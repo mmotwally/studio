@@ -11,7 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, FileText } from 'lucide-react';
+import { PlusCircle, FileText, Briefcase, FileArchive, PackageSearch } from 'lucide-react';
 import type { Requisition, RequisitionStatus } from '@/types';
 import { getRequisitions } from './actions';
 import { format } from 'date-fns';
@@ -61,7 +61,7 @@ export default async function RequisitionsPage() {
       
       {requisitions.length === 0 ? (
          <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-border bg-muted/20 rounded-lg shadow-sm">
-            <FileText size={48} className="text-muted-foreground mb-4" />
+            <PackageSearch size={48} className="text-muted-foreground mb-4" />
             <p className="text-lg text-muted-foreground mb-2">No requisitions found.</p>
             <p className="text-sm text-muted-foreground mb-4">Get started by creating a new requisition.</p>
             <Button asChild variant="outline">
@@ -75,11 +75,14 @@ export default async function RequisitionsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[180px]">Requisition ID</TableHead>
+                <TableHead className="w-[170px]">Requisition ID</TableHead>
+                <TableHead className="w-[120px]">Department</TableHead>
+                <TableHead className="w-[120px]">Order #</TableHead>
+                <TableHead className="w-[120px]">BOM #</TableHead>
                 <TableHead>Date Created</TableHead>
                 <TableHead>Date Needed</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Total Items</TableHead>
+                <TableHead className="text-right">Items</TableHead>
                 <TableHead className="text-right w-[160px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -87,6 +90,16 @@ export default async function RequisitionsPage() {
               {requisitions.map((req) => (
                 <TableRow key={req.id}>
                   <TableCell className="font-mono text-xs">{req.id}</TableCell>
+                  <TableCell>
+                    {req.departmentName ? (
+                        <div className="flex items-center gap-1.5">
+                            <Briefcase className="h-3.5 w-3.5 text-muted-foreground" /> 
+                            <span className="truncate max-w-[100px]">{req.departmentName}</span>
+                        </div>
+                    ): '-'}
+                  </TableCell>
+                  <TableCell>{req.orderNumber || '-'}</TableCell>
+                  <TableCell>{req.bomNumber || '-'}</TableCell>
                   <TableCell>{format(new Date(req.dateCreated), "PP")}</TableCell>
                   <TableCell>{req.dateNeeded ? format(new Date(req.dateNeeded), "PP") : 'N/A'}</TableCell>
                   <TableCell>
@@ -110,4 +123,3 @@ export default async function RequisitionsPage() {
     </>
   );
 }
-

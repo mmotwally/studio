@@ -5,7 +5,7 @@ import { openDb } from '@/lib/database';
 import type { RequisitionFormValues } from './schema';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import type { InventoryItem, Requisition, RequisitionItem, RequisitionStatus, SelectItem, FulfillRequisitionFormValues } from '@/types';
+import type { InventoryItem, Requisition, RequisitionItem, RequisitionStatus, SelectItem } from '@/types';
 import { format } from 'date-fns';
 import type { Database as SqliteDatabaseType } from 'sqlite';
 
@@ -41,9 +41,12 @@ export async function createRequisitionAction(values: RequisitionFormValues) {
     const lastUpdated = dateCreated;
 
     await db.run(
-      `INSERT INTO requisitions (id, dateCreated, dateNeeded, status, notes, lastUpdated)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO requisitions (id, departmentId, orderNumber, bomNumber, dateCreated, dateNeeded, status, notes, lastUpdated)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       requisitionId,
+      values.departmentId,
+      values.orderNumber,
+      values.bomNumber,
       dateCreated,
       values.dateNeeded ? values.dateNeeded.toISOString() : null,
       'PENDING_APPROVAL', 
@@ -99,10 +102,8 @@ export async function updateRequisitionAction(requisitionId: string, values: Req
         throw new Error("Requisition not found.");
     }
 
-    // Store original status
     const originalStatus = currentRequisition.status;
 
-    // If requisition was FULFILLED or PARTIALLY_FULFILLED, return issued stock before updating items
     if (originalStatus === 'FULFILLED' || originalStatus === 'PARTIALLY_FULFILLED') {
       const existingItems = await db.all<RequisitionItem>(
         'SELECT id, inventoryItemId, quantityIssued FROM requisition_items WHERE requisitionId = ?',
@@ -120,10 +121,8 @@ export async function updateRequisitionAction(requisitionId: string, values: Req
       }
     }
 
-    // Delete old items
     await db.run('DELETE FROM requisition_items WHERE requisitionId = ?', requisitionId);
 
-    // Insert new/updated items (quantityIssued will be 0 for all new/re-added items here)
     for (const item of values.items) {
       const requisitionItemId = crypto.randomUUID(); 
       await db.run(
@@ -133,28 +132,25 @@ export async function updateRequisitionAction(requisitionId: string, values: Req
         requisitionId,
         item.inventoryItemId,
         item.quantityRequested,
-        0, // Reset quantityIssued as items are effectively "un-issued"
+        0, 
         item.notes
       );
     }
 
-    // Determine new status
     let newStatus = originalStatus;
     if ((originalStatus === 'FULFILLED' || originalStatus === 'PARTIALLY_FULFILLED')) {
-      // If items were modified and it was previously fulfilled/partially, it needs re-approval/re-fulfillment
       newStatus = 'APPROVED'; 
     } else if (originalStatus === 'REJECTED' || originalStatus === 'CANCELLED') {
-        // If editing a rejected/cancelled one, it should go back to pending
         newStatus = 'PENDING_APPROVAL';
     }
-    // PENDING_APPROVAL remains PENDING_APPROVAL unless explicitly changed by workflow actions.
-    // APPROVED remains APPROVED unless explicitly changed by workflow actions.
-
 
     await db.run(
       `UPDATE requisitions
-       SET dateNeeded = ?, notes = ?, lastUpdated = ?, status = ?
+       SET departmentId = ?, orderNumber = ?, bomNumber = ?, dateNeeded = ?, notes = ?, lastUpdated = ?, status = ?
        WHERE id = ?`,
+      values.departmentId,
+      values.orderNumber,
+      values.bomNumber,
       values.dateNeeded ? values.dateNeeded.toISOString() : null,
       values.notes,
       lastUpdated,
@@ -181,7 +177,7 @@ export async function updateRequisitionAction(requisitionId: string, values: Req
   revalidatePath('/requisitions');
   revalidatePath(`/requisitions/${requisitionId}`);
   revalidatePath(`/requisitions/${requisitionId}/edit`);
-  revalidatePath('/inventory'); // For stock returns
+  revalidatePath('/inventory'); 
   redirect(`/requisitions/${requisitionId}`);
 }
 
@@ -202,7 +198,7 @@ export async function getInventoryItemsForSelect(): Promise<SelectItem[]> {
 
 export async function getRequisitions(): Promise<Requisition[]> {
   const db = await openDb();
-  const requisitions = await db.all<Omit<Requisition, 'items' | 'requesterName' | 'totalItems'>[] & { itemCount: number }>(`
+  const requisitionsData = await db.all<Omit<Requisition, 'items' | 'requesterName' | 'totalItems' | 'departmentName'>[] & { itemCount: number, departmentName?: string }>(`
     SELECT 
       r.id, 
       r.dateCreated, 
@@ -210,25 +206,33 @@ export async function getRequisitions(): Promise<Requisition[]> {
       r.status, 
       r.notes, 
       r.lastUpdated,
+      r.departmentId,
+      d.name as departmentName,
+      r.orderNumber,
+      r.bomNumber,
       (SELECT COUNT(*) FROM requisition_items ri WHERE ri.requisitionId = r.id) as itemCount
     FROM requisitions r
+    LEFT JOIN departments d ON r.departmentId = d.id
     ORDER BY r.dateCreated DESC
   `);
 
-  return requisitions.map(r => ({
+  return requisitionsData.map(r => ({
     ...r,
     status: r.status as RequisitionStatus,
     totalItems: r.itemCount,
+    departmentName: r.departmentName || undefined,
   }));
 }
 
 export async function getRequisitionById(requisitionId: string): Promise<Requisition | null> {
   const db = await openDb();
-  const requisitionData = await db.get<Omit<Requisition, 'items' | 'requesterName' | 'totalItems' | 'status'> & { status: string }>(
+  const requisitionData = await db.get<Omit<Requisition, 'items' | 'requesterName' | 'totalItems' | 'status' | 'departmentName'> & { status: string, departmentName?: string }>(
     `SELECT 
-      id, dateCreated, dateNeeded, status, notes, lastUpdated, requesterId, department 
-     FROM requisitions 
-     WHERE id = ?`,
+      r.id, r.dateCreated, r.dateNeeded, r.status, r.notes, r.lastUpdated, r.requesterId, 
+      r.departmentId, d.name as departmentName, r.orderNumber, r.bomNumber
+     FROM requisitions r
+     LEFT JOIN departments d ON r.departmentId = d.id
+     WHERE r.id = ?`,
     requisitionId
   );
 
@@ -251,6 +255,7 @@ export async function getRequisitionById(requisitionId: string): Promise<Requisi
   return {
     ...requisitionData,
     status: requisitionData.status as RequisitionStatus,
+    departmentName: requisitionData.departmentName || undefined,
     items: itemsData.map(item => ({...item, quantityIssued: item.quantityIssued || 0})),
     totalItems: itemsData.length,
   };
@@ -271,7 +276,6 @@ export async function updateRequisitionStatusAction(requisitionId: string, newSt
     const currentStatus = currentRequisition.status;
     const lastUpdated = new Date().toISOString();
 
-    // Specific logic for CANCELLING a FULFILLED or PARTIALLY_FULFILLED requisition
     if (newStatus === 'CANCELLED' && (currentStatus === 'FULFILLED' || currentStatus === 'PARTIALLY_FULFILLED')) {
       const itemsToReturn = await db.all<RequisitionItem>(
         'SELECT inventoryItemId, quantityIssued FROM requisition_items WHERE requisitionId = ? AND quantityIssued > 0',
@@ -285,7 +289,6 @@ export async function updateRequisitionStatusAction(requisitionId: string, newSt
           item.inventoryItemId
         );
       }
-      // Also reset issued quantities on the requisition items themselves to 0
       await db.run(
         'UPDATE requisition_items SET quantityIssued = 0 WHERE requisitionId = ?',
         requisitionId
@@ -307,10 +310,6 @@ export async function updateRequisitionStatusAction(requisitionId: string, newSt
       requisitionId
     );
 
-    if (result.changes === 0) {
-      // This might happen if the status is already the newStatus, which is not an error.
-      // Or if the ID wasn't found, which is an error caught earlier.
-    }
     await db.run('COMMIT');
   } catch (error) {
     await db.run('ROLLBACK');
@@ -323,7 +322,13 @@ export async function updateRequisitionStatusAction(requisitionId: string, newSt
 
   revalidatePath(`/requisitions/${requisitionId}`);
   revalidatePath('/requisitions');
-  if (newStatus === 'CANCELLED' && (await db.get('SELECT COUNT(*) as count FROM requisition_items WHERE requisitionId = ? AND quantityIssued > 0', requisitionId))?.count > 0) {
+  if (newStatus === 'CANCELLED') {
+    const itemsReturned = await db.get<{count: number} | undefined>(
+        'SELECT COUNT(*) as count FROM requisition_items WHERE requisitionId = ? AND quantityIssued = 0', // This was checking if quantityIssued > 0 previously which would be wrong
+        requisitionId 
+    );
+    // This logic needs rethink: we already set quantityIssued to 0 above if it was FULFILLED/PARTIALLY
+    // The check should be if items *were* returned. For simplicity, always revalidate inventory on cancel for now.
     revalidatePath('/inventory');
   }
 }
@@ -448,7 +453,6 @@ export async function deleteRequisitionAction(requisitionId: string): Promise<{ 
     
     const lastUpdated = new Date().toISOString();
 
-    // Return issued stock to inventory if applicable
     const itemsToReturn = await db.all<RequisitionItem>(
         'SELECT inventoryItemId, quantityIssued FROM requisition_items WHERE requisitionId = ? AND quantityIssued > 0',
         requisitionId
@@ -463,10 +467,7 @@ export async function deleteRequisitionAction(requisitionId: string): Promise<{ 
         );
     }
 
-    // Delete associated requisition items first
     await db.run('DELETE FROM requisition_items WHERE requisitionId = ?', requisitionId);
-
-    // Delete the requisition itself
     const result = await db.run('DELETE FROM requisitions WHERE id = ?', requisitionId);
 
     if (result.changes === 0) {

@@ -25,12 +25,13 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, PlusCircle, Trash2 } from "lucide-react";
+import { CalendarIcon, PlusCircle, Trash2, Briefcase } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { type RequisitionFormValues, requisitionFormSchema } from "@/app/(app)/requisitions/schema";
 import { getInventoryItemsForSelect } from "@/app/(app)/requisitions/actions";
+import { getDepartmentsForSelect } from "@/app/(app)/settings/departments/actions";
 import type { SelectItem as SelectItemType } from "@/types";
 import { useRouter } from "next/navigation";
 
@@ -38,7 +39,7 @@ import { useRouter } from "next/navigation";
 interface RequisitionFormProps {
   onSubmit: (values: RequisitionFormValues) => Promise<void> | void;
   isLoading?: boolean;
-  defaultValues?: RequisitionFormValues;
+  defaultValues?: Partial<RequisitionFormValues>;
   isEditMode?: boolean;
 }
 
@@ -51,14 +52,18 @@ export function RequisitionForm({
   const { toast } = useToast();
   const router = useRouter();
   const [inventoryItems, setInventoryItems] = React.useState<SelectItemType[]>([]);
-  const [isLoadingItems, setIsLoadingItems] = React.useState(true);
+  const [departments, setDepartments] = React.useState<SelectItemType[]>([]);
+  const [isLoadingDropdowns, setIsLoadingDropdowns] = React.useState(true);
 
   const form = useForm<RequisitionFormValues>({
     resolver: zodResolver(requisitionFormSchema),
-    defaultValues: defaultValues || {
-      dateNeeded: null,
-      notes: "",
-      items: [{ inventoryItemId: "", quantityRequested: 1, notes: "" }],
+    defaultValues: {
+      departmentId: defaultValues?.departmentId || "",
+      orderNumber: defaultValues?.orderNumber || "",
+      bomNumber: defaultValues?.bomNumber || "",
+      dateNeeded: defaultValues?.dateNeeded || null,
+      notes: defaultValues?.notes || "",
+      items: defaultValues?.items || [{ inventoryItemId: "", quantityRequested: 1, notes: "" }],
     },
   });
 
@@ -69,28 +74,37 @@ export function RequisitionForm({
 
   React.useEffect(() => {
     if (defaultValues) {
-      form.reset(defaultValues);
+      // Ensure dateNeeded is a Date object if it exists
+      const processedDefaults = {
+        ...defaultValues,
+        dateNeeded: defaultValues.dateNeeded ? new Date(defaultValues.dateNeeded) : null,
+      };
+      form.reset(processedDefaults);
     }
   }, [defaultValues, form]);
 
   React.useEffect(() => {
-    async function loadInventoryItems() {
-      setIsLoadingItems(true);
+    async function loadDropdownData() {
+      setIsLoadingDropdowns(true);
       try {
-        const items = await getInventoryItemsForSelect();
-        setInventoryItems(items);
+        const [fetchedItems, fetchedDepartments] = await Promise.all([
+          getInventoryItemsForSelect(),
+          getDepartmentsForSelect(),
+        ]);
+        setInventoryItems(fetchedItems);
+        setDepartments(fetchedDepartments);
       } catch (error) {
-        console.error("Failed to load inventory items for requisition form:", error);
+        console.error("Failed to load dropdown data for requisition form:", error);
         toast({
           title: "Error",
-          description: "Could not load inventory items for selection.",
+          description: "Could not load selection data. Please try refreshing.",
           variant: "destructive",
         });
       } finally {
-        setIsLoadingItems(false);
+        setIsLoadingDropdowns(false);
       }
     }
-    loadInventoryItems();
+    loadDropdownData();
   }, [toast]);
 
   const handleFormSubmit = async (values: RequisitionFormValues) => {
@@ -101,6 +115,31 @@ export function RequisitionForm({
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+           <FormField
+            control={form.control}
+            name="departmentId"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Department*</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value} disabled={isLoadingDropdowns}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <Briefcase className="mr-2 h-4 w-4 text-muted-foreground inline-block" />
+                      <SelectValue placeholder={isLoadingDropdowns ? "Loading..." : "Select a department"} />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept.value} value={dept.value}>
+                        {dept.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <FormField
             control={form.control}
             name="dateNeeded"
@@ -118,7 +157,7 @@ export function RequisitionForm({
                         )}
                       >
                         {field.value ? (
-                          format(new Date(field.value), "PPP") // Ensure field.value is a Date object for format
+                          format(new Date(field.value), "PPP") 
                         ) : (
                           <span>Pick a date</span>
                         )}
@@ -131,11 +170,38 @@ export function RequisitionForm({
                       mode="single"
                       selected={field.value ? new Date(field.value) : undefined}
                       onSelect={field.onChange}
-                      disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1)) } // Disable past dates
+                      disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1)) } 
                       initialFocus
                     />
                   </PopoverContent>
                 </Popover>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name="orderNumber"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Order Number (Optional)</FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g., ORD-12345" {...field} value={field.value ?? ""} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="bomNumber"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>BOM Number (Optional)</FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g., BOM-XYZ-001" {...field} value={field.value ?? ""} />
+                </FormControl>
                 <FormMessage />
               </FormItem>
             )}
@@ -171,16 +237,16 @@ export function RequisitionForm({
                     <FormLabel>Item*</FormLabel>
                     <Select
                       onValueChange={f.onChange}
-                      value={f.value} // Use value directly
-                      disabled={isLoadingItems}
+                      value={f.value} 
+                      disabled={isLoadingDropdowns}
                     >
                       <FormControl>
                         <SelectTrigger>
-                          <SelectValue placeholder={isLoadingItems ? "Loading items..." : "Select an inventory item"} />
+                          <SelectValue placeholder={isLoadingDropdowns ? "Loading items..." : "Select an inventory item"} />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        {inventoryItems.length === 0 && !isLoadingItems ? (
+                        {inventoryItems.length === 0 && !isLoadingDropdowns ? (
                           <SelectItem value="no-item" disabled>No items available</SelectItem>
                         ) : (
                           inventoryItems.map((item) => (
@@ -242,7 +308,7 @@ export function RequisitionForm({
             variant="outline"
             onClick={() => append({ inventoryItemId: "", quantityRequested: 1, notes: "" })}
             className="mt-2"
-            disabled={isLoadingItems}
+            disabled={isLoadingDropdowns}
           >
             <PlusCircle className="mr-2 h-4 w-4" /> Add Another Item
           </Button>
@@ -255,7 +321,7 @@ export function RequisitionForm({
           <Button type="button" variant="outline" onClick={() => router.back()} disabled={isLoading}>
             Cancel
           </Button>
-          <Button type="submit" disabled={isLoading || isLoadingItems}>
+          <Button type="submit" disabled={isLoading || isLoadingDropdowns}>
             {isLoading ? (isEditMode ? "Saving..." : "Submitting...") : (isEditMode ? "Save Changes" : "Submit Requisition")}
           </Button>
         </div>

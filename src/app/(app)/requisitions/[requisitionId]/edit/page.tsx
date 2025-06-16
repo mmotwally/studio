@@ -34,15 +34,6 @@ export default function EditRequisitionPage() {
       getRequisitionById(requisitionId)
         .then(fetchedRequisition => {
           if (fetchedRequisition) {
-            // Allow editing for PENDING_APPROVAL, APPROVED, FULFILLED, PARTIALLY_FULFILLED, REJECTED
-            // CANCELLED requisitions typically shouldn't be directly edited, but rather a new one created.
-            // For this implementation, we'll allow editing for more states, with backend handling status transitions.
-            const editableStatuses: RequisitionStatus[] = ['PENDING_APPROVAL', 'APPROVED', 'FULFILLED', 'PARTIALLY_FULFILLED', 'REJECTED'];
-            if (!editableStatuses.includes(fetchedRequisition.status) && fetchedRequisition.status !== 'CANCELLED') {
-                // Let's be more permissive on what can be opened for edit, server action will handle real logic
-                // setError(`This requisition (status: ${fetchedRequisition.status}) cannot be edited.`);
-                // toast({ title: "Cannot Edit", description: `Only requisitions with certain statuses can be edited. Current: ${fetchedRequisition.status}`, variant: "destructive" });
-            }
             setRequisition(fetchedRequisition);
             
           } else {
@@ -66,10 +57,9 @@ export default function EditRequisitionPage() {
       setIsSubmitting(true);
       try {
         await updateRequisitionAction(requisition.id, values);
-        // Redirect is handled by the action
       } catch (err: any) {
          if (err.digest?.startsWith('NEXT_REDIRECT')) {
-          throw err; // Re-throw for Next.js to handle client-side navigation
+          throw err; 
         }
         console.error("Client-side error during requisition update:", err);
         toast({
@@ -124,8 +114,11 @@ export default function EditRequisitionPage() {
     );
   }
 
-  const defaultFormValues: RequisitionFormValues = {
-    dateNeeded: requisition.dateNeeded ? new Date(requisition.dateNeeded) : null,
+  const defaultFormValues: Partial<RequisitionFormValues> = {
+    departmentId: requisition.departmentId || "",
+    orderNumber: requisition.orderNumber || "",
+    bomNumber: requisition.bomNumber || "",
+    dateNeeded: requisition.dateNeeded ? new Date(requisition.dateNeeded) : undefined, // Ensure it's Date or undefined
     notes: requisition.notes || "",
     items: requisition.items?.map(item => ({
       inventoryItemId: item.inventoryItemId,

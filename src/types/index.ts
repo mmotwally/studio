@@ -1,5 +1,4 @@
 
-
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavItem {
@@ -16,6 +15,12 @@ export interface DashboardStat {
   icon: LucideIcon;
   description?: string;
   color?: string; // Optional color for icon/text
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  code: string;
 }
 
 export interface CategoryDB {
@@ -161,7 +166,10 @@ export interface Requisition {
   id: string;
   requesterId?: string | null; // Link to User later
   requesterName?: string; // For display from users table eventually
-  department?: string | null;
+  departmentId?: string | null;
+  departmentName?: string; // For display
+  orderNumber?: string | null;
+  bomNumber?: string | null;
   dateCreated: string;
   dateNeeded?: string | null;
   status: RequisitionStatus;
@@ -184,8 +192,10 @@ export interface RequisitionItem {
 }
 
 // Represents the structure of values from the Requisition Form
-// (aligns with src/app/(app)/requisitions/schema.ts)
 export interface RequisitionFormValues {
+  departmentId: string;
+  orderNumber?: string | null;
+  bomNumber?: string | null;
   dateNeeded?: Date | null;
   notes?: string | null;
   items: Array<{
@@ -209,6 +219,10 @@ export interface FulfillRequisitionItemFormValues {
 export interface FulfillRequisitionFormValues {
   requisitionId: string;
   items: FulfillRequisitionItemFormValues[];
-  // workflowNotes?: string; // Optional notes for this fulfillment batch
 }
 
+// Department Management Types
+export interface DepartmentFormValues {
+  name: string;
+  code: string;
+}

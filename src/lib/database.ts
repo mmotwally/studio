@@ -11,6 +11,14 @@ let appDbPromise: Promise<Database<sqlite3.Database, sqlite3.Statement>> | null 
 
 async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.Statement>) {
   await dbConnection.exec(`
+    CREATE TABLE IF NOT EXISTS departments (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      code TEXT NOT NULL UNIQUE
+    );
+  `);
+
+  await dbConnection.exec(`
     CREATE TABLE IF NOT EXISTS categories (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
@@ -109,13 +117,16 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
     CREATE TABLE IF NOT EXISTS requisitions (
       id TEXT PRIMARY KEY, -- e.g., REQ-YYYYMMDD-001
       requesterId TEXT, -- For future use with user authentication
-      department TEXT, -- For future use
+      departmentId TEXT,
+      orderNumber TEXT,
+      bomNumber TEXT,
       dateCreated TEXT NOT NULL,
       dateNeeded TEXT,
       status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL', -- PENDING_APPROVAL, APPROVED, REJECTED, FULFILLED, PARTIALLY_FULFILLED, CANCELLED
       notes TEXT,
       lastUpdated TEXT NOT NULL,
-      FOREIGN KEY (requesterId) REFERENCES users(id) ON DELETE SET NULL
+      FOREIGN KEY (requesterId) REFERENCES users(id) ON DELETE SET NULL,
+      FOREIGN KEY (departmentId) REFERENCES departments(id) ON DELETE SET NULL
     );
   `);
 
@@ -146,11 +157,33 @@ async function _dropTables(dbConnection: Database<sqlite3.Database, sqlite3.Stat
   await dbConnection.exec(`DROP TABLE IF EXISTS categories;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS users;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS roles;`);
+  await dbConnection.exec(`DROP TABLE IF EXISTS departments;`);
   console.log('Existing tables dropped by _dropTables.');
 }
 
 async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement>) {
   console.log('Seeding initial data...');
+
+  // Departments
+  const deptEngId = crypto.randomUUID();
+  const deptProdId = crypto.randomUUID();
+  const deptMaintId = crypto.randomUUID();
+  const deptDesignId = crypto.randomUUID();
+
+  const departmentsData = [
+    { id: deptEngId, name: 'Engineering', code: 'ENG' },
+    { id: deptProdId, name: 'Production', code: 'PROD' },
+    { id: deptMaintId, name: 'Maintenance', code: 'MAINT' },
+    { id: deptDesignId, name: 'Design Office', code: 'DESIGN' },
+  ];
+  for (const dept of departmentsData) {
+    try {
+      await db.run('INSERT INTO departments (id, name, code) VALUES (?, ?, ?) ON CONFLICT(name) DO NOTHING', dept.id, dept.name, dept.code);
+    } catch (e) {
+      console.warn(`Could not insert department ${dept.name}: ${(e as Error).message}`);
+    }
+  }
+  console.log('Departments seeded.');
 
   // Units of Measurement
   const unitPcsId = crypto.randomUUID();
@@ -392,14 +425,14 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
         await db.exec('PRAGMA foreign_keys = ON;');
 
         let schemaNeedsReset = false;
-        const tablesToEnsureExist = ['inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles', 'requisitions', 'requisition_items'];
+        const tablesToEnsureExist = ['departments', 'inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles', 'requisitions', 'requisition_items'];
         const columnsToCheck: Record<string, string[]> = {
           inventory: ['minStockLevel', 'maxStockLevel', 'description', 'imageUrl'],
           units_of_measurement: ['conversion_factor', 'base_unit_id'],
           suppliers: ['contactPhone'],
           categories: ['code'],
           sub_categories: ['code', 'categoryId'],
-          requisitions: ['requesterId', 'department', 'dateNeeded', 'status', 'notes', 'lastUpdated'],
+          requisitions: ['requesterId', 'departmentId', 'orderNumber', 'bomNumber', 'dateNeeded', 'status', 'notes', 'lastUpdated'],
           requisition_items: ['requisitionId', 'inventoryItemId', 'quantityRequested', 'quantityIssued', 'notes'],
         };
 

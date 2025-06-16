@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Dialog, DialogTrigger } from '@/components/ui/dialog';
-import { ArrowLeft, Edit, CheckCircle, XCircle, Settings2, PackageSearch, CalendarDays, FileTextIcon, UserCircle, Info, MoreVertical, Printer, FileX2, PackageCheck, PackageMinus } from 'lucide-react';
+import { ArrowLeft, Edit, CheckCircle, XCircle, Settings2, PackageSearch, CalendarDays, FileTextIcon, UserCircle, Info, MoreVertical, Printer, FileX2, PackageCheck, PackageMinus, Briefcase, FileArchive, FileDigit } from 'lucide-react';
 import { getRequisitionById, updateRequisitionStatusAction } from '../actions';
 import type { Requisition, RequisitionStatus } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -20,19 +20,19 @@ import { FulfillRequisitionDialog } from '@/components/requisitions/fulfill-requ
 
 
 interface RequisitionDetailPageProps {
-  params: Promise<{ // Updated to Promise as per Next.js warning
+  params: Promise<{ 
     requisitionId: string;
   }>;
 }
 
 function getStatusBadgeVariant(status: RequisitionStatus) {
   switch (status) {
-    case 'PENDING_APPROVAL': return 'default'; // Yellowish
-    case 'APPROVED': return 'secondary'; // Greenish
-    case 'REJECTED': return 'destructive'; // Reddish
-    case 'FULFILLED': return 'default'; // Bluish
-    case 'PARTIALLY_FULFILLED': return 'default'; // Purplish
-    case 'CANCELLED': return 'outline'; // Grayish
+    case 'PENDING_APPROVAL': return 'default'; 
+    case 'APPROVED': return 'secondary'; 
+    case 'REJECTED': return 'destructive'; 
+    case 'FULFILLED': return 'default'; 
+    case 'PARTIALLY_FULFILLED': return 'default'; 
+    case 'CANCELLED': return 'outline'; 
     default: return 'default';
   }
 }
@@ -49,9 +49,8 @@ function getStatusColorClass(status: RequisitionStatus): string {
   }
 }
 
-// Client component to fetch and display data
 export default function RequisitionDetailClientPage({ params: paramsPromise }: RequisitionDetailPageProps) {
-  const params = React.use(paramsPromise); // Unwrap the params promise
+  const params = React.use(paramsPromise); 
   const { requisitionId } = params;
   const [requisition, setRequisition] = React.useState<Requisition | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -77,7 +76,7 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
   }, [requisitionId]);
 
   React.useEffect(() => {
-    if (requisitionId) { // Ensure requisitionId is available
+    if (requisitionId) { 
         fetchRequisition();
     }
   }, [requisitionId, fetchRequisition]);
@@ -87,7 +86,7 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
     try {
       await updateRequisitionStatusAction(requisition.id, newStatus);
       toast({ title: "Status Updated", description: `Requisition status changed to ${newStatus.replace(/_/g, ' ').toLowerCase()}.` });
-      fetchRequisition(); // Re-fetch to update UI
+      fetchRequisition(); 
     } catch (err) {
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
     }
@@ -119,8 +118,17 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
     );
   }
 
-  const canEdit = requisition.status === 'PENDING_APPROVAL';
-  const canCancel = requisition.status === 'PENDING_APPROVAL' || requisition.status === 'APPROVED';
+  const canEdit = requisition.status === 'PENDING_APPROVAL' || 
+                  requisition.status === 'APPROVED' || 
+                  requisition.status === 'REJECTED' ||
+                  requisition.status === 'PARTIALLY_FULFILLED' || 
+                  requisition.status === 'FULFILLED';
+                  
+  const canCancel = requisition.status === 'PENDING_APPROVAL' || 
+                    requisition.status === 'APPROVED' || 
+                    requisition.status === 'PARTIALLY_FULFILLED' || 
+                    requisition.status === 'FULFILLED';
+
   const canFulfill = (requisition.status === 'APPROVED' || requisition.status === 'PARTIALLY_FULFILLED') && 
                      requisition.items && requisition.items.some(item => (item.quantityIssued || 0) < item.quantityRequested);
 
@@ -289,6 +297,21 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
               </div>
               <Separator />
                <div className="flex justify-between items-center">
+                 <span className="text-sm text-muted-foreground flex items-center"><Briefcase className="mr-1.5 h-4 w-4 text-muted-foreground" /> Department:</span>
+                 <span className="text-sm">{requisition.departmentName || 'N/A'}</span>
+               </div>
+               <Separator />
+                <div className="flex justify-between items-center">
+                 <span className="text-sm text-muted-foreground flex items-center"><FileArchive className="mr-1.5 h-4 w-4 text-muted-foreground" /> Order #:</span>
+                 <span className="text-sm">{requisition.orderNumber || 'N/A'}</span>
+               </div>
+               <Separator />
+                <div className="flex justify-between items-center">
+                 <span className="text-sm text-muted-foreground flex items-center"><FileDigit className="mr-1.5 h-4 w-4 text-muted-foreground" /> BOM #:</span>
+                 <span className="text-sm">{requisition.bomNumber || 'N/A'}</span>
+               </div>
+               <Separator />
+               <div className="flex justify-between items-center">
                  <span className="text-sm text-muted-foreground flex items-center"><UserCircle className="mr-1.5 h-4 w-4 text-muted-foreground" /> Requester:</span>
                  <span className="text-sm">{requisition.requesterName || 'System (N/A)'}</span>
                </div>
@@ -323,7 +346,7 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
             <FulfillRequisitionDialog
                 requisition={requisition}
                 setOpen={setIsFulfillmentDialogOpen}
-                onFulfillmentProcessed={fetchRequisition} // Re-fetch data after dialog closes
+                onFulfillmentProcessed={fetchRequisition} 
             />
          </Dialog>
       )}
