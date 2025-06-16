@@ -165,3 +165,47 @@ export async function getRequisitionById(requisitionId: string): Promise<Requisi
     // requesterName: requesterName, // Assign fetched or placeholder name
   };
 }
+
+export async function updateRequisitionStatusAction(requisitionId: string, newStatus: RequisitionStatus, workflowNotes?: string) {
+  if (!requisitionId || !newStatus) {
+    throw new Error("Requisition ID and new status are required.");
+  }
+
+  let db;
+  try {
+    db = await openDb();
+    const lastUpdated = new Date().toISOString();
+    
+    // For now, workflowNotes (like rejection reason) are not stored in a separate field.
+    // They could be appended to the main 'notes' or a new field 'workflow_notes' could be added to the requisitions table.
+    // For simplicity, just updating status and lastUpdated.
+    
+    const result = await db.run(
+      `UPDATE requisitions
+       SET status = ?, lastUpdated = ?
+       WHERE id = ?`,
+      newStatus,
+      lastUpdated,
+      requisitionId
+    );
+
+    if (result.changes === 0) {
+      throw new Error(`Requisition with ID "${requisitionId}" not found or status already set.`);
+    }
+
+  } catch (error) {
+    console.error(`Failed to update status for requisition ${requisitionId} to ${newStatus}:`, error);
+    if (db && error instanceof Error && error.message.includes("ROLLBACK")) {
+        // No explicit transaction here, but good to be aware if one was started
+    }
+    if (error instanceof Error) {
+      throw new Error(`Database operation failed: ${error.message}`);
+    }
+    throw new Error('Database operation failed. Could not update requisition status.');
+  }
+
+  revalidatePath(`/requisitions/${requisitionId}`);
+  revalidatePath('/requisitions');
+  // No redirect here, as the user stays on the detail page to see the updated status.
+}
+

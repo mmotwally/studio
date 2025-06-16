@@ -3,13 +3,14 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { ArrowLeft, Edit, CheckCircle, XCircle, Settings2, PackageSearch, CalendarDays, FileTextIcon, UserCircle } from 'lucide-react';
-import { getRequisitionById } from '../actions';
+import { ArrowLeft, Edit, CheckCircle, XCircle, Settings2, PackageSearch, CalendarDays, FileTextIcon, UserCircle, Info } from 'lucide-react';
+import { getRequisitionById, updateRequisitionStatusAction } from '../actions';
 import type { Requisition, RequisitionStatus } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { format } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 
 interface RequisitionDetailPageProps {
   params: {
@@ -31,13 +32,13 @@ function getStatusBadgeVariant(status: RequisitionStatus) {
 
 function getStatusColorClass(status: RequisitionStatus): string {
   switch (status) {
-    case 'PENDING_APPROVAL': return 'bg-yellow-500 hover:bg-yellow-500/90';
-    case 'APPROVED': return 'bg-green-500 hover:bg-green-500/90';
-    case 'REJECTED': return 'bg-red-500 hover:bg-red-500/90';
-    case 'FULFILLED': return 'bg-blue-500 hover:bg-blue-500/90';
-    case 'PARTIALLY_FULFILLED': return 'bg-purple-500 hover:bg-purple-500/90';
-    case 'CANCELLED': return 'bg-gray-500 hover:bg-gray-500/90';
-    default: return 'bg-gray-400 hover:bg-gray-400/90';
+    case 'PENDING_APPROVAL': return 'bg-yellow-500 hover:bg-yellow-500/90 text-yellow-foreground';
+    case 'APPROVED': return 'bg-green-500 hover:bg-green-500/90 text-green-foreground';
+    case 'REJECTED': return 'bg-red-500 hover:bg-red-500/90 text-red-foreground';
+    case 'FULFILLED': return 'bg-blue-500 hover:bg-blue-500/90 text-blue-foreground';
+    case 'PARTIALLY_FULFILLED': return 'bg-purple-500 hover:bg-purple-500/90 text-purple-foreground';
+    case 'CANCELLED': return 'bg-gray-500 hover:bg-gray-500/90 text-gray-foreground';
+    default: return 'bg-gray-400 hover:bg-gray-400/90 text-gray-foreground';
   }
 }
 
@@ -106,20 +107,56 @@ export default async function RequisitionDetailPage({ params }: RequisitionDetai
               <CardDescription>Manage the status and progression of this requisition.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-              {/* Placeholder buttons for workflow actions */}
               {requisition.status === 'PENDING_APPROVAL' && (
                 <>
-                  <Button variant="default"><CheckCircle className="mr-2 h-4 w-4" /> Approve</Button>
-                  <Button variant="destructive"><XCircle className="mr-2 h-4 w-4" /> Reject</Button>
+                  <form action={updateRequisitionStatusAction.bind(null, requisition.id, 'APPROVED')}>
+                    <Button type="submit" variant="default">
+                      <CheckCircle className="mr-2 h-4 w-4" /> Approve
+                    </Button>
+                  </form>
+                  <form action={updateRequisitionStatusAction.bind(null, requisition.id, 'REJECTED')}>
+                    <Button type="submit" variant="destructive">
+                      <XCircle className="mr-2 h-4 w-4" /> Reject
+                    </Button>
+                  </form>
                 </>
               )}
               {requisition.status === 'APPROVED' && (
-                <Button variant="default"><PackageSearch className="mr-2 h-4 w-4" /> Process Fulfillment</Button>
+                 <Alert>
+                    <Info className="h-4 w-4" />
+                    <AlertTitle>Approved</AlertTitle>
+                    <AlertDescription>
+                        This requisition is approved. Fulfillment processing can begin.
+                        <Button variant="default" size="sm" className="ml-4">
+                            <PackageSearch className="mr-2 h-4 w-4" /> Process Fulfillment
+                        </Button>
+                    </AlertDescription>
+                </Alert>
               )}
-              {/* Add more conditional buttons based on status */}
-              <Button variant="outline"><Edit className="mr-2 h-4 w-4" /> Edit Requisition</Button>
-              <Button variant="outline"><Settings2 className="mr-2 h-4 w-4" /> More Actions</Button>
+              {requisition.status === 'REJECTED' && (
+                 <Alert variant="destructive">
+                    <XCircle className="h-4 w-4" />
+                    <AlertTitle>Rejected</AlertTitle>
+                    <AlertDescription>This requisition has been rejected.</AlertDescription>
+                </Alert>
+              )}
+               {requisition.status === 'FULFILLED' && (
+                 <Alert>
+                    <CheckCircle className="h-4 w-4" />
+                    <AlertTitle>Fulfilled</AlertTitle>
+                    <AlertDescription>This requisition has been fulfilled.</AlertDescription>
+                </Alert>
+              )}
+              {/* Add more conditional UI based on other statuses as needed */}
             </CardContent>
+            <CardFooter className="flex-col items-start space-y-2 pt-4">
+                 <Button variant="outline" disabled>
+                    <Edit className="mr-2 h-4 w-4" /> Edit Requisition (Not Implemented)
+                 </Button>
+                 <Button variant="outline" disabled>
+                    <Settings2 className="mr-2 h-4 w-4" /> More Actions (Not Implemented)
+                 </Button>
+            </CardFooter>
           </Card>
         </div>
 
@@ -138,7 +175,7 @@ export default async function RequisitionDetailPage({ params }: RequisitionDetai
                 <span className="text-sm text-muted-foreground">Status:</span>
                 <Badge 
                   variant={getStatusBadgeVariant(requisition.status)} 
-                  className={`capitalize text-white ${getStatusColorClass(requisition.status)}`}
+                  className={`capitalize ${getStatusColorClass(requisition.status)}`}
                 >
                   {requisition.status.replace(/_/g, ' ').toLowerCase()}
                 </Badge>
@@ -177,3 +214,4 @@ export default async function RequisitionDetailPage({ params }: RequisitionDetai
     </>
   );
 }
+
