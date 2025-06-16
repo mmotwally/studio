@@ -1,9 +1,12 @@
 
+"use client";
+import * as React from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { ArrowLeft, Edit, CheckCircle, XCircle, Settings2, PackageSearch, CalendarDays, FileTextIcon, UserCircle, Info, MoreVertical, Printer, FileX2 } from 'lucide-react';
+import { Dialog, DialogTrigger } from '@/components/ui/dialog';
+import { ArrowLeft, Edit, CheckCircle, XCircle, Settings2, PackageSearch, CalendarDays, FileTextIcon, UserCircle, Info, MoreVertical, Printer, FileX2, PackageCheck, PackageMinus } from 'lucide-react';
 import { getRequisitionById, updateRequisitionStatusAction } from '../actions';
 import type { Requisition, RequisitionStatus } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -11,7 +14,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { format } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { useToast } from '@/hooks/use-toast';
+import { FulfillRequisitionDialog } from '@/components/requisitions/fulfill-requisition-dialog';
+
 
 interface RequisitionDetailPageProps {
   params: {
@@ -21,12 +27,12 @@ interface RequisitionDetailPageProps {
 
 function getStatusBadgeVariant(status: RequisitionStatus) {
   switch (status) {
-    case 'PENDING_APPROVAL': return 'default';
-    case 'APPROVED': return 'secondary';
-    case 'REJECTED': return 'destructive';
-    case 'FULFILLED': return 'outline'; 
-    case 'PARTIALLY_FULFILLED': return 'default'; 
-    case 'CANCELLED': return 'outline';
+    case 'PENDING_APPROVAL': return 'default'; // Yellowish
+    case 'APPROVED': return 'secondary'; // Greenish
+    case 'REJECTED': return 'destructive'; // Reddish
+    case 'FULFILLED': return 'default'; // Bluish
+    case 'PARTIALLY_FULFILLED': return 'default'; // Purplish
+    case 'CANCELLED': return 'outline'; // Grayish
     default: return 'default';
   }
 }
@@ -36,16 +42,68 @@ function getStatusColorClass(status: RequisitionStatus): string {
     case 'PENDING_APPROVAL': return 'bg-yellow-500 hover:bg-yellow-500/90 text-yellow-foreground';
     case 'APPROVED': return 'bg-green-500 hover:bg-green-500/90 text-green-foreground';
     case 'REJECTED': return 'bg-red-500 hover:bg-red-500/90 text-red-foreground';
-    case 'FULFILLED': return 'bg-blue-500 hover:bg-blue-500/90 text-blue-foreground';
+    case 'FULFILLED': return 'bg-blue-600 hover:bg-blue-600/90 text-blue-foreground';
     case 'PARTIALLY_FULFILLED': return 'bg-purple-500 hover:bg-purple-500/90 text-purple-foreground';
     case 'CANCELLED': return 'bg-gray-500 hover:bg-gray-500/90 text-gray-foreground';
     default: return 'bg-gray-400 hover:bg-gray-400/90 text-gray-foreground';
   }
 }
 
-export default async function RequisitionDetailPage({ params }: RequisitionDetailPageProps) {
+// Client component to fetch and display data
+export default function RequisitionDetailClientPage({ params }: RequisitionDetailPageProps) {
   const { requisitionId } = params;
-  const requisition = await getRequisitionById(requisitionId);
+  const [requisition, setRequisition] = React.useState<Requisition | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const { toast } = useToast();
+  const [isFulfillmentDialogOpen, setIsFulfillmentDialogOpen] = React.useState(false);
+
+  const fetchRequisition = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await getRequisitionById(requisitionId);
+      if (data) {
+        setRequisition(data);
+      } else {
+        setError("Requisition not found.");
+      }
+    } catch (err) {
+      console.error("Failed to fetch requisition:", err);
+      setError((err as Error).message || "Failed to load requisition data.");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [requisitionId]);
+
+  React.useEffect(() => {
+    fetchRequisition();
+  }, [fetchRequisition]);
+
+  const handleStatusUpdate = async (newStatus: RequisitionStatus) => {
+    if (!requisition) return;
+    try {
+      await updateRequisitionStatusAction(requisition.id, newStatus);
+      toast({ title: "Status Updated", description: `Requisition status changed to ${newStatus.replace(/_/g, ' ').toLowerCase()}.` });
+      fetchRequisition(); // Re-fetch to update UI
+    } catch (err) {
+      toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
+    }
+  };
+
+  if (isLoading) {
+    return <PageHeader title="Loading Requisition..." description="Please wait." />;
+  }
+
+  if (error) {
+    return (
+      <>
+        <PageHeader title="Error" description={error} />
+        <Button variant="outline" asChild>
+          <Link href="/requisitions"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Requisitions</Link>
+        </Button>
+      </>
+    );
+  }
 
   if (!requisition) {
     return (
@@ -60,6 +118,9 @@ export default async function RequisitionDetailPage({ params }: RequisitionDetai
 
   const canEdit = requisition.status === 'PENDING_APPROVAL';
   const canCancel = requisition.status === 'PENDING_APPROVAL' || requisition.status === 'APPROVED';
+  const canFulfill = (requisition.status === 'APPROVED' || requisition.status === 'PARTIALLY_FULFILLED') && 
+                     requisition.items && requisition.items.some(item => (item.quantityIssued || 0) < item.quantityRequested);
+
 
   return (
     <>
@@ -84,19 +145,12 @@ export default async function RequisitionDetailPage({ params }: RequisitionDetai
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 {canCancel && (
-                  <form action={updateRequisitionStatusAction.bind(null, requisition.id, 'CANCELLED')} className="w-full">
-                    <DropdownMenuItem asChild>
-                       <button type="submit" className="w-full text-left cursor-pointer">
-                        <FileX2 className="mr-2 h-4 w-4" /> Cancel Requisition
-                      </button>
-                    </DropdownMenuItem>
-                  </form>
+                   <DropdownMenuItem onSelect={() => handleStatusUpdate('CANCELLED')} className="cursor-pointer">
+                    <FileX2 className="mr-2 h-4 w-4" /> Cancel Requisition
+                  </DropdownMenuItem>
                 )}
                 <DropdownMenuItem disabled>
                   <Printer className="mr-2 h-4 w-4" /> Print Requisition
-                </DropdownMenuItem>
-                <DropdownMenuItem disabled>
-                  <Settings2 className="mr-2 h-4 w-4" /> Other Settings (N/A)
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -120,6 +174,7 @@ export default async function RequisitionDetailPage({ params }: RequisitionDetai
                     <TableRow>
                       <TableHead>Item Name</TableHead>
                       <TableHead className="text-right">Qty Requested</TableHead>
+                      <TableHead className="text-right">Qty Issued</TableHead>
                       <TableHead>Notes</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -128,6 +183,7 @@ export default async function RequisitionDetailPage({ params }: RequisitionDetai
                       <TableRow key={item.id}>
                         <TableCell className="font-medium">{item.inventoryItemName || 'N/A'}</TableCell>
                         <TableCell className="text-right">{item.quantityRequested}</TableCell>
+                        <TableCell className="text-right">{item.quantityIssued || 0}</TableCell>
                         <TableCell>{item.notes || '-'}</TableCell>
                       </TableRow>
                     ))}
@@ -147,27 +203,25 @@ export default async function RequisitionDetailPage({ params }: RequisitionDetai
             <CardContent className="flex flex-wrap gap-2">
               {requisition.status === 'PENDING_APPROVAL' && (
                 <>
-                  <form action={updateRequisitionStatusAction.bind(null, requisition.id, 'APPROVED')}>
-                    <Button type="submit" variant="default">
-                      <CheckCircle className="mr-2 h-4 w-4" /> Approve
-                    </Button>
-                  </form>
-                  <form action={updateRequisitionStatusAction.bind(null, requisition.id, 'REJECTED')}>
-                    <Button type="submit" variant="destructive">
-                      <XCircle className="mr-2 h-4 w-4" /> Reject
-                    </Button>
-                  </form>
+                  <Button onClick={() => handleStatusUpdate('APPROVED')} variant="default">
+                    <CheckCircle className="mr-2 h-4 w-4" /> Approve
+                  </Button>
+                  <Button onClick={() => handleStatusUpdate('REJECTED')} variant="destructive">
+                    <XCircle className="mr-2 h-4 w-4" /> Reject
+                  </Button>
                 </>
               )}
               {requisition.status === 'APPROVED' && (
                  <Alert>
                     <Info className="h-4 w-4" />
                     <AlertTitle>Approved</AlertTitle>
-                    <AlertDescription>
-                        This requisition is approved. Fulfillment processing can begin.
-                        <Button variant="default" size="sm" className="ml-4" disabled>
-                            <PackageSearch className="mr-2 h-4 w-4" /> Process Fulfillment
-                        </Button>
+                    <AlertDescription className="flex items-center justify-between">
+                        <span>This requisition is approved and ready for fulfillment.</span>
+                        {canFulfill && (
+                          <Button variant="default" size="sm" onClick={() => setIsFulfillmentDialogOpen(true)}>
+                              <PackageSearch className="mr-2 h-4 w-4" /> Process Fulfillment
+                          </Button>
+                        )}
                     </AlertDescription>
                 </Alert>
               )}
@@ -178,11 +232,25 @@ export default async function RequisitionDetailPage({ params }: RequisitionDetai
                     <AlertDescription>This requisition has been rejected.</AlertDescription>
                 </Alert>
               )}
+              {requisition.status === 'PARTIALLY_FULFILLED' && (
+                 <Alert className="border-purple-500 bg-purple-50 text-purple-700 dark:bg-purple-700/20 dark:text-purple-300 dark:border-purple-600">
+                    <PackageMinus className="h-4 w-4" />
+                    <AlertTitle>Partially Fulfilled</AlertTitle>
+                     <AlertDescription className="flex items-center justify-between">
+                        <span>This requisition has been partially fulfilled.</span>
+                         {canFulfill && (
+                          <Button variant="default" size="sm" onClick={() => setIsFulfillmentDialogOpen(true)} className="bg-purple-500 hover:bg-purple-600 text-white">
+                              <PackageSearch className="mr-2 h-4 w-4" /> Continue Fulfillment
+                          </Button>
+                        )}
+                    </AlertDescription>
+                </Alert>
+              )}
                {requisition.status === 'FULFILLED' && (
-                 <Alert>
-                    <CheckCircle className="h-4 w-4" />
+                 <Alert className="border-blue-500 bg-blue-50 text-blue-700 dark:bg-blue-700/20 dark:text-blue-300 dark:border-blue-600">
+                    <PackageCheck className="h-4 w-4" />
                     <AlertTitle>Fulfilled</AlertTitle>
-                    <AlertDescription>This requisition has been fulfilled.</AlertDescription>
+                    <AlertDescription>This requisition has been completely fulfilled.</AlertDescription>
                 </Alert>
               )}
               {requisition.status === 'CANCELLED' && (
@@ -247,6 +315,15 @@ export default async function RequisitionDetailPage({ params }: RequisitionDetai
           </Card>
         </div>
       </div>
+      {isFulfillmentDialogOpen && requisition && (
+         <Dialog open={isFulfillmentDialogOpen} onOpenChange={setIsFulfillmentDialogOpen}>
+            <FulfillRequisitionDialog
+                requisition={requisition}
+                setOpen={setIsFulfillmentDialogOpen}
+                onFulfillmentProcessed={fetchRequisition} // Re-fetch data after dialog closes
+            />
+         </Dialog>
+      )}
     </>
   );
 }

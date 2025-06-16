@@ -177,9 +177,9 @@ export interface RequisitionItem {
   requisitionId: string;
   inventoryItemId: string;
   inventoryItemName?: string; // For display
-  inventoryItemCurrentStock?: number; // For display on detail view
+  inventoryItemCurrentStock?: number; // For display on detail/fulfillment view
   quantityRequested: number;
-  quantityIssued?: number; // To be updated during fulfillment
+  quantityIssued: number; // Changed from optional: will be 0 if nothing issued.
   notes?: string | null;
 }
 
@@ -193,5 +193,22 @@ export interface RequisitionFormValues {
     quantityRequested: number;
     notes?: string | null;
   }>;
+}
+
+// Schema for the fulfillment dialog form
+export interface FulfillRequisitionItemFormValues {
+  requisitionItemId: string;
+  inventoryItemId: string;
+  itemName: string; // For display in form
+  quantityRequested: number;
+  currentQuantityIssued: number; // Already issued for this item
+  inventoryItemCurrentStock: number; // Current stock of the inventory item
+  quantityToIssueNow: number; // Quantity being issued in this attempt
+}
+
+export interface FulfillRequisitionFormValues {
+  requisitionId: string;
+  items: FulfillRequisitionItemFormValues[];
+  // workflowNotes?: string; // Optional notes for this fulfillment batch
 }
 
