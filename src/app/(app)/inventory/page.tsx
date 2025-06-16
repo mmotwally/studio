@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { InventoryItem } from '@/types';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, FolderPlus, ListTree, Warehouse, Users, Boxes, FileUp, FileDown, ListPlus } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, FolderPlus, ListTree, Warehouse, Users, Boxes, FileUp, FileDown, ListPlus, Activity } from 'lucide-react';
 import { AddCategoryDialog } from '@/components/settings/add-category-dialog';
 import { AddUnitDialog } from '@/components/settings/add-unit-dialog';
 import { AddLocationDialog } from '@/components/settings/add-location-dialog';
@@ -38,6 +38,7 @@ import { getInventoryItems, exportInventoryToExcelAction, deleteInventoryItemAct
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 import { ImportExcelDialog } from '@/components/inventory/import-excel-dialog';
+import { StockMovementDialog } from '@/components/inventory/stock-movement-dialog';
 
 
 export default function InventoryPage() {
@@ -52,6 +53,7 @@ export default function InventoryPage() {
   const [isLocationDialogOpen, setIsLocationDialogOpen] = React.useState(false);
   const [isSupplierDialogOpen, setIsSupplierDialogOpen] = React.useState(false);
   const [isImportExcelDialogOpen, setIsImportExcelDialogOpen] = React.useState(false);
+  const [isStockMovementDialogOpen, setIsStockMovementDialogOpen] = React.useState(false);
 
   const [itemToDelete, setItemToDelete] = React.useState<InventoryItem | null>(null);
 
@@ -130,12 +132,16 @@ export default function InventoryPage() {
   const handleDeleteConfirm = async () => {
     if (!itemToDelete) return;
     try {
-      await deleteInventoryItemAction(itemToDelete.id);
-      toast({
-        title: "Item Deleted",
-        description: `Item "${itemToDelete.name}" has been successfully deleted.`,
-      });
-      fetchItems(); // Refresh the list
+      const result = await deleteInventoryItemAction(itemToDelete.id);
+      if (result.success) {
+        toast({
+          title: "Item Deleted",
+          description: `Item "${itemToDelete.name}" has been successfully deleted.`,
+        });
+        fetchItems(); // Refresh the list
+      } else {
+        throw new Error(result.message);
+      }
     } catch (error) {
       console.error("Failed to delete item:", error);
       toast({
@@ -180,6 +186,9 @@ export default function InventoryPage() {
         description="Manage your stock items and supplies."
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            <Button variant="outline" onClick={() => setIsStockMovementDialogOpen(true)}>
+              <Activity className="mr-2 h-4 w-4" /> Stock Movement
+            </Button>
             <Dialog open={isImportExcelDialogOpen} onOpenChange={setIsImportExcelDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline">
@@ -308,7 +317,7 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* Dialog definitions for adding related data - triggered by state */}
+      {/* Dialog definitions */}
       <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
         <AddCategoryDialog setOpen={setIsCategoryDialogOpen} onCategoryAdded={fetchItems} />
       </Dialog>
@@ -324,6 +333,13 @@ export default function InventoryPage() {
       <Dialog open={isSupplierDialogOpen} onOpenChange={setIsSupplierDialogOpen}>
         <AddSupplierDialog setOpen={setIsSupplierDialogOpen} onSupplierAdded={fetchItems} />
       </Dialog>
+      <Dialog open={isStockMovementDialogOpen} onOpenChange={setIsStockMovementDialogOpen}>
+        <StockMovementDialog 
+            setOpen={setIsStockMovementDialogOpen} 
+            inventoryItems={inventoryItems.map(item => ({value: item.id, label: `${item.name} (${item.id})`}))} 
+        />
+      </Dialog>
+
 
       {/* Delete confirmation dialog */}
       {itemToDelete && (
