@@ -57,17 +57,16 @@ export default function AddInventoryItemPage() {
     defaultValues: {
       name: "",
       description: "",
-      // imageUrl is no longer a direct input, it will be derived from file upload
       quantity: 0,
       unitCost: 0,
       minStockLevel: 0,
       maxStockLevel: 0,
       lowStock: false,
-      categoryId: "",
+      categoryId: "", // Will be required by schema
       subCategoryId: "",
       locationId: "",
       supplierId: "",
-      unitId: "",
+      unitId: "", // Will be required by schema
     },
   });
 
@@ -89,7 +88,7 @@ export default function AddInventoryItemPage() {
           getUnitsOfMeasurement(),
         ]);
 
-        setCategories(fetchedCategories.map(c => ({ value: c.id, label: c.name })));
+        setCategories(fetchedCategories.map(c => ({ value: c.id, label: `${c.name} (${c.code})` })));
         setLocations(fetchedLocations.map(l => ({ value: l.id, label: l.fullName || l.store })));
         setSuppliers(fetchedSuppliers.map(s => ({ value: s.id, label: s.name })));
         setUnits(fetchedUnits.map(u => ({ value: u.id, label: `${u.name} ${u.abbreviation ? '('+u.abbreviation+')' : ''}`.trim() })));
@@ -113,18 +112,21 @@ export default function AddInventoryItemPage() {
       if (selectedCategoryId) {
         try {
           const fetchedSubCategories = await getSubCategories(selectedCategoryId);
-          setSubCategories(fetchedSubCategories.map(sc => ({ value: sc.id, label: sc.name })));
+          setSubCategories(fetchedSubCategories.map(sc => ({ value: sc.id, label: `${sc.name} (${sc.code})` })));
         } catch (error) {
            console.error("Failed to load sub-categories:", error);
            setSubCategories([]);
         }
       } else {
         setSubCategories([]);
-        form.setValue("subCategoryId", ""); // Reset subcategory if parent category is cleared
+        form.setValue("subCategoryId", ""); 
       }
     }
-    if(!isLoadingDropdownData) {
+    if(!isLoadingDropdownData && selectedCategoryId) { // Only load if category is selected
         loadSubCategories();
+    } else if (!selectedCategoryId) { // Clear if category is deselected
+        setSubCategories([]);
+        form.setValue("subCategoryId", "");
     }
   }, [selectedCategoryId, isLoadingDropdownData, form]);
 
@@ -133,7 +135,6 @@ export default function AddInventoryItemPage() {
     setIsSubmitting(true);
     const formData = new FormData();
 
-    // Append all form values to formData
     Object.entries(values).forEach(([key, value]) => {
       if (value !== null && value !== undefined) {
         if (typeof value === 'boolean') {
@@ -144,14 +145,12 @@ export default function AddInventoryItemPage() {
       }
     });
 
-    // Append image file if selected
     if (imageFileRef.current?.files && imageFileRef.current.files[0]) {
       formData.append('imageFile', imageFileRef.current.files[0]);
     }
 
     try {
       await addInventoryItemAction(formData);
-      // Server action handles redirect.
     } catch (error) {
       console.error("Submission error:", error);
       toast({
@@ -183,26 +182,27 @@ export default function AddInventoryItemPage() {
     placeholder: string,
     options: SelectItemType[],
     isLoading?: boolean,
-    isDisabled?: boolean
+    isDisabled?: boolean,
+    isRequired?: boolean
   ) => (
     <FormField
       control={form.control}
       name={name}
       render={({ field }) => (
         <FormItem>
-          <FormLabel>{label}</FormLabel>
+          <FormLabel>{label}{isRequired ? '*' : ''}</FormLabel>
           <Select
             onValueChange={field.onChange}
             value={field.value as string | undefined}
-            disabled={isLoading || isDisabled || (!isLoading && options.length === 0)}
+            disabled={isLoading || isDisabled || (!isLoading && options.length === 0 && name !== 'subCategoryId')}
           >
             <FormControl>
               <SelectTrigger>
-                <SelectValue placeholder={isLoading ? "Loading..." : (options.length === 0 ? "No options available" : placeholder)} />
+                <SelectValue placeholder={isLoading ? "Loading..." : (options.length === 0 && name !== 'subCategoryId' ? "No options available" : placeholder)} />
               </SelectTrigger>
             </FormControl>
             <SelectContent>
-              {options.length === 0 && !isLoading ? (
+              {options.length === 0 && !isLoading && name !== 'subCategoryId' ? (
                 <SelectItem value="no-options" disabled>No options available</SelectItem>
               ) : (
                 options.map((option) => (
@@ -211,6 +211,9 @@ export default function AddInventoryItemPage() {
                   </SelectItem>
                 ))
               )}
+               {name === 'subCategoryId' && options.length === 0 && !isLoading && selectedCategoryId && (
+                 <SelectItem value="no-sub-options" disabled>No sub-categories for selected category</SelectItem>
+               )}
             </SelectContent>
           </Select>
           <FormMessage />
@@ -223,7 +226,7 @@ export default function AddInventoryItemPage() {
     <>
       <PageHeader
         title="Add New Inventory Item"
-        description="Fill in the details to add a new item to your inventory."
+        description="Fill in the details to add a new item to your inventory. Item ID will be auto-generated."
       />
       <Card className="shadow-lg">
         <CardHeader>
@@ -279,6 +282,10 @@ export default function AddInventoryItemPage() {
                   <FormMessage />
                 </FormItem>
 
+                {renderSelect("categoryId", "Category", "Select a category", categories, isLoadingDropdownData, false, true)}
+                {renderSelect("subCategoryId", "Sub-Category", "Select a sub-category (optional)", subCategories, isLoadingDropdownData || (!!selectedCategoryId && subCategories.length === 0 && !isLoadingDropdownData && form.getFieldState("categoryId").isDirty) , !selectedCategoryId)}
+                {renderSelect("unitId", "Unit of Measurement", "Select a unit", units, isLoadingDropdownData, false, true)}
+                
                  <FormField
                   control={form.control}
                   name="quantity"
@@ -332,11 +339,9 @@ export default function AddInventoryItemPage() {
                   )}
                 />
 
-                {renderSelect("categoryId", "Category*", "Select a category", categories, isLoadingDropdownData)}
-                {renderSelect("subCategoryId", "Sub-Category", "Select a sub-category", subCategories, isLoadingDropdownData || (!!selectedCategoryId && subCategories.length === 0 && !isLoadingDropdownData && form.getFieldState("categoryId").isDirty) , !selectedCategoryId)}
-                {renderSelect("locationId", "Location", "Select a location", locations, isLoadingDropdownData)}
-                {renderSelect("supplierId", "Supplier", "Select a supplier", suppliers, isLoadingDropdownData)}
-                {renderSelect("unitId", "Unit of Measurement*", "Select a unit", units, isLoadingDropdownData)}
+                {renderSelect("locationId", "Location (Optional)", "Select a location", locations, isLoadingDropdownData)}
+                {renderSelect("supplierId", "Supplier (Optional)", "Select a supplier", suppliers, isLoadingDropdownData)}
+                
 
                 <FormField
                   control={form.control}
@@ -376,3 +381,5 @@ export default function AddInventoryItemPage() {
     </>
   );
 }
+
+    

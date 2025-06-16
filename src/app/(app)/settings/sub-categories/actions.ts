@@ -12,10 +12,11 @@ export async function addSubCategoryAction(data: SubCategoryFormValues) {
     const id = crypto.randomUUID();
 
     const result = await db.run(
-      `INSERT INTO sub_categories (id, name, categoryId) VALUES (?, ?, ?)`,
+      `INSERT INTO sub_categories (id, name, categoryId, code) VALUES (?, ?, ?, ?)`,
       id,
       data.name,
-      data.categoryId
+      data.categoryId,
+      data.code.toUpperCase()
     );
 
     if (!result.lastID) {
@@ -28,6 +29,9 @@ export async function addSubCategoryAction(data: SubCategoryFormValues) {
         if (error.message.includes("UNIQUE constraint failed: sub_categories.name, sub_categories.categoryId")) {
             throw new Error(`A sub-category with the name "${data.name}" already exists under the selected parent category.`);
         }
+        if (error.message.includes("UNIQUE constraint failed: sub_categories.categoryId, sub_categories.code")) {
+            throw new Error(`A sub-category with the code "${data.code.toUpperCase()}" already exists under the selected parent category.`);
+        }
       throw new Error(`Database operation failed: ${error.message}`);
     }
     throw new Error("Database operation failed. Could not add sub-category.");
@@ -35,13 +39,12 @@ export async function addSubCategoryAction(data: SubCategoryFormValues) {
 
   revalidatePath("/inventory");
   revalidatePath("/inventory/new");
-  // Potentially revalidate a settings page for sub-categories if it exists
 }
 
 export async function getSubCategories(categoryId?: string): Promise<SubCategoryDB[]> {
   const db = await openDb();
   let query = `
-    SELECT sc.id, sc.name, sc.categoryId, c.name as categoryName 
+    SELECT sc.id, sc.name, sc.categoryId, sc.code, c.name as categoryName 
     FROM sub_categories sc
     JOIN categories c ON sc.categoryId = c.id
   `;
@@ -55,3 +58,16 @@ export async function getSubCategories(categoryId?: string): Promise<SubCategory
   const subCategories = await db.all<SubCategoryDB[]>(query, ...params);
   return subCategories;
 }
+
+export async function getSubCategoryById(id: string): Promise<SubCategoryDB | null> {
+  if (!id) return null;
+  const db = await openDb();
+  const subCategory = await db.get<SubCategoryDB>(
+    `SELECT sc.id, sc.name, sc.categoryId, sc.code, c.name as categoryName 
+     FROM sub_categories sc
+     JOIN categories c ON sc.categoryId = c.id
+     WHERE sc.id = ?`, id);
+  return subCategory || null;
+}
+
+    

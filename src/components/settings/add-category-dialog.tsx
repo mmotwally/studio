@@ -39,6 +39,7 @@ export function AddCategoryDialog({ setOpen, onCategoryAdded }: AddCategoryDialo
     resolver: zodResolver(categorySchema),
     defaultValues: {
       name: "",
+      code: "",
     },
   });
 
@@ -68,15 +69,15 @@ export function AddCategoryDialog({ setOpen, onCategoryAdded }: AddCategoryDialo
   }
 
   return (
-    <DialogContent className="sm:max-w-[425px]">
+    <DialogContent className="sm:max-w-md">
       <DialogHeader>
         <DialogTitle>Add New Category</DialogTitle>
         <DialogDescription>
-          Enter the name for the new category.
+          Enter the name and a unique code for the new category.
         </DialogDescription>
       </DialogHeader>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
           <FormField
             control={form.control}
             name="name"
@@ -85,6 +86,19 @@ export function AddCategoryDialog({ setOpen, onCategoryAdded }: AddCategoryDialo
                 <FormLabel>Category Name*</FormLabel>
                 <FormControl>
                   <Input placeholder="e.g., Office Supplies" {...field} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="code"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Category Code*</FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g., OS (2-5 uppercase chars)" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} />
                 </FormControl>
                 <FormMessage />
               </FormItem>
@@ -105,3 +119,5 @@ export function AddCategoryDialog({ setOpen, onCategoryAdded }: AddCategoryDialo
     </DialogContent>
   );
 }
+
+    

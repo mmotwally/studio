@@ -71,6 +71,7 @@ export function AddSubCategoryDialog({ setOpen, onSubCategoryAdded }: AddSubCate
     defaultValues: {
       name: "",
       categoryId: "",
+      code: "",
     },
   });
 
@@ -100,11 +101,11 @@ export function AddSubCategoryDialog({ setOpen, onSubCategoryAdded }: AddSubCate
   }
 
   return (
-    <DialogContent className="sm:max-w-md">
+    <DialogContent className="sm:max-w-lg">
       <DialogHeader>
         <DialogTitle>Add New Sub-Category</DialogTitle>
         <DialogDescription>
-          Enter the name for the new sub-category and select its parent category.
+          Enter the name, a unique code for this sub-category under its parent, and select its parent category.
         </DialogDescription>
       </DialogHeader>
       <Form {...form}>
@@ -127,7 +128,7 @@ export function AddSubCategoryDialog({ setOpen, onSubCategoryAdded }: AddSubCate
                     ) : (
                       categories.map((category) => (
                         <SelectItem key={category.id} value={category.id}>
-                          {category.name}
+                          {category.name} ({category.code})
                         </SelectItem>
                       ))
                     )}
@@ -150,6 +151,19 @@ export function AddSubCategoryDialog({ setOpen, onSubCategoryAdded }: AddSubCate
               </FormItem>
             )}
           />
+          <FormField
+            control={form.control}
+            name="code"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Sub-Category Code*</FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g., LAP (2-5 uppercase chars)" {...field} onChange={(e) => field.onChange(e.target.value.toUpperCase())} />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline" disabled={isSubmitting}>
@@ -165,3 +179,5 @@ export function AddSubCategoryDialog({ setOpen, onSubCategoryAdded }: AddSubCate
     </DialogContent>
   );
 }
+
+    

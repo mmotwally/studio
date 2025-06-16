@@ -5,9 +5,11 @@ import { openDb } from "@/lib/database";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { InventoryItem } from '@/types';
+import { getCategoryById } from "@/app/(app)/settings/categories/actions";
+import { getSubCategoryById } from "@/app/(app)/settings/sub-categories/actions";
 import fs from 'fs/promises';
 import path from 'path';
-import crypto from 'crypto'; // For unique filenames
+import crypto from 'crypto'; // For unique filenames for images
 
 // Helper function to ensure directory exists
 async function ensureDirExists(dirPath: string) {
@@ -21,10 +23,50 @@ async function ensureDirExists(dirPath: string) {
   }
 }
 
+async function generateItemId(db: Database, categoryId: string, subCategoryId?: string | null): Promise<string> {
+  const category = await getCategoryById(categoryId);
+  if (!category || !category.code) {
+    throw new Error("Selected category is invalid or missing a code.");
+  }
+
+  let prefix = category.code + "-";
+  if (subCategoryId) {
+    const subCategory = await getSubCategoryById(subCategoryId);
+    if (subCategory && subCategory.code) {
+      prefix += subCategory.code + "-";
+    } else if (subCategory && !subCategory.code) {
+      // This case should ideally not happen if codes are enforced
+      console.warn(`Sub-category ${subCategoryId} is missing a code. Item ID will not include sub-category code.`);
+    }
+  }
+  
+  // Query for the highest sequence number for this prefix
+  // The 'id' column stores the full ID, e.g., "WP-PLY-001"
+  // We need to extract the numeric part after the prefix.
+  const likePattern = prefix + '%';
+  const result = await db.get(
+    `SELECT id FROM inventory WHERE id LIKE ? ORDER BY id DESC LIMIT 1`, 
+    likePattern
+  );
+
+  let nextSequence = 1;
+  if (result && result.id) {
+    const lastId = result.id as string;
+    const numericPart = lastId.substring(prefix.length);
+    const lastSequence = parseInt(numericPart, 10);
+    if (!isNaN(lastSequence)) {
+      nextSequence = lastSequence + 1;
+    }
+  }
+  
+  const formattedSequence = String(nextSequence).padStart(3, '0');
+  return prefix + formattedSequence;
+}
+
+
 export async function addInventoryItemAction(formData: FormData) {
   const rawFormData = Object.fromEntries(formData.entries());
 
-  // Manually parse and coerce form data because FormData sends everything as string
   const data = {
     name: rawFormData.name as string,
     description: rawFormData.description ? rawFormData.description as string : null,
@@ -33,12 +75,16 @@ export async function addInventoryItemAction(formData: FormData) {
     lowStock: rawFormData.lowStock === 'on' || rawFormData.lowStock === 'true',
     minStockLevel: parseInt(rawFormData.minStockLevel as string, 10) || 0,
     maxStockLevel: parseInt(rawFormData.maxStockLevel as string, 10) || 0,
-    categoryId: rawFormData.categoryId ? rawFormData.categoryId as string : undefined,
+    categoryId: rawFormData.categoryId as string, // Now mandatory
     subCategoryId: rawFormData.subCategoryId ? rawFormData.subCategoryId as string : undefined,
     locationId: rawFormData.locationId ? rawFormData.locationId as string : undefined,
     supplierId: rawFormData.supplierId ? rawFormData.supplierId as string : undefined,
     unitId: rawFormData.unitId ? rawFormData.unitId as string : undefined,
   };
+
+  if (!data.categoryId) {
+    throw new Error("Category is required to add an inventory item.");
+  }
 
   let imageUrlToStore: string | null = null;
   const imageFile = formData.get('imageFile') as File | null;
@@ -48,7 +94,7 @@ export async function addInventoryItemAction(formData: FormData) {
       const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'inventory');
       await ensureDirExists(uploadsDir);
 
-      const fileExtension = path.extname(imageFile.name) || '.png'; // default to png if no extension
+      const fileExtension = path.extname(imageFile.name) || '.png'; 
       const uniqueFileName = `${crypto.randomUUID()}${fileExtension}`;
       const filePath = path.join(uploadsDir, uniqueFileName);
 
@@ -57,25 +103,21 @@ export async function addInventoryItemAction(formData: FormData) {
       imageUrlToStore = `/uploads/inventory/${uniqueFileName}`;
     } catch (error) {
       console.error("Failed to upload image:", error);
-      // Decide if you want to throw an error and stop item creation or proceed without image
-      // For now, proceeding without image if upload fails.
-      // throw new Error("Image upload failed.");
     }
   }
 
-
   try {
     const db = await openDb();
-    const id = crypto.randomUUID();
+    const itemId = await generateItemId(db, data.categoryId, data.subCategoryId);
     const lastUpdated = new Date().toISOString();
 
     await db.run(
       `INSERT INTO inventory (id, name, description, imageUrl, quantity, unitCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      id,
+      itemId,
       data.name,
       data.description,
-      imageUrlToStore, // Use the path of the stored image
+      imageUrlToStore,
       data.quantity,
       data.unitCost,
       lastUpdated,
@@ -115,7 +157,9 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
       minStockLevel: number;
       maxStockLevel: number;
       categoryName?: string | null;
+      categoryCode?: string | null;
       subCategoryName?: string | null;
+      subCategoryCode?: string | null;
       locationName?: string | null;
       supplierName?: string | null;
       unitName?: string | null;
@@ -128,8 +172,8 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
     SELECT
       i.id, i.name, i.description, i.imageUrl, i.quantity, i.unitCost, i.lastUpdated, i.lowStock,
       i.minStockLevel, i.maxStockLevel,
-      c.name as categoryName, i.categoryId,
-      sc.name as subCategoryName, i.subCategoryId,
+      c.name as categoryName, c.code as categoryCode, i.categoryId,
+      sc.name as subCategoryName, sc.code as subCategoryCode, i.subCategoryId,
       l.store || COALESCE(' - ' || l.rack, '') || COALESCE(' - ' || l.shelf, '') as locationName, i.locationId,
       s.name as supplierName, i.supplierId,
       uom.name as unitName, i.unitId
@@ -139,7 +183,7 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
     LEFT JOIN locations l ON i.locationId = l.id
     LEFT JOIN suppliers s ON i.supplierId = s.id
     LEFT JOIN units_of_measurement uom ON i.unitId = uom.id
-    ORDER BY i.name ASC
+    ORDER BY i.id ASC -- Order by the new structured ID
   `);
 
   return rawItems.map(item => ({
@@ -155,7 +199,9 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
     minStockLevel: item.minStockLevel,
     maxStockLevel: item.maxStockLevel,
     categoryName: item.categoryName || undefined,
+    categoryCode: item.categoryCode || undefined,
     subCategoryName: item.subCategoryName || undefined,
+    subCategoryCode: item.subCategoryCode || undefined,
     locationName: item.locationName || undefined,
     supplierName: item.supplierName || undefined,
     unitName: item.unitName || undefined,
@@ -166,3 +212,5 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
     unitId: item.unitId || undefined,
   }));
 }
+
+    

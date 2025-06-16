@@ -13,7 +13,8 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
   await dbConnection.exec(`
     CREATE TABLE IF NOT EXISTS categories (
       id TEXT PRIMARY KEY,
-      name TEXT NOT NULL UNIQUE
+      name TEXT NOT NULL UNIQUE,
+      code TEXT NOT NULL UNIQUE
     );
   `);
 
@@ -22,8 +23,10 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       categoryId TEXT NOT NULL,
+      code TEXT NOT NULL,
       FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE CASCADE,
-      UNIQUE (name, categoryId)
+      UNIQUE (name, categoryId),
+      UNIQUE (categoryId, code)
     );
   `);
 
@@ -61,7 +64,7 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
 
   await dbConnection.exec(`
     CREATE TABLE IF NOT EXISTS inventory (
-      id TEXT PRIMARY KEY,
+      id TEXT PRIMARY KEY, -- Will store structured ID like CAT-SUB-001 or UUID if no category
       name TEXT NOT NULL,
       description TEXT,
       imageUrl TEXT,
@@ -171,20 +174,18 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   const catAdhesivesId = crypto.randomUUID();
 
   const categoriesData = [
-    { id: catWoodPanelsId, name: 'Wood Panels' },
-    { id: catEdgeBandingId, name: 'Edge Banding' },
-    { id: catHardwareId, name: 'Hardware' },
-    { id: catFastenersId, name: 'Fasteners' },
-    { id: catFinishesId, name: 'Finishes' },
-    { id: catAccessoriesId, name: 'Accessories' },
-    { id: catAdhesivesId, name: 'Adhesives & Sealants' },
+    { id: catWoodPanelsId, name: 'Wood Panels', code: 'WP' },
+    { id: catEdgeBandingId, name: 'Edge Banding', code: 'EB' },
+    { id: catHardwareId, name: 'Hardware', code: 'HW' },
+    { id: catFastenersId, name: 'Fasteners', code: 'FS' },
+    { id: catFinishesId, name: 'Finishes', code: 'FN' },
+    { id: catAccessoriesId, name: 'Accessories', code: 'AC' },
+    { id: catAdhesivesId, name: 'Adhesives & Sealants', code: 'AS' },
   ];
 
-  const categoryMap = new Map<string, string>();
   for (const cat of categoriesData) {
     try {
-      await db.run('INSERT INTO categories (id, name) VALUES (?, ?) ON CONFLICT(name) DO NOTHING', cat.id, cat.name);
-      categoryMap.set(cat.name, cat.id);
+      await db.run('INSERT INTO categories (id, name, code) VALUES (?, ?, ?) ON CONFLICT(name) DO NOTHING', cat.id, cat.name, cat.code);
     } catch (e) {
        console.warn(`Could not insert category ${cat.name}: ${(e as Error).message}`);
     }
@@ -195,47 +196,61 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   const subCatPlywoodId = crypto.randomUUID();
   const subCatMdfId = crypto.randomUUID();
   const subCatParticleBoardId = crypto.randomUUID();
+  const subCatVeneerSheetsId = crypto.randomUUID();
   const subCatPvcEdgeId = crypto.randomUUID();
+  const subCatWoodVeneerEdgeId = crypto.randomUUID();
   const subCatHingesId = crypto.randomUUID();
   const subCatDrawerSlidesId = crypto.randomUUID();
   const subCatHandlesId = crypto.randomUUID();
+  const subCatShelfSupportsId = crypto.randomUUID();
+  const subCatCabinetLegsId = crypto.randomUUID();
   const subCatScrewsId = crypto.randomUUID();
+  const subCatNailsBradsId = crypto.randomUUID();
+  const subCatDowelsId = crypto.randomUUID();
+  const subCatCamLocksId = crypto.randomUUID();
   const subCatPaintId = crypto.randomUUID();
+  const subCatVarnishId = crypto.randomUUID();
+  const subCatWoodStainId = crypto.randomUUID();
+  const subCatPrimerId = crypto.randomUUID();
+  const subCatDrawerOrgId = crypto.randomUUID();
+  const subCatLazySusanId = crypto.randomUUID();
+  const subCatLedStripId = crypto.randomUUID();
   const subCatWoodGlueId = crypto.randomUUID();
+  const subCatSiliconeId = crypto.randomUUID();
 
 
   const subCategoriesData = [
-    { id: subCatPlywoodId, name: 'Plywood', categoryId: catWoodPanelsId },
-    { id: subCatMdfId, name: 'MDF', categoryId: catWoodPanelsId },
-    { id: subCatParticleBoardId, name: 'Particle Board', categoryId: catWoodPanelsId },
-    { id: crypto.randomUUID(), name: 'Veneer Sheets', categoryId: catWoodPanelsId },
-    { id: subCatPvcEdgeId, name: 'PVC Edge Banding', categoryId: catEdgeBandingId },
-    { id: crypto.randomUUID(), name: 'Wood Veneer Edge Banding', categoryId: catEdgeBandingId },
-    { id: subCatHingesId, name: 'Hinges', categoryId: catHardwareId },
-    { id: subCatDrawerSlidesId, name: 'Drawer Slides', categoryId: catHardwareId },
-    { id: subCatHandlesId, name: 'Handles & Knobs', categoryId: catHardwareId },
-    { id: crypto.randomUUID(), name: 'Shelf Supports', categoryId: catHardwareId },
-    { id: crypto.randomUUID(), name: 'Cabinet Legs', categoryId: catHardwareId },
-    { id: subCatScrewsId, name: 'Screws', categoryId: catFastenersId },
-    { id: crypto.randomUUID(), name: 'Nails & Brads', categoryId: catFastenersId },
-    { id: crypto.randomUUID(), name: 'Dowels', categoryId: catFastenersId },
-    { id: crypto.randomUUID(), name: 'Cam Locks & Fittings', categoryId: catFastenersId },
-    { id: subCatPaintId, name: 'Paint', categoryId: catFinishesId },
-    { id: crypto.randomUUID(), name: 'Varnish / Lacquer', categoryId: catFinishesId },
-    { id: crypto.randomUUID(), name: 'Wood Stain', categoryId: catFinishesId },
-    { id: crypto.randomUUID(), name: 'Primer', categoryId: catFinishesId },
-    { id: crypto.randomUUID(), name: 'Drawer Organizers', categoryId: catAccessoriesId },
-    { id: crypto.randomUUID(), name: 'Lazy Susans', categoryId: catAccessoriesId },
-    { id: crypto.randomUUID(), name: 'LED Lighting Strips', categoryId: catAccessoriesId },
-    { id: subCatWoodGlueId, name: 'Wood Glue', categoryId: catAdhesivesId },
-    { id: crypto.randomUUID(), name: 'Silicone Sealant', categoryId: catAdhesivesId },
+    { id: subCatPlywoodId, name: 'Plywood', categoryId: catWoodPanelsId, code: 'PLY' },
+    { id: subCatMdfId, name: 'MDF', categoryId: catWoodPanelsId, code: 'MDF' },
+    { id: subCatParticleBoardId, name: 'Particle Board', categoryId: catWoodPanelsId, code: 'PB' },
+    { id: subCatVeneerSheetsId, name: 'Veneer Sheets', categoryId: catWoodPanelsId, code: 'VEN' },
+    { id: subCatPvcEdgeId, name: 'PVC Edge Banding', categoryId: catEdgeBandingId, code: 'PVC' },
+    { id: subCatWoodVeneerEdgeId, name: 'Wood Veneer Edge Banding', categoryId: catEdgeBandingId, code: 'WVE' },
+    { id: subCatHingesId, name: 'Hinges', categoryId: catHardwareId, code: 'HNG' },
+    { id: subCatDrawerSlidesId, name: 'Drawer Slides', categoryId: catHardwareId, code: 'DRS' },
+    { id: subCatHandlesId, name: 'Handles & Knobs', categoryId: catHardwareId, code: 'HND' },
+    { id: subCatShelfSupportsId, name: 'Shelf Supports', categoryId: catHardwareId, code: 'SHS' },
+    { id: subCatCabinetLegsId, name: 'Cabinet Legs', categoryId: catHardwareId, code: 'LEG' },
+    { id: subCatScrewsId, name: 'Screws', categoryId: catFastenersId, code: 'SCR' },
+    { id: subCatNailsBradsId, name: 'Nails & Brads', categoryId: catFastenersId, code: 'NLB' },
+    { id: subCatDowelsId, name: 'Dowels', categoryId: catFastenersId, code: 'DWL' },
+    { id: subCatCamLocksId, name: 'Cam Locks & Fittings', categoryId: catFastenersId, code: 'CMF' },
+    { id: subCatPaintId, name: 'Paint', categoryId: catFinishesId, code: 'PNT' },
+    { id: subCatVarnishId, name: 'Varnish / Lacquer', categoryId: catFinishesId, code: 'VAR' },
+    { id: subCatWoodStainId, name: 'Wood Stain', categoryId: catFinishesId, code: 'STN' },
+    { id: subCatPrimerId, name: 'Primer', categoryId: catFinishesId, code: 'PRM' },
+    { id: subCatDrawerOrgId, name: 'Drawer Organizers', categoryId: catAccessoriesId, code: 'DOR' },
+    { id: subCatLazySusanId, name: 'Lazy Susans', categoryId: catAccessoriesId, code: 'LSN' },
+    { id: subCatLedStripId, name: 'LED Lighting Strips', categoryId: catAccessoriesId, code: 'LED' },
+    { id: subCatWoodGlueId, name: 'Wood Glue', categoryId: catAdhesivesId, code: 'WGL' },
+    { id: subCatSiliconeId, name: 'Silicone Sealant', categoryId: catAdhesivesId, code: 'SIL' },
   ];
 
   for (const subCat of subCategoriesData) {
     try {
       await db.run(
-        'INSERT INTO sub_categories (id, name, categoryId) VALUES (?, ?, ?) ON CONFLICT(name, categoryId) DO NOTHING',
-        subCat.id, subCat.name, subCat.categoryId
+        'INSERT INTO sub_categories (id, name, categoryId, code) VALUES (?, ?, ?, ?) ON CONFLICT(name, categoryId) DO NOTHING',
+        subCat.id, subCat.name, subCat.categoryId, subCat.code
       );
     } catch (e) {
       console.warn(`Could not insert sub-category ${subCat.name} for category ID ${subCat.categoryId}: ${(e as Error).message}`);
@@ -291,52 +306,28 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Suppliers seeded.');
 
-  // Inventory Items
+  // Inventory Items (now using structured IDs from addInventoryItemAction logic if called, but for seeding, we'll pre-assign some)
   const inventoryItemsData = [
+    // These IDs are illustrative for seeding; actual generation is in addInventoryItemAction
     {
-      name: '18mm Birch Plywood (2440x1220mm)', description: 'High-quality birch plywood for structural and aesthetic applications.', imageUrl: 'https://placehold.co/300x200.png?text=Plywood',
+      id: 'WP-PLY-001', name: '18mm Birch Plywood (2440x1220mm)', description: 'High-quality birch plywood for structural and aesthetic applications.', imageUrl: 'https://placehold.co/300x200.png?text=Plywood',
       quantity: 50, unitCost: 45.50, lowStock: 0, minStockLevel: 10, maxStockLevel: 100,
       categoryId: catWoodPanelsId, subCategoryId: subCatPlywoodId, locationId: locMainWarehouseA1S1Id, supplierId: supPanelProId, unitId: unitSheetId,
     },
     {
-      name: 'Standard MDF Sheet (2440x1220x18mm)', description: 'Medium-density fiberboard, ideal for paint-grade cabinet doors and panels.', imageUrl: 'https://placehold.co/300x200.png?text=MDF',
+      id: 'WP-MDF-001', name: 'Standard MDF Sheet (2440x1220x18mm)', description: 'Medium-density fiberboard, ideal for paint-grade cabinet doors and panels.', imageUrl: 'https://placehold.co/300x200.png?text=MDF',
       quantity: 75, unitCost: 28.00, lowStock: 0, minStockLevel: 20, maxStockLevel: 150,
       categoryId: catWoodPanelsId, subCategoryId: subCatMdfId, locationId: locMainWarehouseA1S1Id, supplierId: supPanelProId, unitId: unitSheetId,
     },
     {
-      name: 'White PVC Edge Banding (22mm x 0.45mm)', description: 'Durable PVC edge banding for finishing MDF and particle board edges.', imageUrl: 'https://placehold.co/300x200.png?text=Edge+Band',
+      id: 'EB-PVC-001', name: 'White PVC Edge Banding (22mm x 0.45mm)', description: 'Durable PVC edge banding for finishing MDF and particle board edges.', imageUrl: 'https://placehold.co/300x200.png?text=Edge+Band',
       quantity: 5, unitCost: 15.00, lowStock: 1, minStockLevel: 2, maxStockLevel: 10,
       categoryId: catEdgeBandingId, subCategoryId: subCatPvcEdgeId, locationId: locWorkshopStorageB2Id, supplierId: supFinishingTouchesId, unitId: unitRollId,
     },
     {
-      name: 'Soft-Close Cabinet Hinges (Full Overlay)', description: 'European style soft-close hinges for a quiet and smooth cabinet door operation.', imageUrl: 'https://placehold.co/300x200.png?text=Hinges',
+      id: 'HW-HNG-001', name: 'Soft-Close Cabinet Hinges (Full Overlay)', description: 'European style soft-close hinges for a quiet and smooth cabinet door operation.', imageUrl: 'https://placehold.co/300x200.png?text=Hinges',
       quantity: 200, unitCost: 1.80, lowStock: 0, minStockLevel: 50, maxStockLevel: 300,
       categoryId: catHardwareId, subCategoryId: subCatHingesId, locationId: locWorkshopStorageB2Id, supplierId: supHardwareHubId, unitId: unitPairId,
-    },
-    {
-      name: 'Ball Bearing Drawer Slides (450mm)', description: 'Heavy-duty ball bearing drawer slides for smooth and reliable drawer movement.', imageUrl: 'https://placehold.co/300x200.png?text=Slides',
-      quantity: 80, unitCost: 5.50, lowStock: 0, minStockLevel: 20, maxStockLevel: 100,
-      categoryId: catHardwareId, subCategoryId: subCatDrawerSlidesId, locationId: locWorkshopStorageB2Id, supplierId: supHardwareHubId, unitId: unitSetId,
-    },
-    {
-      name: 'Brushed Nickel Cabinet Handles (128mm)', description: 'Modern brushed nickel handles for cabinet doors and drawers.', imageUrl: 'https://placehold.co/300x200.png?text=Handles',
-      quantity: 150, unitCost: 2.20, lowStock: 0, minStockLevel: 30, maxStockLevel: 200,
-      categoryId: catHardwareId, subCategoryId: subCatHandlesId, locationId: locShowroomBackstockId, supplierId: supHardwareHubId, unitId: unitPcsId,
-    },
-    {
-      name: 'Wood Screws (4x30mm)', description: 'General purpose wood screws, box of 200.', imageUrl: 'https://placehold.co/300x200.png?text=Screws',
-      quantity: 2, unitCost: 8.00, lowStock: 0, minStockLevel: 1, maxStockLevel: 5,
-      categoryId: catFastenersId, subCategoryId: subCatScrewsId, locationId: locCuttingDeptRackCId, supplierId: supHardwareHubId, unitId: unitBoxId,
-    },
-    {
-      name: 'Water-Based White Paint (Gloss)', description: 'Low VOC water-based paint for a durable gloss white finish.', imageUrl: 'https://placehold.co/300x200.png?text=Paint',
-      quantity: 10, unitCost: 25.00, lowStock: 0, minStockLevel: 3, maxStockLevel: 15,
-      categoryId: catFinishesId, subCategoryId: subCatPaintId, locationId: locWorkshopStorageB2Id, supplierId: supFinishingTouchesId, unitId: unitLiterId,
-    },
-    {
-      name: 'Professional Wood Glue (PVA)', description: 'Strong PVA wood glue for joinery and assembly, 1kg bottle.', imageUrl: 'https://placehold.co/300x200.png?text=Glue',
-      quantity: 20, unitCost: 7.50, lowStock: 0, minStockLevel: 5, maxStockLevel: 30,
-      categoryId: catAdhesivesId, subCategoryId: subCatWoodGlueId, locationId: locCuttingDeptRackCId, supplierId: supFinishingTouchesId, unitId: unitKgId,
     },
   ];
 
@@ -345,11 +336,11 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
       await db.run(
         `INSERT INTO inventory (id, name, description, imageUrl, quantity, unitCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        crypto.randomUUID(), item.name, item.description, item.imageUrl, item.quantity, item.unitCost, new Date().toISOString(), item.lowStock, item.minStockLevel, item.maxStockLevel,
+        item.id, item.name, item.description, item.imageUrl, item.quantity, item.unitCost, new Date().toISOString(), item.lowStock, item.minStockLevel, item.maxStockLevel,
         item.categoryId, item.subCategoryId, item.locationId, item.supplierId, item.unitId
       );
     } catch (e) {
-      console.warn(`Could not insert inventory item ${item.name}: ${(e as Error).message}`);
+      console.warn(`Could not insert inventory item ${item.name} with ID ${item.id}: ${(e as Error).message}`);
     }
   }
   console.log('Inventory Items seeded.');
@@ -371,12 +362,13 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
         await db.exec('PRAGMA foreign_keys = ON;');
 
         let schemaNeedsReset = false;
-        const tablesToEnsureExist = ['inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers'];
+        const tablesToEnsureExist = ['inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles'];
         const columnsToCheck: Record<string, string[]> = {
-          inventory: ['minStockLevel', 'description', 'imageUrl'],
+          inventory: ['minStockLevel', 'maxStockLevel', 'description', 'imageUrl'],
           units_of_measurement: ['conversion_factor', 'base_unit_id'],
           suppliers: ['contactPhone'],
-          sub_categories: ['categoryId'], // check constraint indirectly
+          categories: ['code'],
+          sub_categories: ['code', 'categoryId'],
         };
 
 
@@ -387,46 +379,41 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
             schemaNeedsReset = true;
             break; 
           }
-          // If table exists and we have specific columns to check for it
           if (columnsToCheck[tableName]) {
+            const tableInfo = await db.all(`PRAGMA table_info(${tableName});`);
+            const existingColumnNames = tableInfo.map(col => col.name);
             for (const columnName of columnsToCheck[tableName]) {
-              try {
-                // This is a light check, pragma_table_info would be more robust but complex for this auto-reset
-                await db.get(`SELECT ${columnName} FROM ${tableName} LIMIT 1;`);
-              } catch (e: any) {
-                if (e.message && e.message.toLowerCase().includes('no such column')) {
-                  console.warn(`Old schema detected for table ${tableName} (missing column: ${columnName}). Flagging for table reset.`);
-                  schemaNeedsReset = true;
-                  break; // Break from inner loop (columns)
-                } else {
-                  console.warn(`Unexpected error checking column ${columnName} in ${tableName}: ${e.message}. Flagging for reset as a precaution.`);
-                  schemaNeedsReset = true;
-                  break; // Break from inner loop (columns)
-                }
+              if (!existingColumnNames.includes(columnName)) {
+                console.warn(`Old schema detected for table ${tableName} (missing column: ${columnName}). Flagging for table reset.`);
+                schemaNeedsReset = true;
+                break; 
               }
             }
-            if (schemaNeedsReset) break; // Break from outer loop (tables)
+            if (schemaNeedsReset) break; 
           }
         }
 
 
         if (schemaNeedsReset) {
-          console.log('Performing data reset: dropping and recreating all tables due to detected schema mismatch or missing tables.');
+          console.log('Performing data reset: dropping and recreating all tables due to detected schema mismatch or missing tables/columns.');
           await _dropTables(db);
           await _createTables(db);
           console.log('All tables have been reset and recreated.');
           await _seedInitialData(db); 
         } else {
-          await _createTables(db); // Ensure tables exist if no reset was needed
-          const categoryCount = await db.get('SELECT COUNT(*) as count FROM categories');
-          if (categoryCount && categoryCount.count === 0) {
+          await _createTables(db); 
+          const categoryCountResult = await db.get('SELECT COUNT(*) as count FROM categories');
+          const categoryCount = categoryCountResult?.count ?? 0;
+          
+          if (categoryCount === 0) {
             console.log('Categories table is empty, but no schema reset was triggered. Seeding initial data.');
             await _seedInitialData(db);
           } else {
-            const inventoryCount = await db.get('SELECT COUNT(*) as count FROM inventory');
-            if (inventoryCount && inventoryCount.count === 0) {
-                 console.log('Inventory table is empty. Re-seeding initial data.');
-                await _seedInitialData(db);
+            const inventoryCountResult = await db.get('SELECT COUNT(*) as count FROM inventory');
+            const inventoryCount = inventoryCountResult?.count ?? 0;
+            if (inventoryCount === 0) {
+                 console.log('Inventory table is empty. Re-seeding initial data for inventory (and potentially related lookups if they were also empty).');
+                await _seedInitialData(db); // Re-seed all if inventory is empty as it might indicate a partial wipe or first seed
             }
           }
         }
@@ -442,7 +429,7 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
             console.error("Failed to close DB connection on error path:", closeErr);
           }
         }
-        appDbPromise = null; // Allow re-attempt on next call
+        appDbPromise = null; 
         throw error;
       }
     })();
@@ -469,8 +456,9 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
   if (dropFirst) { 
     await _seedInitialData(db);
   } else { 
-    const categoryCount = await db.get('SELECT COUNT(*) as count FROM categories');
-    if (categoryCount && categoryCount.count === 0) {
+    const categoryCountResult = await db.get('SELECT COUNT(*) as count FROM categories');
+    const categoryCount = categoryCountResult?.count ?? 0;
+    if (categoryCount === 0) {
         console.log('Script: Categories table is empty. Seeding initial data.');
         await _seedInitialData(db);
     }
@@ -479,3 +467,4 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
   return db;
 }
 
+    

@@ -20,6 +20,7 @@ export interface DashboardStat {
 export interface CategoryDB {
   id: string;
   name: string;
+  code: string;
 }
 
 export interface SubCategoryDB {
@@ -27,6 +28,7 @@ export interface SubCategoryDB {
   name: string;
   categoryId: string;
   categoryName?: string; // Optional: For display if joined
+  code: string;
 }
 
 export interface LocationDB {
@@ -69,8 +71,10 @@ export interface InventoryItem {
   maxStockLevel?: number;
   categoryId?: string;
   categoryName?: string; // For display, from join
+  categoryCode?: string; // For ID generation logic
   subCategoryId?: string;
   subCategoryName?: string; // For display
+  subCategoryCode?: string; // For ID generation logic
   locationId?: string;
   locationName?: string; // For display (e.g. Store - Rack - Shelf)
   supplierId?: string;
@@ -104,3 +108,4 @@ export type SelectItem = {
   label: string;
 };
 
+    
