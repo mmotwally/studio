@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import type { Requisition, FulfillRequisitionFormValues, FulfillRequisitionItemFormValues } from "@/types";
+import type { Requisition, FulfillRequisitionFormValues } from "@/types"; // Removed FulfillRequisitionItemFormValues as it's part of the schema
 import { processRequisitionFulfillmentAction } from "@/app/(app)/requisitions/actions";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AlertCircle, Info } from "lucide-react";
@@ -94,7 +94,7 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
     setServerError(null);
 
     const itemsToFulfill = values.items
-        .filter(item => item.quantityToIssueNow > 0) // Only send items where quantityToIssueNow > 0
+        .filter(item => item.quantityToIssueNow > 0) 
         .map(item => ({
             requisitionItemId: item.requisitionItemId,
             inventoryItemId: item.inventoryItemId,
@@ -113,27 +113,37 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
 
     try {
       await processRequisitionFulfillmentAction(values.requisitionId, itemsToFulfill);
+      // On successful redirect, this part won't be reached.
+      // If it is reached, it means the action completed without redirecting (which is not expected here).
       toast({
         title: "Success",
         description: "Requisition fulfillment processed.",
       });
-      onFulfillmentProcessed(); // Call to refresh data on the detail page
+      onFulfillmentProcessed(); 
       setOpen(false);
-    } catch (error) {
+    } catch (error: any) {
+      // Check if it's a Next.js redirect error
+      if (error.digest?.startsWith('NEXT_REDIRECT')) {
+        console.info("FulfillRequisitionDialog: Caught NEXT_REDIRECT, re-throwing.");
+        throw error; // Re-throw for Next.js to handle client-side navigation
+      }
+      // Handle actual application errors
       console.error("Failed to process fulfillment:", error);
       const errorMessage = error instanceof Error ? error.message : "Could not process fulfillment. Please try again.";
-      setServerError(errorMessage); // Display server error in dialog
+      setServerError(errorMessage); 
       toast({
         title: "Fulfillment Error",
         description: errorMessage,
         variant: "destructive",
       });
     } finally {
-      setIsSubmitting(false);
+      // Only set if not a redirect error that would unmount the component
+      if (!((isSubmitting && (serverError === null && !((Error as any).digest?.startsWith('NEXT_REDIRECT')))))) {
+         setIsSubmitting(false);
+      }
     }
   }
   
-  // If there are no items needing fulfillment, show a message and effectively disable the form.
   if (defaultFormValues.items.length === 0) {
     return (
        <DialogContent className="sm:max-w-2xl">
@@ -156,7 +166,7 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
 
 
   return (
-    <DialogContent className="sm:max-w-3xl"> {/* Increased width for better table layout */}
+    <DialogContent className="sm:max-w-3xl"> 
       <DialogHeader>
         <DialogTitle>Process Fulfillment for Requisition: {requisition.id}</DialogTitle>
         <DialogDescription>
@@ -165,7 +175,7 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
       </DialogHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-          <ScrollArea className="max-h-[60vh] pr-4"> {/* ScrollArea for potentially long lists */}
+          <ScrollArea className="max-h-[60vh] pr-4"> 
             <div className="space-y-4">
               {fields.map((field, index) => {
                 const itemData = form.getValues(`items.${index}`);
@@ -245,3 +255,4 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
     </DialogContent>
   );
 }
+
