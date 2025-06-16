@@ -9,11 +9,6 @@ import { createRequisitionAction } from '../actions';
 import type { RequisitionFormValues } from '../schema';
 import { useToast } from "@/hooks/use-toast";
 
-// Define an interface for the error object that Next.js throws for redirects
-interface NextRedirectError extends Error {
-  digest?: string;
-}
-
 export default function CreateRequisitionPage() {
   const { toast } = useToast();
   const [isPending, startTransition] = React.useTransition();
@@ -22,33 +17,39 @@ export default function CreateRequisitionPage() {
     startTransition(async () => {
       try {
         await createRequisitionAction(values);
-        // If createRequisitionAction calls redirect(), Next.js should handle it,
-        // and this try...catch should ideally not catch the redirect signal
-        // if the re-throw logic below works correctly.
+        // If createRequisitionAction successfully calls redirect(), 
+        // Next.js router should handle client-side navigation, and the promise 
+        // from the action should not reject in a way that this catch block
+        // is hit with a redirect signal when used with startTransition.
       } catch (error) {
-        const typedError = error as NextRedirectError;
+        const errorObj = error as Error & { digest?: string }; // Cast for potential digest property
 
-        // Check for the specific 'NEXT_REDIRECT' digest.
-        // This is the canonical way Next.js signals a redirect internally.
-        if (typedError.digest === 'NEXT_REDIRECT') {
-          // Re-throw the error so Next.js's router can handle the client-side navigation.
-          throw typedError;
+        // Log the caught error structure for debugging
+        console.log("Client caught error:", { 
+            message: errorObj.message, 
+            digest: errorObj.digest, 
+            name: errorObj.name,
+            // stack: errorObj.stack // Full stack can be verbose
+        });
+
+        // Check for Next.js redirect signal (digest is the most reliable)
+        if (errorObj.digest === 'NEXT_REDIRECT') {
+          console.log("Re-throwing error based on digest: NEXT_REDIRECT");
+          throw error; // Re-throw for Next.js router to handle
         }
         
-        // If it's not a NEXT_REDIRECT error, it's an actual application error from the server action.
-        console.error("Application error during requisition creation:", error);
-        
-        let title = "Error Creating Requisition";
-        let description = "Could not create requisition. Please try again.";
-
-        if (error instanceof Error) {
-           // Use the error message from the action if available
-           description = error.message || description;
+        // Fallback: Check message if digest is not NEXT_REDIRECT (e.g., due to serialization)
+        // This addresses the case where the toast was showing "NEXT_REDIRECT" as the message.
+        if (errorObj.message === 'NEXT_REDIRECT') {
+          console.warn("Re-throwing error based on message: NEXT_REDIRECT (digest was: " + errorObj.digest + ")");
+          throw error; // Re-throw for Next.js router to handle
         }
-        
+
+        // If it's a non-redirect error, it's an actual application error.
+        console.error("Application error during requisition creation (displaying toast):", error);
         toast({
-          title: title,
-          description: description,
+          title: "Error Creating Requisition",
+          description: errorObj.message || "Could not create requisition. Please try again.",
           variant: "destructive",
         });
       }
