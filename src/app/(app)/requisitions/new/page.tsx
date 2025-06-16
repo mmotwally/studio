@@ -17,21 +17,23 @@ export default function CreateRequisitionPage() {
     startTransition(() => {
       createRequisitionAction(values)
         .then(() => {
-          // This block should ideally not be reached if createRequisitionAction
-          // successfully calls redirect(), as Next.js should handle the navigation.
-          // However, if the action completes without a redirect (e.g., returns data),
-          // you might want a success toast here.
-          // For this specific 'create' action that redirects, we don't expect a success toast here.
-          console.log("Requisition action promise resolved without redirect being caught on client.");
+          // This toast is unlikely to be shown if the action successfully redirects.
+          // It's here as a fallback if the action completes but somehow doesn't trigger a redirect
+          // (which would be an unusual case for a successful create-and-redirect pattern).
+          toast({
+            title: "Success (No Redirect)",
+            description: "Requisition created, but redirect did not occur. Please check the requisitions list.",
+          });
         })
         .catch((error) => {
-          // This catch block will handle any errors from createRequisitionAction
-          // that are *not* the Next.js redirect signal, or if the redirect signal
-          // is unexpectedly caught here.
-          console.error("Error during requisition creation:", error);
+          // Next.js redirect signals are typically not caught here if the server action is set up correctly.
+          // This catch block is for genuine application errors from the server action.
+          console.error("Client-side error during requisition creation:", error);
           toast({
             title: "Error Creating Requisition",
-            description: (error instanceof Error ? error.message : String(error)) || "Could not create requisition. Please try again.",
+            description: (error instanceof Error && error.message !== 'NEXT_REDIRECT' && !error.message.startsWith('NEXT_REDIRECT')) 
+                           ? error.message 
+                           : "Could not create requisition. Please try again.",
             variant: "destructive",
           });
         });
