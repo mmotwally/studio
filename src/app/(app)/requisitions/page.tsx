@@ -1,6 +1,4 @@
 
-"use client";
-import * as React from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -13,93 +11,37 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, MoreHorizontal, Eye } from 'lucide-react';
+import { PlusCircle, Eye } from 'lucide-react';
 import type { Requisition, RequisitionStatus } from '@/types';
-// import { getRequisitions } from './actions'; // We'll create this action later
-import { useToast } from "@/hooks/use-toast";
+import { getRequisitions } from './actions';
+import { format } from 'date-fns';
 
-// Mock data for now - replace with API call
-const mockRequisitions: Requisition[] = [
-  // { 
-  //   id: 'REQ-202301-001', dateCreated: new Date().toISOString(), status: 'PENDING_APPROVAL', totalItems: 3, 
-  //   requesterName: 'Alice', lastUpdated: new Date().toISOString() 
-  // },
-  // { 
-  //   id: 'REQ-202301-002', dateCreated: new Date(Date.now() - 86400000).toISOString(), status: 'APPROVED', totalItems: 1, 
-  //   requesterName: 'Bob', lastUpdated: new Date(Date.now() - 86400000).toISOString()
-  // },
-];
-
-
-export default function RequisitionsPage() {
-  const [requisitions, setRequisitions] = React.useState<Requisition[]>(mockRequisitions);
-  const [isLoading, setIsLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-  const { toast } = useToast();
-
-  // TODO: Implement fetchRequisitions function using server action
-  // React.useEffect(() => {
-  //   async function fetchRequisitions() {
-  //     setIsLoading(true);
-  //     try {
-  //       // const fetchedRequisitions = await getRequisitions();
-  //       // setRequisitions(fetchedRequisitions);
-  //       setError(null);
-  //     } catch (e) {
-  //       console.error("Failed to fetch requisitions:", e);
-  //       setError("Could not load requisitions.");
-  //       setRequisitions([]);
-  //     } finally {
-  //       setIsLoading(false);
-  //     }
-  //   }
-  //   fetchRequisitions();
-  // }, [toast]);
-
-
-  React.useEffect(() => {
-    // Simulate loading for now
-    setTimeout(() => {
-      setIsLoading(false);
-      if (mockRequisitions.length === 0) {
-        // setError("No requisitions found. Create one to get started.");
-      }
-    }, 500);
-  }, []);
-
-
-  const getStatusBadgeVariant = (status: RequisitionStatus) => {
-    switch (status) {
-      case 'PENDING_APPROVAL': return 'default'; // bg-primary
-      case 'APPROVED': return 'secondary'; // bg-secondary, consider a green-like custom variant
-      case 'REJECTED': return 'destructive';
-      case 'FULFILLED': return 'outline'; // Consider a blue-like custom variant
-      case 'PARTIALLY_FULFILLED': return 'default'; // bg-primary with different text maybe
-      case 'CANCELLED': return 'outline';
-      default: return 'default';
-    }
-  };
-
-  const getStatusColor = (status: RequisitionStatus): string => {
-    switch (status) {
-      case 'PENDING_APPROVAL': return 'bg-yellow-500';
-      case 'APPROVED': return 'bg-green-500';
-      case 'REJECTED': return 'bg-red-500';
-      case 'FULFILLED': return 'bg-blue-500';
-      case 'PARTIALLY_FULFILLED': return 'bg-purple-500';
-      case 'CANCELLED': return 'bg-gray-500';
-      default: return 'bg-gray-400';
-    }
+function getStatusBadgeVariant(status: RequisitionStatus) {
+  switch (status) {
+    case 'PENDING_APPROVAL': return 'default';
+    case 'APPROVED': return 'secondary';
+    case 'REJECTED': return 'destructive';
+    case 'FULFILLED': return 'outline'; // Consider a more distinct "success" like variant
+    case 'PARTIALLY_FULFILLED': return 'default'; // Consider a more distinct "warning" like variant
+    case 'CANCELLED': return 'outline';
+    default: return 'default';
   }
+}
 
-  if (isLoading) {
-    return (
-      <>
-        <PageHeader title="Requisitions" description="Manage item requests and approval workflows." />
-        <div className="mt-4 text-center">Loading requisitions...</div>
-      </>
-    );
+function getStatusColorClass(status: RequisitionStatus): string {
+  switch (status) {
+    case 'PENDING_APPROVAL': return 'bg-yellow-500 hover:bg-yellow-500/90';
+    case 'APPROVED': return 'bg-green-500 hover:bg-green-500/90';
+    case 'REJECTED': return 'bg-red-500 hover:bg-red-500/90';
+    case 'FULFILLED': return 'bg-blue-500 hover:bg-blue-500/90';
+    case 'PARTIALLY_FULFILLED': return 'bg-purple-500 hover:bg-purple-500/90';
+    case 'CANCELLED': return 'bg-gray-500 hover:bg-gray-500/90';
+    default: return 'bg-gray-400 hover:bg-gray-400/90';
   }
+}
+
+export default async function RequisitionsPage() {
+  const requisitions = await getRequisitions();
 
   return (
     <>
@@ -114,13 +56,13 @@ export default function RequisitionsPage() {
           </Button>
         }
       />
-      {error && <div className="mb-4 text-center text-destructive">{error}</div>}
       
-      {requisitions.length === 0 && !isLoading && !error ? (
-         <div className="flex flex-col items-center justify-center h-64  border-2 border-dashed border-border bg-muted/20 rounded-lg">
+      {requisitions.length === 0 ? (
+         <div className="flex flex-col items-center justify-center h-64 border-2 border-dashed border-border bg-muted/20 rounded-lg shadow-sm">
+            <FileText size={48} className="text-muted-foreground mb-4" />
             <p className="text-lg text-muted-foreground mb-2">No requisitions found.</p>
             <p className="text-sm text-muted-foreground mb-4">Get started by creating a new requisition.</p>
-            <Button asChild>
+            <Button asChild variant="outline">
                 <Link href="/requisitions/new">
                 <PlusCircle className="mr-2 h-4 w-4" /> Create New Requisition
                 </Link>
@@ -131,34 +73,37 @@ export default function RequisitionsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[150px]">Requisition ID</TableHead>
+                <TableHead className="w-[180px]">Requisition ID</TableHead>
                 <TableHead>Date Created</TableHead>
+                <TableHead>Date Needed</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Requester</TableHead>
                 <TableHead className="text-right">Total Items</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead className="text-right w-[100px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {requisitions.map((req) => (
                 <TableRow key={req.id}>
                   <TableCell className="font-mono text-xs">{req.id}</TableCell>
-                  <TableCell>{new Date(req.dateCreated).toLocaleDateString()}</TableCell>
+                  <TableCell>{format(new Date(req.dateCreated), "PP")}</TableCell>
+                  <TableCell>{req.dateNeeded ? format(new Date(req.dateNeeded), "PP") : 'N/A'}</TableCell>
                   <TableCell>
-                    <Badge variant={getStatusBadgeVariant(req.status)} className={`capitalize ${getStatusColor(req.status)} text-white`}>
+                    <Badge 
+                      variant={getStatusBadgeVariant(req.status)} 
+                      className={`capitalize text-white ${getStatusColorClass(req.status)}`}
+                    >
                       {req.status.replace(/_/g, ' ').toLowerCase()}
                     </Badge>
                   </TableCell>
-                  <TableCell>{req.requesterName || 'N/A'}</TableCell>
-                  <TableCell className="text-right">{req.totalItems || req.items?.length || 0}</TableCell>
+                  <TableCell className="text-right">{req.totalItems || 0}</TableCell>
                   <TableCell className="text-right">
-                    {/* Placeholder for actions dropdown */}
-                    <Button variant="ghost" size="icon" asChild>
-                      <Link href={`/requisitions/${req.id}`}>
+                    <Button variant="ghost" size="icon" asChild title="View Details">
+                      <Link href={`/requisitions/${req.id}`}> 
                         <Eye className="h-4 w-4" />
-                        <span className="sr-only">View Details</span>
+                        <span className="sr-only">View Details for {req.id}</span>
                       </Link>
                     </Button>
+                    {/* Future actions: Edit, Cancel, Approve, etc. could go into a DropdownMenu */}
                   </TableCell>
                 </TableRow>
               ))}
