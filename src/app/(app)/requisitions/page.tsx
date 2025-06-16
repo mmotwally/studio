@@ -11,10 +11,12 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, Eye, FileText } from 'lucide-react';
+import { PlusCircle, FileText } from 'lucide-react';
 import type { Requisition, RequisitionStatus } from '@/types';
 import { getRequisitions } from './actions';
 import { format } from 'date-fns';
+import { RequisitionRowActions } from '@/components/requisitions/requisition-row-actions';
+
 
 function getStatusBadgeVariant(status: RequisitionStatus) {
   switch (status) {
@@ -78,7 +80,7 @@ export default async function RequisitionsPage() {
                 <TableHead>Date Needed</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Total Items</TableHead>
-                <TableHead className="text-right w-[100px]">Actions</TableHead>
+                <TableHead className="text-right w-[120px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -97,13 +99,7 @@ export default async function RequisitionsPage() {
                   </TableCell>
                   <TableCell className="text-right">{req.totalItems || 0}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="ghost" size="icon" asChild title="View Details">
-                      {/* Ensure the href uses the dynamic segment name `requisitionId` */}
-                      <Link href={`/requisitions/${req.id}`}> 
-                        <Eye className="h-4 w-4" />
-                        <span className="sr-only">View Details for {req.id}</span>
-                      </Link>
-                    </Button>
+                    <RequisitionRowActions requisition={req} />
                   </TableCell>
                 </TableRow>
               ))}
@@ -114,3 +110,4 @@ export default async function RequisitionsPage() {
     </>
   );
 }
+

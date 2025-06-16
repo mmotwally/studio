@@ -55,12 +55,12 @@ export async function createRequisitionAction(values: RequisitionFormValues) {
       const requisitionItemId = crypto.randomUUID();
       await db.run(
         `INSERT INTO requisition_items (id, requisitionId, inventoryItemId, quantityRequested, quantityIssued, notes)
-         VALUES (?, ?, ?, ?, ?, ?)`, // Added quantityIssued (default 0)
+         VALUES (?, ?, ?, ?, ?, ?)`,
         requisitionItemId,
         requisitionId,
         item.inventoryItemId,
         item.quantityRequested,
-        0, // Default quantityIssued to 0 on creation
+        0, 
         item.notes
       );
     }
@@ -94,18 +94,22 @@ export async function updateRequisitionAction(requisitionId: string, values: Req
 
     const lastUpdated = new Date().toISOString();
 
-    // Update main requisition details
+    const currentRequisition = await db.get('SELECT status FROM requisitions WHERE id = ?', requisitionId);
+    if (!currentRequisition || currentRequisition.status !== 'PENDING_APPROVAL') {
+        throw new Error("Requisition cannot be edited. It is not pending approval or does not exist.");
+    }
+
+
     await db.run(
       `UPDATE requisitions
        SET dateNeeded = ?, notes = ?, lastUpdated = ?
-       WHERE id = ? AND status = 'PENDING_APPROVAL'`, // Only allow edits if pending
+       WHERE id = ? AND status = 'PENDING_APPROVAL'`,
       values.dateNeeded ? values.dateNeeded.toISOString() : null,
       values.notes,
       lastUpdated,
       requisitionId
     );
 
-    // Get existing items to preserve their quantityIssued if any (though for PENDING_APPROVAL, it should be 0)
     const existingItemsMap = new Map<string, number>();
     const currentItems = await db.all<{id: string, inventoryItemId: string, quantityIssued: number}>(
         'SELECT id, inventoryItemId, quantityIssued FROM requisition_items WHERE requisitionId = ?', requisitionId
@@ -113,10 +117,8 @@ export async function updateRequisitionAction(requisitionId: string, values: Req
     currentItems.forEach(item => existingItemsMap.set(item.inventoryItemId, item.quantityIssued));
 
 
-    // Delete existing items for this requisition
     await db.run('DELETE FROM requisition_items WHERE requisitionId = ?', requisitionId);
 
-    // Re-insert all items from the form
     for (const item of values.items) {
       const requisitionItemId = crypto.randomUUID(); 
       const previouslyIssued = existingItemsMap.get(item.inventoryItemId) || 0;
@@ -127,7 +129,7 @@ export async function updateRequisitionAction(requisitionId: string, values: Req
         requisitionId,
         item.inventoryItemId,
         item.quantityRequested,
-        previouslyIssued, // Preserve previously issued quantity (should be 0 for PENDING_APPROVAL status)
+        previouslyIssued, 
         item.notes
       );
     }
@@ -220,7 +222,7 @@ export async function getRequisitionById(requisitionId: string): Promise<Requisi
   return {
     ...requisitionData,
     status: requisitionData.status as RequisitionStatus,
-    items: itemsData.map(item => ({...item, quantityIssued: item.quantityIssued || 0})), // Ensure quantityIssued is number
+    items: itemsData.map(item => ({...item, quantityIssued: item.quantityIssued || 0})),
     totalItems: itemsData.length,
   };
 }
@@ -229,7 +231,6 @@ export async function updateRequisitionStatusAction(requisitionId: string, newSt
   if (!requisitionId || !newStatus) {
     throw new Error("Requisition ID and new status are required.");
   }
-  // Prevent fulfilling/rejecting/cancelling if not in an appropriate state
   const db = await openDb();
   const currentRequisition = await db.get('SELECT status FROM requisitions WHERE id = ?', requisitionId);
   if (!currentRequisition) {
@@ -244,7 +245,6 @@ export async function updateRequisitionStatusAction(requisitionId: string, newSt
   if ((newStatus === 'APPROVED' || newStatus === 'REJECTED') && currentStatus !== 'PENDING_APPROVAL') {
      throw new Error(`Requisition cannot be ${newStatus.toLowerCase()}. Current status: ${currentStatus}.`);
   }
-  // Fulfillment status changes will be handled by processRequisitionFulfillmentAction
 
   try {
     const lastUpdated = new Date().toISOString();
@@ -294,10 +294,9 @@ export async function processRequisitionFulfillmentAction(
         throw new Error(`Quantity to issue for item ID ${item.inventoryItemId} cannot be negative.`);
       }
       if (item.quantityToIssueNow === 0) {
-        continue; // Skip if not issuing any quantity for this item in this batch
+        continue; 
       }
 
-      // Get current inventory stock and requisition item details in one go
       const inventoryItem = await db.get<InventoryItem>(
         'SELECT quantity FROM inventory WHERE id = ?',
         item.inventoryItemId
@@ -309,7 +308,6 @@ export async function processRequisitionFulfillmentAction(
         throw new Error(`Insufficient stock for item ID ${item.inventoryItemId}. Available: ${inventoryItem.quantity}, Tried to issue: ${item.quantityToIssueNow}.`);
       }
 
-      // Decrement inventory stock
       await db.run(
         'UPDATE inventory SET quantity = quantity - ?, lastUpdated = ? WHERE id = ?',
         item.quantityToIssueNow,
@@ -317,7 +315,6 @@ export async function processRequisitionFulfillmentAction(
         item.inventoryItemId
       );
 
-      // Update requisition item's quantityIssued (cumulative)
       await db.run(
         'UPDATE requisition_items SET quantityIssued = quantityIssued + ? WHERE id = ? AND requisitionId = ?',
         item.quantityToIssueNow,
@@ -326,7 +323,6 @@ export async function processRequisitionFulfillmentAction(
       );
     }
 
-    // Determine new overall requisition status
     const allRequisitionItems = await db.all<RequisitionItem>(
       'SELECT quantityRequested, quantityIssued FROM requisition_items WHERE requisitionId = ?',
       requisitionId
@@ -336,7 +332,7 @@ export async function processRequisitionFulfillmentAction(
     let isPartiallyFulfilled = false;
 
     if (allRequisitionItems.length === 0) {
-      isFullyFulfilled = false; // Or handle as an error case / specific status if needed
+      isFullyFulfilled = false; 
     }
 
     for (const reqItem of allRequisitionItems) {
@@ -354,10 +350,8 @@ export async function processRequisitionFulfillmentAction(
     } else if (isPartiallyFulfilled) {
       newStatus = 'PARTIALLY_FULFILLED';
     } else {
-      // If nothing was issued and it was previously 'APPROVED', it remains 'APPROVED'.
-      // This logic might need refinement if a state like 'PROCESSING' is introduced.
       const currentReq = await db.get('SELECT status FROM requisitions WHERE id = ?', requisitionId);
-      newStatus = currentReq?.status as RequisitionStatus || 'APPROVED'; // Fallback, though should have a status
+      newStatus = currentReq?.status as RequisitionStatus || 'APPROVED'; 
     }
 
     await db.run(
@@ -379,7 +373,55 @@ export async function processRequisitionFulfillmentAction(
 
   revalidatePath(`/requisitions/${requisitionId}`);
   revalidatePath('/requisitions');
-  revalidatePath('/inventory'); // Stock levels changed
+  revalidatePath('/inventory'); 
   redirect(`/requisitions/${requisitionId}`);
 }
 
+export async function deleteRequisitionAction(requisitionId: string): Promise<{ success: boolean; message: string }> {
+  if (!requisitionId) {
+    return { success: false, message: "Requisition ID is required for deletion." };
+  }
+
+  const db = await openDb();
+  await db.run('BEGIN TRANSACTION');
+
+  try {
+    // Check current status - for simplicity, allow deletion only for certain statuses
+    const requisition = await db.get('SELECT status FROM requisitions WHERE id = ?', requisitionId);
+    if (!requisition) {
+      await db.run('ROLLBACK');
+      return { success: false, message: `Requisition with ID "${requisitionId}" not found.` };
+    }
+
+    const deletableStatuses: RequisitionStatus[] = ['PENDING_APPROVAL', 'REJECTED', 'CANCELLED'];
+    if (!deletableStatuses.includes(requisition.status as RequisitionStatus)) {
+      await db.run('ROLLBACK');
+      return { success: false, message: `Requisition cannot be deleted. Current status: ${requisition.status}. Only pending, rejected, or cancelled requisitions can be deleted.` };
+    }
+
+    // Delete associated requisition items first
+    await db.run('DELETE FROM requisition_items WHERE requisitionId = ?', requisitionId);
+
+    // Delete the requisition itself
+    const result = await db.run('DELETE FROM requisitions WHERE id = ?', requisitionId);
+
+    if (result.changes === 0) {
+      // Should have been caught by the check above, but as a safeguard
+      await db.run('ROLLBACK');
+      return { success: false, message: `Requisition with ID "${requisitionId}" not found or already deleted.` };
+    }
+
+    await db.run('COMMIT');
+    revalidatePath("/requisitions");
+    return { success: true, message: `Requisition "${requisitionId}" and its items deleted successfully.` };
+
+  } catch (error: any) {
+    await db.run('ROLLBACK');
+    console.error(`Failed to delete requisition ${requisitionId}:`, error);
+    // Check for foreign key constraint errors if an inventory item was deleted, which shouldn't happen with ON DELETE RESTRICT
+    if (error.message.includes('FOREIGN KEY constraint failed')) {
+        return { success: false, message: `Failed to delete requisition: A related inventory item might still be in use or there's a data integrity issue.` };
+    }
+    return { success: false, message: `Failed to delete requisition: ${error.message}` };
+  }
+}
