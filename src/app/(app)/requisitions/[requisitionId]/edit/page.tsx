@@ -7,12 +7,13 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RequisitionForm } from '@/components/requisitions/requisition-form';
 import { getRequisitionById, updateRequisitionAction } from '../actions';
-import type { RequisitionFormValues, RequisitionItemFormValues } from '../schema';
-import type { Requisition } from '@/types';
+import type { RequisitionFormValues } from '../schema';
+import type { Requisition, RequisitionStatus } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button'; // For error state
-import { ArrowLeft } from 'lucide-react';
+import { Button } from '@/components/ui/button'; 
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Info, ArrowLeft } from 'lucide-react';
 
 export default function EditRequisitionPage() {
   const router = useRouter();
@@ -33,12 +34,17 @@ export default function EditRequisitionPage() {
       getRequisitionById(requisitionId)
         .then(fetchedRequisition => {
           if (fetchedRequisition) {
-            if (fetchedRequisition.status !== 'PENDING_APPROVAL') {
-                setError("This requisition cannot be edited as it's no longer pending approval.");
-                toast({ title: "Cannot Edit", description: "Only requisitions pending approval can be edited.", variant: "destructive" });
-            } else {
-                setRequisition(fetchedRequisition);
+            // Allow editing for PENDING_APPROVAL, APPROVED, FULFILLED, PARTIALLY_FULFILLED, REJECTED
+            // CANCELLED requisitions typically shouldn't be directly edited, but rather a new one created.
+            // For this implementation, we'll allow editing for more states, with backend handling status transitions.
+            const editableStatuses: RequisitionStatus[] = ['PENDING_APPROVAL', 'APPROVED', 'FULFILLED', 'PARTIALLY_FULFILLED', 'REJECTED'];
+            if (!editableStatuses.includes(fetchedRequisition.status) && fetchedRequisition.status !== 'CANCELLED') {
+                // Let's be more permissive on what can be opened for edit, server action will handle real logic
+                // setError(`This requisition (status: ${fetchedRequisition.status}) cannot be edited.`);
+                // toast({ title: "Cannot Edit", description: `Only requisitions with certain statuses can be edited. Current: ${fetchedRequisition.status}`, variant: "destructive" });
             }
+            setRequisition(fetchedRequisition);
+            
           } else {
             setError("Requisition not found.");
             toast({ title: "Error", description: "Requisition not found.", variant: "destructive" });
@@ -71,9 +77,8 @@ export default function EditRequisitionPage() {
           description: (err instanceof Error ? err.message : String(err)) || "Could not update requisition. Please try again.",
           variant: "destructive",
         });
-        setIsSubmitting(false); // Only set if not a redirect error
+        setIsSubmitting(false); 
       } 
-      // setIsSubmitting(false) will be handled by redirect or finally block if it fails before redirect
     });
   };
 
@@ -128,6 +133,9 @@ export default function EditRequisitionPage() {
       notes: item.notes || "",
     })) || [{ inventoryItemId: "", quantityRequested: 1, notes: "" }],
   };
+  
+  const showFulfilledWarning = requisition.status === 'FULFILLED' || requisition.status === 'PARTIALLY_FULFILLED';
+
 
   return (
     <>
@@ -139,10 +147,22 @@ export default function EditRequisitionPage() {
         <CardHeader>
           <CardTitle>Requisition Details</CardTitle>
           <CardDescription>
-            Update item quantities or notes. To add or remove items, you might need to cancel and create a new requisition.
+            Update item quantities or notes. 
+            {showFulfilledWarning && " Modifying a (partially) fulfilled requisition will return issued items to stock and reset its fulfillment status, requiring it to be processed again."}
+            Current Status: <span className="font-semibold">{requisition.status.replace(/_/g, ' ').toLowerCase()}</span>
           </CardDescription>
         </CardHeader>
         <CardContent>
+          {showFulfilledWarning && (
+             <Alert variant="default" className="mb-6 border-yellow-500 bg-yellow-50 text-yellow-700 dark:bg-yellow-700/20 dark:text-yellow-300 dark:border-yellow-600">
+                <Info className="h-4 w-4" />
+                <AlertTitle>Editing Fulfilled Requisition</AlertTitle>
+                <AlertDescription>
+                    Saving changes to this requisition will return any previously issued items to inventory. 
+                    The requisition status will be updated to 'Approved' and will require re-fulfillment.
+                </AlertDescription>
+            </Alert>
+          )}
           <RequisitionForm
             onSubmit={handleSubmit}
             isLoading={isPending || isSubmitting}
@@ -154,3 +174,4 @@ export default function EditRequisitionPage() {
     </>
   );
 }
+    

@@ -31,9 +31,19 @@ export function RequisitionRowActions({ requisition }: RequisitionRowActionsProp
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
 
-  const canEdit = requisition.status === 'PENDING_APPROVAL';
-  const canCancel = requisition.status === 'PENDING_APPROVAL' || requisition.status === 'APPROVED';
-  const canDelete = ['PENDING_APPROVAL', 'REJECTED', 'CANCELLED'].includes(requisition.status);
+  const canEdit = requisition.status === 'PENDING_APPROVAL' || 
+                  requisition.status === 'APPROVED' || 
+                  requisition.status === 'PARTIALLY_FULFILLED' ||
+                  requisition.status === 'FULFILLED' || // Allow editing fulfilled to potentially adjust/correct
+                  requisition.status === 'REJECTED'; // Allow editing rejected to resubmit
+
+  const canCancel = requisition.status === 'PENDING_APPROVAL' || 
+                    requisition.status === 'APPROVED' || 
+                    requisition.status === 'PARTIALLY_FULFILLED' || 
+                    requisition.status === 'FULFILLED';
+                    
+  // Allow deletion for most statuses, as stock will be returned.
+  const canDelete = true; 
 
   const handleCancelRequisition = async () => {
     startTransition(async () => {
@@ -41,7 +51,7 @@ export function RequisitionRowActions({ requisition }: RequisitionRowActionsProp
         await updateRequisitionStatusAction(requisition.id, 'CANCELLED');
         toast({
           title: "Requisition Cancelled",
-          description: `Requisition ${requisition.id} has been cancelled.`,
+          description: `Requisition ${requisition.id} has been cancelled. Issued stock (if any) returned.`,
         });
         // router.refresh(); // Handled by revalidatePath in action
       } catch (error) {
@@ -109,7 +119,7 @@ export function RequisitionRowActions({ requisition }: RequisitionRowActionsProp
             className="h-8 w-8"
             title="Cancel Requisition"
             onClick={(e) => { e.preventDefault(); setIsCancelAlertOpen(true); }}
-            disabled={isPending}
+            disabled={isPending || requisition.status === 'CANCELLED'}
           >
             <FileX2 className="h-4 w-4" />
             <span className="sr-only">Cancel {requisition.id}</span>
@@ -138,6 +148,7 @@ export function RequisitionRowActions({ requisition }: RequisitionRowActionsProp
             <AlertDialogTitle>Cancel Requisition?</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to cancel requisition <span className="font-semibold">{requisition.id}</span>? 
+              If this requisition was partially or fully fulfilled, the issued stock will be returned to inventory.
               This action cannot be undone easily.
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -161,7 +172,7 @@ export function RequisitionRowActions({ requisition }: RequisitionRowActionsProp
             <AlertDialogTitle>Delete Requisition?</AlertDialogTitle>
             <AlertDialogDescription>
               Are you sure you want to permanently delete requisition <span className="font-semibold">{requisition.id}</span> and all its items? 
-              This action cannot be undone.
+              Any stock that was issued for this requisition will be returned to inventory. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -179,3 +190,4 @@ export function RequisitionRowActions({ requisition }: RequisitionRowActionsProp
     </>
   );
 }
+    
