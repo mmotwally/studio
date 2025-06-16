@@ -9,18 +9,73 @@ const DB_FILE = path.join(process.cwd(), 'local.db');
 let appDbPromise: Promise<Database<sqlite3.Database, sqlite3.Statement>> | null = null;
 
 async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.Statement>) {
+  // Categories Table
+  await dbConnection.exec(`
+    CREATE TABLE IF NOT EXISTS categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE
+    );
+  `);
+
+  // Sub-Categories Table
+  await dbConnection.exec(`
+    CREATE TABLE IF NOT EXISTS sub_categories (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      categoryId TEXT NOT NULL,
+      FOREIGN KEY (categoryId) REFERENCES categories(id)
+    );
+  `);
+
+  // Locations Table
+  await dbConnection.exec(`
+    CREATE TABLE IF NOT EXISTS locations (
+      id TEXT PRIMARY KEY,
+      store TEXT NOT NULL,
+      rack TEXT,
+      shelf TEXT
+    );
+  `);
+
+  // Suppliers Table
+  await dbConnection.exec(`
+    CREATE TABLE IF NOT EXISTS suppliers (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      contactPerson TEXT,
+      contactMail TEXT,
+      address TEXT
+    );
+  `);
+
+  // Units of Measurement Table
+  await dbConnection.exec(`
+    CREATE TABLE IF NOT EXISTS units_of_measurement (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      abbreviation TEXT UNIQUE
+    );
+  `);
+
   // Inventory Table
   await dbConnection.exec(`
     CREATE TABLE IF NOT EXISTS inventory (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
-      category TEXT,
       quantity INTEGER NOT NULL DEFAULT 0,
       unitCost REAL NOT NULL DEFAULT 0,
-      location TEXT,
-      supplier TEXT,
       lastUpdated TEXT NOT NULL,
-      lowStock INTEGER NOT NULL DEFAULT 0
+      lowStock INTEGER NOT NULL DEFAULT 0,
+      categoryId TEXT,
+      subCategoryId TEXT,
+      locationId TEXT,
+      supplierId TEXT,
+      unitId TEXT,
+      FOREIGN KEY (categoryId) REFERENCES categories(id),
+      FOREIGN KEY (subCategoryId) REFERENCES sub_categories(id),
+      FOREIGN KEY (locationId) REFERENCES locations(id),
+      FOREIGN KEY (supplierId) REFERENCES suppliers(id),
+      FOREIGN KEY (unitId) REFERENCES units_of_measurement(id)
     );
   `);
 

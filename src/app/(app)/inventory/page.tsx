@@ -13,27 +13,42 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { InventoryItem } from '@/types';
-import { PlusCircle, MoreHorizontal, Edit, Trash2 } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, FolderPlus, ListTree, Warehouse, Users } from 'lucide-react';
 import { openDb } from '@/lib/database';
 
 async function getInventoryItems(): Promise<InventoryItem[]> {
   const db = await openDb();
-  // The 'lowStock' column in the DB is INTEGER (0 or 1).
-  // The 'totalValue' is not stored in DB, it's derived.
-  const rawItems = await db.all('SELECT id, name, category, quantity, unitCost, location, supplier, lastUpdated, lowStock FROM inventory ORDER BY name ASC');
-  // Note: We don't call db.close() here if openDb provides a shared/managed instance.
+  // This query will need to be enhanced with JOINs later to fetch names for IDs
+  const rawItems = await db.all(`
+    SELECT 
+      i.id, i.name, i.quantity, i.unitCost, i.lastUpdated, i.lowStock,
+      c.name as categoryName,
+      sc.name as subCategoryName,
+      l.store || COALESCE(' - ' || l.rack, '') || COALESCE(' - ' || l.shelf, '') as locationName,
+      s.name as supplierName,
+      uom.name as unitName
+    FROM inventory i
+    LEFT JOIN categories c ON i.categoryId = c.id
+    LEFT JOIN sub_categories sc ON i.subCategoryId = sc.id
+    LEFT JOIN locations l ON i.locationId = l.id
+    LEFT JOIN suppliers s ON i.supplierId = s.id
+    LEFT JOIN units_of_measurement uom ON i.unitId = uom.id
+    ORDER BY i.name ASC
+  `);
 
   return rawItems.map(item => ({
     id: item.id,
     name: item.name,
-    category: item.category,
     quantity: item.quantity,
     unitCost: item.unitCost,
     totalValue: item.quantity * item.unitCost,
-    location: item.location,
-    supplier: item.supplier,
     lastUpdated: item.lastUpdated,
     lowStock: Boolean(item.lowStock),
+    categoryName: item.categoryName,
+    subCategoryName: item.subCategoryName,
+    locationName: item.locationName,
+    supplierName: item.supplierName,
+    unitName: item.unitName,
   }));
 }
 
@@ -43,7 +58,6 @@ export default async function InventoryPage() {
     inventoryItems = await getInventoryItems();
   } catch (error) {
     console.error("Failed to fetch inventory items:", error);
-    // Optionally, render an error message to the user
     return (
       <>
         <PageHeader
@@ -52,6 +66,7 @@ export default async function InventoryPage() {
         />
         <div className="mt-4 text-center text-destructive">
           Error loading inventory data. Please ensure the database is initialized correctly.
+          Run 'npm run db:init' if this is the first setup.
         </div>
       </>
     );
@@ -63,11 +78,33 @@ export default async function InventoryPage() {
         title="Inventory"
         description="Manage your stock items and supplies."
         actions={
-          <Button asChild>
-            <Link href="/inventory/new">
-              <PlusCircle className="mr-2 h-4 w-4" /> Add New Item
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="outline">
+              <Link href="#"> {/* Placeholder: Link to Add Category Dialog */}
+                <FolderPlus className="mr-2 h-4 w-4" /> Add Category
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="#"> {/* Placeholder: Link to Add Sub-Category Dialog */}
+                <ListTree className="mr-2 h-4 w-4" /> Add Sub-Category
+              </Link>
+            </Button>
+             <Button asChild variant="outline">
+              <Link href="#"> {/* Placeholder: Link to Add Location Dialog */}
+                <Warehouse className="mr-2 h-4 w-4" /> Add Location
+              </Link>
+            </Button>
+             <Button asChild variant="outline">
+              <Link href="#"> {/* Placeholder: Link to Add Supplier Dialog */}
+                <Users className="mr-2 h-4 w-4" /> Add Supplier
+              </Link>
+            </Button>
+            <Button asChild>
+              <Link href="/inventory/new">
+                <PlusCircle className="mr-2 h-4 w-4" /> Add New Item
+              </Link>
+            </Button>
+          </div>
         }
       />
       <div className="overflow-hidden rounded-lg border shadow-sm">
@@ -77,11 +114,13 @@ export default async function InventoryPage() {
               <TableHead>Item ID</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
+              <TableHead>Sub-Category</TableHead>
+              <TableHead>Location</TableHead>
+              <TableHead>Supplier</TableHead>
+              <TableHead>Unit</TableHead>
               <TableHead className="text-right">Quantity</TableHead>
               <TableHead className="text-right">Unit Cost</TableHead>
               <TableHead className="text-right">Total Value</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Supplier</TableHead>
               <TableHead>Last Updated</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -89,17 +128,19 @@ export default async function InventoryPage() {
           <TableBody>
             {inventoryItems.map((item) => (
               <TableRow key={item.id} className={item.lowStock ? 'bg-destructive/10 hover:bg-destructive/20' : ''}>
-                <TableCell className="font-medium">{item.id}</TableCell>
+                <TableCell className="font-medium truncate max-w-[100px]">{item.id}</TableCell>
                 <TableCell>
                   {item.name}
                   {item.lowStock && <Badge variant="destructive" className="ml-2">Low Stock</Badge>}
                 </TableCell>
-                <TableCell>{item.category}</TableCell>
+                <TableCell>{item.categoryName || '-'}</TableCell>
+                <TableCell>{item.subCategoryName || '-'}</TableCell>
+                <TableCell>{item.locationName || '-'}</TableCell>
+                <TableCell>{item.supplierName || '-'}</TableCell>
+                <TableCell>{item.unitName || '-'}</TableCell>
                 <TableCell className="text-right">{item.quantity}</TableCell>
                 <TableCell className="text-right">${item.unitCost.toFixed(2)}</TableCell>
                 <TableCell className="text-right">${item.totalValue.toFixed(2)}</TableCell>
-                <TableCell>{item.location}</TableCell>
-                <TableCell>{item.supplier}</TableCell>
                 <TableCell>{new Date(item.lastUpdated).toLocaleDateString()}</TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>

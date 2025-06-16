@@ -22,7 +22,7 @@ import { PageHeader } from "@/components/page-header";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { addInventoryItemAction } from "../actions";
-import { type InventoryItemFormValues, inventoryItemSchema } from "../schema"; // Import from the new schema file
+import { type InventoryItemFormValues, inventoryItemSchema } from "../schema";
 
 export default function AddInventoryItemPage() {
   const router = useRouter();
@@ -33,12 +33,14 @@ export default function AddInventoryItemPage() {
     resolver: zodResolver(inventoryItemSchema),
     defaultValues: {
       name: "",
-      category: "",
       quantity: 0,
       unitCost: 0,
-      location: "",
-      supplier: "",
       lowStock: false,
+      categoryId: "",
+      subCategoryId: "",
+      locationId: "",
+      supplierId: "",
+      unitId: "",
     },
   });
 
@@ -46,13 +48,7 @@ export default function AddInventoryItemPage() {
     setIsSubmitting(true);
     try {
       await addInventoryItemAction(values);
-      // Server action handles redirect, so success toast might be better on the target page
-      // or using a flash message system if needed. For now, direct redirect is fine.
-      // router.push('/inventory'); // Action will redirect
-      // toast({
-      //   title: "Success",
-      //   description: "Inventory item added successfully.",
-      // });
+      // Action handles redirect
     } catch (error) {
       console.error("Submission error:", error);
       toast({
@@ -60,10 +56,8 @@ export default function AddInventoryItemPage() {
         description: (error instanceof Error ? error.message : String(error)) || "Could not add item. Please try again.",
         variant: "destructive",
       });
-      setIsSubmitting(false); // Only set if error, on success redirect happens
+      setIsSubmitting(false);
     }
-    // Do not set isSubmitting to false here if successful, as redirect will unmount.
-    // It's handled in the catch block.
   }
 
   return (
@@ -93,20 +87,7 @@ export default function AddInventoryItemPage() {
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={form.control}
-                  name="category"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Category</FormLabel>
-                      <FormControl>
-                        <Input placeholder="e.g., Furniture" {...field} />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
+                 <FormField
                   control={form.control}
                   name="quantity"
                   render={({ field }) => (
@@ -132,28 +113,77 @@ export default function AddInventoryItemPage() {
                     </FormItem>
                   )}
                 />
+                {/* Placeholder for Category Dropdown - Will be Select component */}
                 <FormField
                   control={form.control}
-                  name="location"
+                  name="categoryId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Location</FormLabel>
+                      <FormLabel>Category ID (temp)</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., Warehouse A, Shelf 3" {...field} />
+                        <Input placeholder="Enter Category ID" {...field} />
                       </FormControl>
+                       <FormDescription>This will be a dropdown later.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <FormField
+                {/* Placeholder for Sub-Category Dropdown - Will be Select component */}
+                 <FormField
                   control={form.control}
-                  name="supplier"
+                  name="subCategoryId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Supplier</FormLabel>
+                      <FormLabel>Sub-Category ID (temp)</FormLabel>
                       <FormControl>
-                        <Input placeholder="e.g., Office Supplies Inc." {...field} />
+                        <Input placeholder="Enter Sub-Category ID" {...field} />
                       </FormControl>
+                      <FormDescription>This will be a dropdown later.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {/* Placeholder for Location Dropdown - Will be Select component */}
+                <FormField
+                  control={form.control}
+                  name="locationId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Location ID (temp)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter Location ID" {...field} />
+                      </FormControl>
+                      <FormDescription>This will be a dropdown later.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                {/* Placeholder for Supplier Dropdown - Will be Select component */}
+                <FormField
+                  control={form.control}
+                  name="supplierId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Supplier ID (temp)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter Supplier ID" {...field} />
+                      </FormControl>
+                      <FormDescription>This will be a dropdown later.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 {/* Placeholder for Unit Dropdown - Will be Select component */}
+                <FormField
+                  control={form.control}
+                  name="unitId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Unit ID (temp)</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter Unit ID" {...field} />
+                      </FormControl>
+                      <FormDescription>This will be a dropdown later.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
