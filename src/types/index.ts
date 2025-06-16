@@ -146,3 +146,48 @@ export type SelectItem = {
   value: string;
   label: string;
 };
+
+
+// Requisition Module Types
+export type RequisitionStatus = 
+  | 'PENDING_APPROVAL' 
+  | 'APPROVED' 
+  | 'REJECTED' 
+  | 'FULFILLED' 
+  | 'PARTIALLY_FULFILLED' 
+  | 'CANCELLED';
+
+export interface Requisition {
+  id: string;
+  requesterId?: string | null; // Link to User later
+  requesterName?: string; // For display
+  department?: string | null;
+  dateCreated: string;
+  dateNeeded?: string | null;
+  status: RequisitionStatus;
+  notes?: string | null;
+  lastUpdated: string;
+  items?: RequisitionItem[]; // Populated when viewing details
+  totalItems?: number; // For list view summary
+}
+
+export interface RequisitionItem {
+  id: string;
+  requisitionId: string;
+  inventoryItemId: string;
+  inventoryItemName?: string; // For display
+  inventoryItemCurrentStock?: number; // For display on detail view
+  quantityRequested: number;
+  quantityIssued?: number;
+  notes?: string | null;
+}
+
+export interface RequisitionFormValues {
+  dateNeeded?: Date | null;
+  notes?: string | null;
+  items: Array<{
+    inventoryItemId: string;
+    quantityRequested: number;
+    notes?: string | null;
+  }>;
+}

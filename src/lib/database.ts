@@ -64,7 +64,7 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
 
   await dbConnection.exec(`
     CREATE TABLE IF NOT EXISTS inventory (
-      id TEXT PRIMARY KEY, -- Will store structured ID like CAT-SUB-001 or UUID if no category
+      id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       description TEXT,
       imageUrl TEXT,
@@ -104,10 +104,40 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       description TEXT
     );
   `);
+
+  await dbConnection.exec(`
+    CREATE TABLE IF NOT EXISTS requisitions (
+      id TEXT PRIMARY KEY, -- e.g., REQ-YYYYMMDD-001
+      requesterId TEXT, -- For future use with user authentication
+      department TEXT, -- For future use
+      dateCreated TEXT NOT NULL,
+      dateNeeded TEXT,
+      status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL', -- PENDING_APPROVAL, APPROVED, REJECTED, FULFILLED, PARTIALLY_FULFILLED, CANCELLED
+      notes TEXT,
+      lastUpdated TEXT NOT NULL,
+      FOREIGN KEY (requesterId) REFERENCES users(id) ON DELETE SET NULL
+    );
+  `);
+
+  await dbConnection.exec(`
+    CREATE TABLE IF NOT EXISTS requisition_items (
+      id TEXT PRIMARY KEY, -- UUID
+      requisitionId TEXT NOT NULL,
+      inventoryItemId TEXT NOT NULL,
+      quantityRequested INTEGER NOT NULL,
+      quantityIssued INTEGER DEFAULT 0,
+      notes TEXT,
+      FOREIGN KEY (requisitionId) REFERENCES requisitions(id) ON DELETE CASCADE,
+      FOREIGN KEY (inventoryItemId) REFERENCES inventory(id) ON DELETE RESTRICT -- Prevent deleting inventory items that are on requisitions
+    );
+  `);
+
   console.log('Tables schema checked/created by _createTables.');
 }
 
 async function _dropTables(dbConnection: Database<sqlite3.Database, sqlite3.Statement>) {
+  await dbConnection.exec(`DROP TABLE IF EXISTS requisition_items;`);
+  await dbConnection.exec(`DROP TABLE IF EXISTS requisitions;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS inventory;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS units_of_measurement;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS suppliers;`);
@@ -362,13 +392,15 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
         await db.exec('PRAGMA foreign_keys = ON;');
 
         let schemaNeedsReset = false;
-        const tablesToEnsureExist = ['inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles'];
+        const tablesToEnsureExist = ['inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles', 'requisitions', 'requisition_items'];
         const columnsToCheck: Record<string, string[]> = {
           inventory: ['minStockLevel', 'maxStockLevel', 'description', 'imageUrl'],
           units_of_measurement: ['conversion_factor', 'base_unit_id'],
           suppliers: ['contactPhone'],
           categories: ['code'],
           sub_categories: ['code', 'categoryId'],
+          requisitions: ['requesterId', 'department', 'dateNeeded', 'status', 'notes', 'lastUpdated'],
+          requisition_items: ['requisitionId', 'inventoryItemId', 'quantityRequested', 'quantityIssued', 'notes'],
         };
 
 
