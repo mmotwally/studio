@@ -4,9 +4,9 @@
 import * as React from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-// import { RequisitionForm } from './components/requisition-form'; // We will create this component
-// import { createRequisitionAction } from './actions'; // We will create this action
-import type { RequisitionFormValues } from '@/types';
+import { RequisitionForm } from '@/components/requisitions/requisition-form'; 
+import { createRequisitionAction } from '../actions'; 
+import type { RequisitionFormValues } from '../schema';
 import { useToast } from "@/hooks/use-toast";
 import { useRouter } from 'next/navigation';
 
@@ -15,26 +15,22 @@ export default function CreateRequisitionPage() {
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
-  // const handleSubmit = async (values: RequisitionFormValues) => {
-  //   setIsSubmitting(true);
-  //   try {
-  //     // await createRequisitionAction(values);
-  //     toast({
-  //       title: "Requisition Created",
-  //       description: "Your requisition has been submitted for approval.",
-  //     });
-  //     router.push('/requisitions');
-  //   } catch (error) {
-  //     console.error("Failed to create requisition:", error);
-  //     toast({
-  //       title: "Error",
-  //       description: (error instanceof Error ? error.message : "Could not create requisition.") || "Could not create requisition.",
-  //       variant: "destructive",
-  //     });
-  //   } finally {
-  //     setIsSubmitting(false);
-  //   }
-  // };
+  const handleSubmit = async (values: RequisitionFormValues) => {
+    setIsSubmitting(true);
+    try {
+      await createRequisitionAction(values);
+      // Toast and redirect are handled by the action on success
+    } catch (error) {
+      console.error("Failed to create requisition:", error);
+      toast({
+        title: "Error Creating Requisition",
+        description: (error instanceof Error ? error.message : "Could not create requisition.") || "Could not create requisition.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <>
@@ -46,19 +42,14 @@ export default function CreateRequisitionPage() {
         <CardHeader>
           <CardTitle>Requisition Details</CardTitle>
           <CardDescription>
-            Select items and specify quantities needed.
+            Select items and specify quantities needed. Item ID will be auto-generated.
           </CardDescription>
         </CardHeader>
         <CardContent>
-           <div className="flex h-64 items-center justify-center rounded-md border-2 border-dashed border-border bg-muted/20">
-            <p className="text-muted-foreground">Requisition form will be here. Under development.</p>
-          </div>
-          {/* 
-            <RequisitionForm 
-              onSubmit={handleSubmit} 
-              isLoading={isSubmitting} 
-            /> 
-          */}
+          <RequisitionForm 
+            onSubmit={handleSubmit} 
+            isLoading={isSubmitting} 
+          /> 
         </CardContent>
       </Card>
     </>

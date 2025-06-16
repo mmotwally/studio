@@ -160,7 +160,7 @@ export type RequisitionStatus =
 export interface Requisition {
   id: string;
   requesterId?: string | null; // Link to User later
-  requesterName?: string; // For display
+  requesterName?: string; // For display from users table eventually
   department?: string | null;
   dateCreated: string;
   dateNeeded?: string | null;
@@ -171,17 +171,20 @@ export interface Requisition {
   totalItems?: number; // For list view summary
 }
 
+// Represents an item stored in the database for a requisition
 export interface RequisitionItem {
-  id: string;
+  id: string; // UUID for the requisition_item entry itself
   requisitionId: string;
   inventoryItemId: string;
   inventoryItemName?: string; // For display
   inventoryItemCurrentStock?: number; // For display on detail view
   quantityRequested: number;
-  quantityIssued?: number;
+  quantityIssued?: number; // To be updated during fulfillment
   notes?: string | null;
 }
 
+// Represents the structure of values from the Requisition Form
+// (aligns with src/app/(app)/requisitions/schema.ts)
 export interface RequisitionFormValues {
   dateNeeded?: Date | null;
   notes?: string | null;
