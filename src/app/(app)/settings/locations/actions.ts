@@ -4,6 +4,7 @@
 import { openDb } from "@/lib/database";
 import { revalidatePath } from "next/cache";
 import type { LocationFormValues } from "./schema";
+import type { LocationDB } from "@/types";
 
 export async function addLocationAction(data: LocationFormValues) {
   try {
@@ -36,4 +37,18 @@ export async function addLocationAction(data: LocationFormValues) {
   revalidatePath("/inventory");
   revalidatePath("/inventory/new");
 }
-    
+
+export async function getLocations(): Promise<LocationDB[]> {
+  const db = await openDb();
+  const locations = await db.all<LocationDB[]>(`
+    SELECT 
+      id, 
+      store, 
+      rack, 
+      shelf,
+      store || COALESCE(' - ' || rack, '') || COALESCE(' - ' || shelf, '') as fullName
+    FROM locations 
+    ORDER BY store, rack, shelf ASC
+  `);
+  return locations;
+}

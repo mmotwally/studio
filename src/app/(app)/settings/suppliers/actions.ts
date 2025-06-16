@@ -4,6 +4,7 @@
 import { openDb } from "@/lib/database";
 import { revalidatePath } from "next/cache";
 import type { SupplierFormValues } from "./schema";
+import type { SupplierDB } from "@/types";
 
 export async function addSupplierAction(data: SupplierFormValues) {
   try {
@@ -37,4 +38,9 @@ export async function addSupplierAction(data: SupplierFormValues) {
   revalidatePath("/inventory");
   revalidatePath("/inventory/new");
 }
-    
+
+export async function getSuppliers(): Promise<SupplierDB[]> {
+  const db = await openDb();
+  const suppliers = await db.all<SupplierDB[]>('SELECT id, name, contactPerson, contactMail, address FROM suppliers ORDER BY name ASC');
+  return suppliers;
+}

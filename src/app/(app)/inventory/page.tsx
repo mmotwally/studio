@@ -22,11 +22,8 @@ import { AddCategoryDialog } from '@/components/settings/add-category-dialog';
 import { AddUnitDialog } from '@/components/settings/add-unit-dialog';
 import { AddLocationDialog } from '@/components/settings/add-location-dialog';
 import { AddSupplierDialog } from '@/components/settings/add-supplier-dialog';
+import { AddSubCategoryDialog } from '@/components/settings/add-sub-category-dialog';
 import { getInventoryItems } from './actions';
-
-// Import other dialogs as they are created
-// import { AddSubCategoryDialog } from '@/components/settings/add-sub-category-dialog';
-
 
 export default function InventoryPage() {
   const [inventoryItems, setInventoryItems] = React.useState<InventoryItem[]>([]);
@@ -34,11 +31,10 @@ export default function InventoryPage() {
   const [error, setError] = React.useState<string | null>(null);
 
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = React.useState(false);
+  const [isSubCategoryDialogOpen, setIsSubCategoryDialogOpen] = React.useState(false);
   const [isUnitDialogOpen, setIsUnitDialogOpen] = React.useState(false);
   const [isLocationDialogOpen, setIsLocationDialogOpen] = React.useState(false);
   const [isSupplierDialogOpen, setIsSupplierDialogOpen] = React.useState(false);
-  // const [isSubCategoryDialogOpen, setIsSubCategoryDialogOpen] = React.useState(false);
-
 
   const fetchItems = React.useCallback(async () => {
     setIsLoading(true);
@@ -103,11 +99,14 @@ export default function InventoryPage() {
               <AddCategoryDialog setOpen={setIsCategoryDialogOpen} onCategoryAdded={fetchItems} />
             </Dialog>
 
-            <Button asChild variant="outline">
-              <Link href="#"> {/* Placeholder: Link to Add Sub-Category Dialog */}
-                <ListTree className="mr-2 h-4 w-4" /> Add Sub-Category
-              </Link>
-            </Button>
+            <Dialog open={isSubCategoryDialogOpen} onOpenChange={setIsSubCategoryDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <ListTree className="mr-2 h-4 w-4" /> Add Sub-Category
+                </Button>
+              </DialogTrigger>
+              <AddSubCategoryDialog setOpen={setIsSubCategoryDialogOpen} onSubCategoryAdded={fetchItems} />
+            </Dialog>
 
             <Dialog open={isUnitDialogOpen} onOpenChange={setIsUnitDialogOpen}>
               <DialogTrigger asChild>
@@ -204,10 +203,9 @@ export default function InventoryPage() {
       </div>
       {inventoryItems.length === 0 && (
         <div className="mt-4 text-center text-muted-foreground">
-          No inventory items found. Add new items to get started. If you have run 'npm run db:init' and this persists, check console for errors.
+          No inventory items found. Add new items to get started.
         </div>
       )}
     </>
   );
 }
-    

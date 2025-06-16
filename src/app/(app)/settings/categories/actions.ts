@@ -4,6 +4,7 @@
 import { openDb } from "@/lib/database";
 import { revalidatePath } from "next/cache";
 import type { CategoryFormValues } from "./schema";
+import type { CategoryDB } from "@/types";
 
 export async function addCategoryAction(data: CategoryFormValues) {
   try {
@@ -31,6 +32,13 @@ export async function addCategoryAction(data: CategoryFormValues) {
     throw new Error("Database operation failed. Could not add category.");
   }
 
-  revalidatePath("/inventory"); // Revalidate inventory page in case it displays categories
-  revalidatePath("/settings"); // Or a potential future settings/categories page
+  revalidatePath("/inventory"); 
+  revalidatePath("/inventory/new");
+  revalidatePath("/settings"); 
+}
+
+export async function getCategories(): Promise<CategoryDB[]> {
+  const db = await openDb();
+  const categories = await db.all<CategoryDB[]>('SELECT id, name FROM categories ORDER BY name ASC');
+  return categories;
 }

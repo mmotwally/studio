@@ -26,27 +26,29 @@ export interface SubCategoryDB {
   id: string;
   name: string;
   categoryId: string;
+  categoryName?: string; // Optional: For display if joined
 }
 
 export interface LocationDB {
   id: string;
   store: string;
-  rack?: string;
-  shelf?: string;
+  rack?: string | null;
+  shelf?: string | null;
+  fullName?: string; // For display (e.g. Store - Rack - Shelf)
 }
 
 export interface SupplierDB {
   id: string;
   name: string;
-  contactPerson?: string;
-  contactMail?: string;
-  address?: string;
+  contactPerson?: string | null;
+  contactMail?: string | null;
+  address?: string | null;
 }
 
 export interface UnitOfMeasurementDB {
   id: string;
   name: string;
-  abbreviation?: string;
+  abbreviation?: string | null;
 }
 
 export interface InventoryItem {
@@ -88,3 +90,8 @@ export interface ReportFilter {
   dateRange?: { from?: Date; to?: Date };
   reportType?: string;
 }
+
+export type SelectItem = {
+  value: string;
+  label: string;
+};

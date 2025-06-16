@@ -4,6 +4,7 @@
 import { openDb } from "@/lib/database";
 import { revalidatePath } from "next/cache";
 import type { UnitOfMeasurementFormValues } from "./schema";
+import type { UnitOfMeasurementDB } from "@/types";
 
 export async function addUnitOfMeasurementAction(data: UnitOfMeasurementFormValues) {
   try {
@@ -24,7 +25,7 @@ export async function addUnitOfMeasurementAction(data: UnitOfMeasurementFormValu
   } catch (error) {
     console.error("Failed to add unit of measurement:", error);
     if (error instanceof Error) {
-        if (error.message.includes("UNIQUE constraint failed")) {
+        if (error.message.includes("UNIQUE constraint failed")) { // Covers name and abbreviation
             throw new Error(`A unit with this name or abbreviation already exists.`);
         }
       throw new Error(`Database operation failed: ${error.message}`);
@@ -33,6 +34,11 @@ export async function addUnitOfMeasurementAction(data: UnitOfMeasurementFormValu
   }
 
   revalidatePath("/inventory");
-  revalidatePath("/inventory/new"); // For dropdowns later
+  revalidatePath("/inventory/new");
 }
-    
+
+export async function getUnitsOfMeasurement(): Promise<UnitOfMeasurementDB[]> {
+  const db = await openDb();
+  const units = await db.all<UnitOfMeasurementDB[]>('SELECT id, name, abbreviation FROM units_of_measurement ORDER BY name ASC');
+  return units;
+}
