@@ -236,20 +236,17 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
 
         let schemaNeedsReset = false;
         try {
-          // Check for inventory table presence
           const inventoryTableExists = await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='inventory';");
           if (inventoryTableExists) {
-            // Check for a key column from the current inventory schema
-            await db.get('SELECT categoryId FROM inventory LIMIT 1;');
+            await db.get('SELECT categoryId FROM inventory LIMIT 1;'); // Check for a key new column
           } else {
              schemaNeedsReset = true; 
              console.log('Inventory table does not exist. Flagging for table reset.');
           }
 
-          // Check for units_of_measurement table and the conversion_factor column
           const uomTableExists = await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='units_of_measurement';");
           if (uomTableExists) {
-            await db.get('SELECT conversion_factor FROM units_of_measurement LIMIT 1;');
+            await db.get('SELECT conversion_factor FROM units_of_measurement LIMIT 1;'); // Check for a key new column
           } else {
              schemaNeedsReset = true;
              console.log('Units_of_measurement table does not exist. Flagging for table reset.');
@@ -275,6 +272,12 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
           await _seedInitialData(db); // Seed data after reset
         } else {
           await _createTables(db); // Ensure tables exist if no reset was needed
+          // Check if categories are empty, if so, seed. This covers the case where DB was created fresh but not via db:init
+          const categoryCount = await db.get('SELECT COUNT(*) as count FROM categories');
+          if (categoryCount && categoryCount.count === 0) {
+            console.log('Categories table is empty. Seeding initial data.');
+            await _seedInitialData(db);
+          }
         }
         
         console.log('App database tables ensured/initialized.');
