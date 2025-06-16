@@ -3,6 +3,7 @@
 
 import * as React from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import {
@@ -147,14 +148,17 @@ export default function InventoryPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Item ID</TableHead>
+              <TableHead className="w-[80px]">Image</TableHead>
+              <TableHead className="w-[100px]">Item ID</TableHead>
               <TableHead>Name</TableHead>
               <TableHead>Category</TableHead>
               <TableHead>Sub-Category</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Supplier</TableHead>
               <TableHead>Unit</TableHead>
-              <TableHead className="text-right">Quantity</TableHead>
+              <TableHead className="text-right">Qty</TableHead>
+              <TableHead className="text-right">Min Stock</TableHead>
+              <TableHead className="text-right">Max Stock</TableHead>
               <TableHead className="text-right">Unit Cost</TableHead>
               <TableHead className="text-right">Total Value</TableHead>
               <TableHead>Last Updated</TableHead>
@@ -164,7 +168,23 @@ export default function InventoryPage() {
           <TableBody>
             {inventoryItems.map((item) => (
               <TableRow key={item.id} className={item.lowStock ? 'bg-destructive/10 hover:bg-destructive/20' : ''}>
-                <TableCell className="font-medium truncate max-w-[100px]">{item.id}</TableCell>
+                <TableCell>
+                  {item.imageUrl ? (
+                    <Image
+                      src={item.imageUrl}
+                      alt={item.name}
+                      width={40}
+                      height={40}
+                      className="rounded object-cover"
+                      data-ai-hint="product image"
+                    />
+                  ) : (
+                    <div className="h-10 w-10 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground">
+                      No Img
+                    </div>
+                  )}
+                </TableCell>
+                <TableCell className="font-mono text-xs truncate max-w-[100px]">{item.id}</TableCell>
                 <TableCell>
                   {item.name}
                   {item.lowStock && <Badge variant="destructive" className="ml-2">Low Stock</Badge>}
@@ -175,6 +195,8 @@ export default function InventoryPage() {
                 <TableCell>{item.supplierName || '-'}</TableCell>
                 <TableCell>{item.unitName || '-'}</TableCell>
                 <TableCell className="text-right">{item.quantity}</TableCell>
+                <TableCell className="text-right">{item.minStockLevel ?? '-'}</TableCell>
+                <TableCell className="text-right">{item.maxStockLevel ?? '-'}</TableCell>
                 <TableCell className="text-right">${item.unitCost.toFixed(2)}</TableCell>
                 <TableCell className="text-right">${item.totalValue.toFixed(2)}</TableCell>
                 <TableCell>{new Date(item.lastUpdated).toLocaleDateString()}</TableCell>

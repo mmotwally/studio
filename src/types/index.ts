@@ -58,6 +58,8 @@ export interface UnitOfMeasurementDB {
 export interface InventoryItem {
   id: string;
   name: string;
+  description?: string | null;
+  imageUrl?: string | null;
   quantity: number;
   unitCost: number;
   totalValue: number; // Calculated: quantity * unitCost

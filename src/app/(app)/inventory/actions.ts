@@ -14,10 +14,12 @@ export async function addInventoryItemAction(data: InventoryItemFormValues) {
     const lastUpdated = new Date().toISOString();
 
     await db.run(
-      `INSERT INTO inventory (id, name, quantity, unitCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO inventory (id, name, description, imageUrl, quantity, unitCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       data.name,
+      data.description || null,
+      data.imageUrl || null,
       data.quantity,
       data.unitCost,
       lastUpdated,
@@ -39,7 +41,7 @@ export async function addInventoryItemAction(data: InventoryItemFormValues) {
   }
 
   revalidatePath("/inventory");
-  revalidatePath("/inventory/new"); // also revalidate new in case it shows a list or something later
+  revalidatePath("/inventory/new"); 
   redirect("/inventory");
 }
 
@@ -48,6 +50,8 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
   const rawItems = await db.all<({ 
       id: string;
       name: string;
+      description: string | null;
+      imageUrl: string | null;
       quantity: number;
       unitCost: number;
       lastUpdated: string;
@@ -66,7 +70,7 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
       unitId?: string | null;
     })[]>(`
     SELECT
-      i.id, i.name, i.quantity, i.unitCost, i.lastUpdated, i.lowStock,
+      i.id, i.name, i.description, i.imageUrl, i.quantity, i.unitCost, i.lastUpdated, i.lowStock,
       i.minStockLevel, i.maxStockLevel,
       c.name as categoryName, i.categoryId,
       sc.name as subCategoryName, i.subCategoryId,
@@ -85,6 +89,8 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
   return rawItems.map(item => ({
     id: item.id,
     name: item.name,
+    description: item.description,
+    imageUrl: item.imageUrl,
     quantity: item.quantity,
     unitCost: item.unitCost,
     totalValue: (item.quantity || 0) * (item.unitCost || 0),
@@ -104,4 +110,3 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
     unitId: item.unitId || undefined,
   }));
 }
-

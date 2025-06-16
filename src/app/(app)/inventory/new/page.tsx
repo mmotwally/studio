@@ -16,6 +16,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -53,6 +54,8 @@ export default function AddInventoryItemPage() {
     resolver: zodResolver(inventoryItemSchema),
     defaultValues: {
       name: "",
+      description: "",
+      imageUrl: "",
       quantity: 0,
       unitCost: 0,
       minStockLevel: 0,
@@ -135,7 +138,7 @@ export default function AddInventoryItemPage() {
         description: (error instanceof Error ? error.message : String(error)) || "Could not add item. Please try again.",
         variant: "destructive",
       });
-      setIsSubmitting(false); // Only set to false on error, success redirects
+      setIsSubmitting(false); 
     }
   }
 
@@ -155,7 +158,7 @@ export default function AddInventoryItemPage() {
           <FormLabel>{label}</FormLabel>
           <Select
             onValueChange={field.onChange}
-            value={field.value}
+            value={field.value as string | undefined}
             disabled={isLoading || isDisabled || options.length === 0}
           >
             <FormControl>
@@ -208,6 +211,33 @@ export default function AddInventoryItemPage() {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="description"
+                  render={({ field }) => (
+                    <FormItem className="lg:col-span-3">
+                      <FormLabel>Description</FormLabel>
+                      <FormControl>
+                        <Textarea placeholder="Detailed description of the item..." {...field} value={field.value ?? ""} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                 <FormField
+                  control={form.control}
+                  name="imageUrl"
+                  render={({ field }) => (
+                    <FormItem className="lg:col-span-3">
+                      <FormLabel>Image URL</FormLabel>
+                      <FormControl>
+                        <Input type="url" placeholder="https://placehold.co/600x400.png" {...field} value={field.value ?? ""} />
+                      </FormControl>
+                      <FormDescription>Provide a direct link to the item image.</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                  <FormField
                   control={form.control}
                   name="quantity"
@@ -241,7 +271,7 @@ export default function AddInventoryItemPage() {
                     <FormItem>
                       <FormLabel>Min Stock Level</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="e.g., 5" {...field} value={field.value === 0 && !form.formState.dirtyFields.minStockLevel ? "" : field.value} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} />
+                        <Input type="number" placeholder="e.g., 5" {...field} value={(field.value === 0 || field.value === undefined) && !form.formState.dirtyFields.minStockLevel ? "" : field.value} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -254,7 +284,7 @@ export default function AddInventoryItemPage() {
                     <FormItem>
                       <FormLabel>Max Stock Level</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="e.g., 50" {...field} value={field.value === 0 && !form.formState.dirtyFields.maxStockLevel ? "" : field.value} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} />
+                        <Input type="number" placeholder="e.g., 50" {...field} value={(field.value === 0 || field.value === undefined) && !form.formState.dirtyFields.maxStockLevel ? "" : field.value} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -305,4 +335,3 @@ export default function AddInventoryItemPage() {
     </>
   );
 }
-

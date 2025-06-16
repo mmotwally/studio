@@ -63,6 +63,8 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
     CREATE TABLE IF NOT EXISTS inventory (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
+      description TEXT,
+      imageUrl TEXT,
       quantity INTEGER NOT NULL DEFAULT 0,
       unitCost REAL NOT NULL DEFAULT 0,
       lastUpdated TEXT NOT NULL,
@@ -292,49 +294,58 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   // Inventory Items
   const inventoryItemsData = [
     {
-      name: '18mm Birch Plywood (2440x1220mm)', quantity: 50, unitCost: 45.50, lowStock: 0, minStockLevel: 10, maxStockLevel: 100,
+      name: '18mm Birch Plywood (2440x1220mm)', description: 'High-quality birch plywood for structural and aesthetic applications.', imageUrl: 'https://placehold.co/300x200.png?text=Plywood',
+      quantity: 50, unitCost: 45.50, lowStock: 0, minStockLevel: 10, maxStockLevel: 100,
       categoryId: catWoodPanelsId, subCategoryId: subCatPlywoodId, locationId: locMainWarehouseA1S1Id, supplierId: supPanelProId, unitId: unitSheetId,
     },
     {
-      name: 'Standard MDF Sheet (2440x1220x18mm)', quantity: 75, unitCost: 28.00, lowStock: 0, minStockLevel: 20, maxStockLevel: 150,
+      name: 'Standard MDF Sheet (2440x1220x18mm)', description: 'Medium-density fiberboard, ideal for paint-grade cabinet doors and panels.', imageUrl: 'https://placehold.co/300x200.png?text=MDF',
+      quantity: 75, unitCost: 28.00, lowStock: 0, minStockLevel: 20, maxStockLevel: 150,
       categoryId: catWoodPanelsId, subCategoryId: subCatMdfId, locationId: locMainWarehouseA1S1Id, supplierId: supPanelProId, unitId: unitSheetId,
     },
     {
-      name: 'White PVC Edge Banding (22mm x 0.45mm)', quantity: 5, unitCost: 15.00, lowStock: 1, minStockLevel: 2, maxStockLevel: 10,
-      categoryId: catEdgeBandingId, subCategoryId: subCatPvcEdgeId, locationId: locWorkshopStorageB2Id, supplierId: supFinishingTouchesId, unitId: unitRollId, // Assuming roll
+      name: 'White PVC Edge Banding (22mm x 0.45mm)', description: 'Durable PVC edge banding for finishing MDF and particle board edges.', imageUrl: 'https://placehold.co/300x200.png?text=Edge+Band',
+      quantity: 5, unitCost: 15.00, lowStock: 1, minStockLevel: 2, maxStockLevel: 10,
+      categoryId: catEdgeBandingId, subCategoryId: subCatPvcEdgeId, locationId: locWorkshopStorageB2Id, supplierId: supFinishingTouchesId, unitId: unitRollId,
     },
     {
-      name: 'Soft-Close Cabinet Hinges (Full Overlay)', quantity: 200, unitCost: 1.80, lowStock: 0, minStockLevel: 50, maxStockLevel: 300,
-      categoryId: catHardwareId, subCategoryId: subCatHingesId, locationId: locWorkshopStorageB2Id, supplierId: supHardwareHubId, unitId: unitPairId, // Assuming pair
+      name: 'Soft-Close Cabinet Hinges (Full Overlay)', description: 'European style soft-close hinges for a quiet and smooth cabinet door operation.', imageUrl: 'https://placehold.co/300x200.png?text=Hinges',
+      quantity: 200, unitCost: 1.80, lowStock: 0, minStockLevel: 50, maxStockLevel: 300,
+      categoryId: catHardwareId, subCategoryId: subCatHingesId, locationId: locWorkshopStorageB2Id, supplierId: supHardwareHubId, unitId: unitPairId,
     },
     {
-      name: 'Ball Bearing Drawer Slides (450mm)', quantity: 80, unitCost: 5.50, lowStock: 0, minStockLevel: 20, maxStockLevel: 100,
-      categoryId: catHardwareId, subCategoryId: subCatDrawerSlidesId, locationId: locWorkshopStorageB2Id, supplierId: supHardwareHubId, unitId: unitSetId, // Assuming set of 2
+      name: 'Ball Bearing Drawer Slides (450mm)', description: 'Heavy-duty ball bearing drawer slides for smooth and reliable drawer movement.', imageUrl: 'https://placehold.co/300x200.png?text=Slides',
+      quantity: 80, unitCost: 5.50, lowStock: 0, minStockLevel: 20, maxStockLevel: 100,
+      categoryId: catHardwareId, subCategoryId: subCatDrawerSlidesId, locationId: locWorkshopStorageB2Id, supplierId: supHardwareHubId, unitId: unitSetId,
     },
     {
-      name: 'Brushed Nickel Cabinet Handles (128mm)', quantity: 150, unitCost: 2.20, lowStock: 0, minStockLevel: 30, maxStockLevel: 200,
+      name: 'Brushed Nickel Cabinet Handles (128mm)', description: 'Modern brushed nickel handles for cabinet doors and drawers.', imageUrl: 'https://placehold.co/300x200.png?text=Handles',
+      quantity: 150, unitCost: 2.20, lowStock: 0, minStockLevel: 30, maxStockLevel: 200,
       categoryId: catHardwareId, subCategoryId: subCatHandlesId, locationId: locShowroomBackstockId, supplierId: supHardwareHubId, unitId: unitPcsId,
     },
     {
-      name: 'Wood Screws (4x30mm)', quantity: 2, unitCost: 8.00, lowStock: 0, minStockLevel: 1, maxStockLevel: 5,
-      categoryId: catFastenersId, subCategoryId: subCatScrewsId, locationId: locCuttingDeptRackCId, supplierId: supHardwareHubId, unitId: unitBoxId, // Assuming box of 100/200
+      name: 'Wood Screws (4x30mm)', description: 'General purpose wood screws, box of 200.', imageUrl: 'https://placehold.co/300x200.png?text=Screws',
+      quantity: 2, unitCost: 8.00, lowStock: 0, minStockLevel: 1, maxStockLevel: 5,
+      categoryId: catFastenersId, subCategoryId: subCatScrewsId, locationId: locCuttingDeptRackCId, supplierId: supHardwareHubId, unitId: unitBoxId,
     },
     {
-      name: 'Water-Based White Paint (Gloss)', quantity: 10, unitCost: 25.00, lowStock: 0, minStockLevel: 3, maxStockLevel: 15,
+      name: 'Water-Based White Paint (Gloss)', description: 'Low VOC water-based paint for a durable gloss white finish.', imageUrl: 'https://placehold.co/300x200.png?text=Paint',
+      quantity: 10, unitCost: 25.00, lowStock: 0, minStockLevel: 3, maxStockLevel: 15,
       categoryId: catFinishesId, subCategoryId: subCatPaintId, locationId: locWorkshopStorageB2Id, supplierId: supFinishingTouchesId, unitId: unitLiterId,
     },
     {
-      name: 'Professional Wood Glue (PVA)', quantity: 20, unitCost: 7.50, lowStock: 0, minStockLevel: 5, maxStockLevel: 30,
-      categoryId: catAdhesivesId, subCategoryId: subCatWoodGlueId, locationId: locCuttingDeptRackCId, supplierId: supFinishingTouchesId, unitId: unitKgId, // Assuming 1kg bottles
+      name: 'Professional Wood Glue (PVA)', description: 'Strong PVA wood glue for joinery and assembly, 1kg bottle.', imageUrl: 'https://placehold.co/300x200.png?text=Glue',
+      quantity: 20, unitCost: 7.50, lowStock: 0, minStockLevel: 5, maxStockLevel: 30,
+      categoryId: catAdhesivesId, subCategoryId: subCatWoodGlueId, locationId: locCuttingDeptRackCId, supplierId: supFinishingTouchesId, unitId: unitKgId,
     },
   ];
 
   for (const item of inventoryItemsData) {
     try {
       await db.run(
-        `INSERT INTO inventory (id, name, quantity, unitCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        crypto.randomUUID(), item.name, item.quantity, item.unitCost, new Date().toISOString(), item.lowStock, item.minStockLevel, item.maxStockLevel,
+        `INSERT INTO inventory (id, name, description, imageUrl, quantity, unitCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        crypto.randomUUID(), item.name, item.description, item.imageUrl, item.quantity, item.unitCost, new Date().toISOString(), item.lowStock, item.minStockLevel, item.maxStockLevel,
         item.categoryId, item.subCategoryId, item.locationId, item.supplierId, item.unitId
       );
     } catch (e) {
@@ -361,10 +372,11 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
 
         let schemaNeedsReset = false;
         const tablesToEnsureExist = ['inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers'];
-        const columnsToCheck: Record<string, string> = {
-          inventory: 'minStockLevel', // A new column in inventory
-          units_of_measurement: 'conversion_factor', // An existing crucial column
-          suppliers: 'contactPhone', // A new column in suppliers
+        const columnsToCheck: Record<string, string[]> = {
+          inventory: ['minStockLevel', 'description', 'imageUrl'],
+          units_of_measurement: ['conversion_factor', 'base_unit_id'],
+          suppliers: ['contactPhone'],
+          sub_categories: ['categoryId'], // check constraint indirectly
         };
 
 
@@ -375,21 +387,25 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
             schemaNeedsReset = true;
             break; 
           }
-          // If table exists and we have a specific column to check for it
+          // If table exists and we have specific columns to check for it
           if (columnsToCheck[tableName]) {
-            try {
-              await db.get(`SELECT ${columnsToCheck[tableName]} FROM ${tableName} LIMIT 1;`);
-            } catch (e: any) {
-               if (e.message && e.message.toLowerCase().includes('no such column')) {
-                console.warn(`Old schema detected for table ${tableName} (missing column: ${columnsToCheck[tableName]}). Flagging for table reset.`);
-                schemaNeedsReset = true;
-                break;
-              } else {
-                console.warn(`Unexpected error checking column ${columnsToCheck[tableName]} in ${tableName}: ${e.message}. Flagging for reset as a precaution.`);
-                schemaNeedsReset = true;
-                break;
+            for (const columnName of columnsToCheck[tableName]) {
+              try {
+                // This is a light check, pragma_table_info would be more robust but complex for this auto-reset
+                await db.get(`SELECT ${columnName} FROM ${tableName} LIMIT 1;`);
+              } catch (e: any) {
+                if (e.message && e.message.toLowerCase().includes('no such column')) {
+                  console.warn(`Old schema detected for table ${tableName} (missing column: ${columnName}). Flagging for table reset.`);
+                  schemaNeedsReset = true;
+                  break; // Break from inner loop (columns)
+                } else {
+                  console.warn(`Unexpected error checking column ${columnName} in ${tableName}: ${e.message}. Flagging for reset as a precaution.`);
+                  schemaNeedsReset = true;
+                  break; // Break from inner loop (columns)
+                }
               }
             }
+            if (schemaNeedsReset) break; // Break from outer loop (tables)
           }
         }
 
@@ -407,12 +423,10 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
             console.log('Categories table is empty, but no schema reset was triggered. Seeding initial data.');
             await _seedInitialData(db);
           } else {
-            // Check if critical new tables like locations or suppliers are empty even if categories are not
-            const locationCount = await db.get('SELECT COUNT(*) as count FROM locations');
-            const supplierCount = await db.get('SELECT COUNT(*) as count FROM suppliers');
-            if ((locationCount && locationCount.count === 0) || (supplierCount && supplierCount.count === 0)) {
-                console.log('Locations or Suppliers table is empty. Re-seeding initial data.');
-                await _seedInitialData(db); // Re-seed if these critical tables are empty.
+            const inventoryCount = await db.get('SELECT COUNT(*) as count FROM inventory');
+            if (inventoryCount && inventoryCount.count === 0) {
+                 console.log('Inventory table is empty. Re-seeding initial data.');
+                await _seedInitialData(db);
             }
           }
         }
@@ -452,9 +466,9 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
   await _createTables(db);
   console.log('Database initialization by script complete. Tables created/ensured.');
 
-  if (dropFirst) { // Seed only if tables were dropped and recreated
+  if (dropFirst) { 
     await _seedInitialData(db);
-  } else { // If not dropping, check if data exists and seed if necessary
+  } else { 
     const categoryCount = await db.get('SELECT COUNT(*) as count FROM categories');
     if (categoryCount && categoryCount.count === 0) {
         console.log('Script: Categories table is empty. Seeding initial data.');
