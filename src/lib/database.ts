@@ -118,19 +118,71 @@ async function _dropTables(dbConnection: Database<sqlite3.Database, sqlite3.Stat
 export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.Statement>> {
   if (!appDbPromise) {
     appDbPromise = (async () => {
+      let db: Database<sqlite3.Database, sqlite3.Statement> | null = null;
       try {
         console.log(`App is opening/getting database connection to: ${DB_FILE}`);
-        const db = await open({
+        db = await open({
           filename: DB_FILE,
           driver: sqlite3.Database,
         });
-        console.log('App database connection opened. Ensuring tables exist...');
+        console.log('App database connection opened.');
         await db.exec('PRAGMA foreign_keys = ON;'); // Enforce foreign key constraints
-        await _createTables(db); // Initialize on first connection for the app
-        console.log('App database tables ensured.');
+
+        let schemaNeedsReset = false;
+        try {
+          // Check if inventory table exists
+          const inventoryTableExists = await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='inventory';");
+          if (inventoryTableExists) {
+            // If inventory table exists, check for a column from the new schema (e.g., categoryId)
+            // This query will throw an error if the column doesn't exist.
+            await db.get('SELECT categoryId FROM inventory LIMIT 1;');
+            console.log('Inventory table schema check: categoryId column found.');
+          } else {
+            // Inventory table doesn't exist, so _createTables will handle it without needing a reset.
+            console.log('Inventory table does not exist yet. It will be created.');
+          }
+        } catch (e: any) {
+          // Check if the error is specifically "no such column" for our target column.
+          if (e.message && e.message.toLowerCase().includes('no such column') && e.message.toLowerCase().includes('categoryid')) {
+            console.warn(`Old schema detected in 'inventory' table (missing 'categoryId'). Reason: ${e.message}. Flagging for table reset.`);
+            schemaNeedsReset = true;
+          } else if (e.message && e.message.toLowerCase().includes('no such table') && e.message.toLowerCase().includes('inventory')) {
+             // This case is if inventory table itself is missing, _createTables handles this, no reset needed by this logic block.
+             console.log(`Inventory table not found during schema check. It will be created.`);
+          } else {
+            // An unexpected error occurred during the schema check.
+            console.error('Unexpected error during schema check:', e);
+            // We might not want to reset for all types of errors, so we re-throw.
+            // Or, depending on policy, we might still proceed to _createTables.
+            // For now, let's re-throw to make it visible.
+            // throw e; // Or decide to let _createTables try its best.
+            // For robustness in this dev context, let's assume _createTables should run.
+             console.warn(`An unexpected issue during schema check: ${e.message}. Proceeding to ensure tables.`);
+          }
+        }
+
+        if (schemaNeedsReset) {
+          console.log('Performing data reset: dropping and recreating all tables due to detected old inventory schema.');
+          await _dropTables(db);
+          await _createTables(db);
+          console.log('All tables have been reset and recreated.');
+        } else {
+          // If schema was okay, or specific column-missing error wasn't hit,
+          // just ensure all tables are created (IF NOT EXISTS).
+          await _createTables(db);
+        }
+        
+        console.log('App database tables ensured/initialized.');
         return db;
       } catch (error) {
         console.error('App failed to open or initialize database:', error);
+        if (db) {
+          try {
+            await db.close();
+          } catch (closeErr) {
+            console.error("Failed to close DB connection on error path:", closeErr);
+          }
+        }
         appDbPromise = null; // Reset promise on failure to allow retry
         throw error;
       }
