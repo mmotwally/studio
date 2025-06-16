@@ -137,6 +137,7 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       inventoryItemId TEXT NOT NULL,
       quantityRequested INTEGER NOT NULL,
       quantityIssued INTEGER DEFAULT 0,
+      isApproved INTEGER DEFAULT 0, -- 0 for false/pending, 1 for true/approved
       notes TEXT,
       FOREIGN KEY (requisitionId) REFERENCES requisitions(id) ON DELETE CASCADE,
       FOREIGN KEY (inventoryItemId) REFERENCES inventory(id) ON DELETE RESTRICT -- Prevent deleting inventory items that are on requisitions
@@ -433,7 +434,7 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
           categories: ['code'],
           sub_categories: ['code', 'categoryId'],
           requisitions: ['requesterId', 'departmentId', 'orderNumber', 'bomNumber', 'dateNeeded', 'status', 'notes', 'lastUpdated'],
-          requisition_items: ['requisitionId', 'inventoryItemId', 'quantityRequested', 'quantityIssued', 'notes'],
+          requisition_items: ['requisitionId', 'inventoryItemId', 'quantityRequested', 'quantityIssued', 'isApproved', 'notes'], // Added isApproved
         };
 
 

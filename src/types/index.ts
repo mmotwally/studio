@@ -187,7 +187,8 @@ export interface RequisitionItem {
   inventoryItemName?: string; // For display
   inventoryItemCurrentStock?: number; // For display on detail/fulfillment view
   quantityRequested: number;
-  quantityIssued: number; // Changed from optional: will be 0 if nothing issued.
+  quantityIssued: number; 
+  isApproved?: boolean; // 0 for false/pending, 1 for true/approved
   notes?: string | null;
 }
 
@@ -225,4 +226,17 @@ export interface FulfillRequisitionFormValues {
 export interface DepartmentFormValues {
   name: string;
   code: string;
+}
+
+// For item approval dialog
+export interface ApproveRequisitionItemFormValues {
+  requisitionItemId: string;
+  itemName: string;
+  quantityRequested: number;
+  isApproved: boolean;
+}
+
+export interface ApproveRequisitionFormValues {
+  requisitionId: string;
+  items: ApproveRequisitionItemFormValues[];
 }
