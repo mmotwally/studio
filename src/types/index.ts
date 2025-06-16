@@ -49,6 +49,9 @@ export interface UnitOfMeasurementDB {
   id: string;
   name: string;
   abbreviation?: string | null;
+  baseUnitId?: string | null;
+  baseUnitName?: string | null; // For display
+  conversionFactor: number;
 }
 
 export interface InventoryItem {

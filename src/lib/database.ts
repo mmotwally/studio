@@ -51,7 +51,10 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
     CREATE TABLE IF NOT EXISTS units_of_measurement (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
-      abbreviation TEXT UNIQUE
+      abbreviation TEXT UNIQUE,
+      base_unit_id TEXT,
+      conversion_factor REAL NOT NULL DEFAULT 1.0,
+      FOREIGN KEY (base_unit_id) REFERENCES units_of_measurement(id) ON DELETE SET NULL
     );
   `);
 
@@ -123,24 +126,17 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
 
         let schemaNeedsReset = false;
         try {
-          const inventoryTableExists = await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='inventory';");
-          if (inventoryTableExists) {
-            await db.get('SELECT categoryId FROM inventory LIMIT 1;');
+          const uomTableExists = await db.get("SELECT name FROM sqlite_master WHERE type='table' AND name='units_of_measurement';");
+          if (uomTableExists) {
+            // Check for a new column that signifies the new schema
+            await db.get('SELECT conversion_factor FROM units_of_measurement LIMIT 1;');
           } else {
-             schemaNeedsReset = true; // If critical table like inventory is missing, better reset.
-             console.log('Inventory table does not exist. Flagging for table reset.');
+             schemaNeedsReset = true; 
+             console.log('Units_of_measurement table does not exist. Flagging for table reset.');
           }
-           // Check for sub_categories unique constraint (more robust would be schema versioning)
-           const subCategoriesTableInfo = await db.all(`PRAGMA index_list('sub_categories');`);
-           const uniqueConstraintExists = subCategoriesTableInfo.some(index => index.name === 'sqlite_autoindex_sub_categories_1' && index.unique === 1); // Name can vary
-           // A simpler check if the table exists and then check for a known new column or constraint details
-           // For now, the inventory check implies a full reset if old, which also covers sub_categories.
-           // If inventory check passes but sub_categories is old, this won't be caught without db:init
-           // Given the user's permission, the existing inventory check leading to full drop is sufficient for now.
-
         } catch (e: any) {
-          if (e.message && e.message.toLowerCase().includes('no such column') && e.message.toLowerCase().includes('categoryid')) {
-            console.warn(`Old schema detected in 'inventory' table (missing 'categoryId'). Reason: ${e.message}. Flagging for table reset.`);
+          if (e.message && e.message.toLowerCase().includes('no such column') && e.message.toLowerCase().includes('conversion_factor')) {
+            console.warn(`Old schema detected in 'units_of_measurement' table (missing 'conversion_factor'). Reason: ${e.message}. Flagging for table reset.`);
             schemaNeedsReset = true;
           } else if (e.message && e.message.toLowerCase().includes('no such table')) {
              console.warn(`A table seems to be missing: ${e.message}. Flagging for table reset.`);
