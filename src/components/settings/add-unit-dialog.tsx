@@ -9,7 +9,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
+  DialogDescription as DialogDescriptionComponent, // Renamed to avoid conflict
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
@@ -20,6 +20,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription, // Added FormDescription here
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
@@ -57,24 +58,29 @@ export function AddUnitDialog({ setOpen, onUnitAdded }: AddUnitDialogProps) {
 
   const watchedBaseUnitId = form.watch("baseUnitId");
 
-  React.useEffect(() => {
-    async function fetchUnits() {
-      setIsLoadingUnits(true);
-      try {
-        const units = await getUnitsOfMeasurement();
-        setExistingUnits(units);
-      } catch (error) {
-        console.error("Failed to fetch units for dialog:", error);
-        toast({
-          title: "Error",
-          description: "Could not load existing units for selection.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoadingUnits(false);
-      }
+  // Renamed to avoid conflict with DialogDescription component from Radix
+  const DialogUIDescription = DialogDescriptionComponent;
+
+
+  async function fetchUnitsForDropdown() {
+    setIsLoadingUnits(true);
+    try {
+      const units = await getUnitsOfMeasurement();
+      setExistingUnits(units);
+    } catch (error) {
+      console.error("Failed to fetch units for dialog:", error);
+      toast({
+        title: "Error",
+        description: "Could not load existing units for selection.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingUnits(false);
     }
-    fetchUnits();
+  }
+
+  React.useEffect(() => {
+    fetchUnitsForDropdown();
   }, [toast]);
 
   React.useEffect(() => {
@@ -89,7 +95,7 @@ export function AddUnitDialog({ setOpen, onUnitAdded }: AddUnitDialogProps) {
     
     const submissionValues = {
       ...values,
-      baseUnitId: values.baseUnitId || null, // Ensure null if empty/undefined
+      baseUnitId: values.baseUnitId || null, 
       conversionFactor: values.baseUnitId ? values.conversionFactor : 1.0,
     };
 
@@ -100,9 +106,9 @@ export function AddUnitDialog({ setOpen, onUnitAdded }: AddUnitDialogProps) {
         description: "Unit of measurement added successfully.",
       });
       if (onUnitAdded) {
-        onUnitAdded(); // This should trigger re-fetch in parent
-        fetchUnitsForDropdown(); // Re-fetch units for this dialog's dropdown
+        onUnitAdded(); 
       }
+      await fetchUnitsForDropdown(); 
       setOpen(false);
       form.reset({ name: "", abbreviation: "", baseUnitId: undefined, conversionFactor: 1.0 });
     } catch (error) {
@@ -117,26 +123,14 @@ export function AddUnitDialog({ setOpen, onUnitAdded }: AddUnitDialogProps) {
     }
   }
   
-  async function fetchUnitsForDropdown() {
-    setIsLoadingUnits(true);
-    try {
-      const units = await getUnitsOfMeasurement();
-      setExistingUnits(units);
-    } catch (error) {
-      // Error already handled by toast in initial load, or can be shown again
-    } finally {
-      setIsLoadingUnits(false);
-    }
-  }
-
 
   return (
     <DialogContent className="sm:max-w-md">
       <DialogHeader>
         <DialogTitle>Add New Unit of Measurement</DialogTitle>
-        <DialogDescription>
+        <DialogUIDescription>
           Enter the details for the new unit. Specify a base unit and conversion factor if applicable.
-        </DialogDescription>
+        </DialogUIDescription>
       </DialogHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
@@ -229,3 +223,4 @@ export function AddUnitDialog({ setOpen, onUnitAdded }: AddUnitDialogProps) {
     </DialogContent>
   );
 }
+
