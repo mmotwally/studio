@@ -118,12 +118,13 @@ export default function AddInventoryItemPage() {
         }
       } else {
         setSubCategories([]); 
+        form.setValue("subCategoryId", ""); // Reset subcategory if parent category is cleared
       }
     }
     if(!isLoadingDropdownData) { 
         loadSubCategories();
     }
-  }, [selectedCategoryId, isLoadingDropdownData]);
+  }, [selectedCategoryId, isLoadingDropdownData, form]);
 
 
   async function onSubmit(values: InventoryItemFormValues) {
@@ -159,11 +160,11 @@ export default function AddInventoryItemPage() {
           <Select
             onValueChange={field.onChange}
             value={field.value as string | undefined}
-            disabled={isLoading || isDisabled || options.length === 0}
+            disabled={isLoading || isDisabled || (!isLoading && options.length === 0)}
           >
             <FormControl>
               <SelectTrigger>
-                <SelectValue placeholder={isLoading ? "Loading..." : placeholder} />
+                <SelectValue placeholder={isLoading ? "Loading..." : (options.length === 0 ? "No options available" : placeholder)} />
               </SelectTrigger>
             </FormControl>
             <SelectContent>
@@ -233,7 +234,7 @@ export default function AddInventoryItemPage() {
                       <FormControl>
                         <Input type="url" placeholder="https://placehold.co/600x400.png" {...field} value={field.value ?? ""} />
                       </FormControl>
-                      <FormDescription>Provide a direct link to the item image.</FormDescription>
+                      <FormDescription>Provide a direct link to an image. For placeholders, you can use services like `https://placehold.co/WIDTHxHEIGHT.png`.</FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
@@ -291,11 +292,11 @@ export default function AddInventoryItemPage() {
                   )}
                 />
                 
-                {renderSelect("categoryId", "Category", "Select a category", categories, isLoadingDropdownData)}
-                {renderSelect("subCategoryId", "Sub-Category", "Select a sub-category", subCategories, isLoadingDropdownData || (selectedCategoryId && subCategories.length === 0 && !isLoadingDropdownData) , !selectedCategoryId)}
+                {renderSelect("categoryId", "Category*", "Select a category", categories, isLoadingDropdownData)}
+                {renderSelect("subCategoryId", "Sub-Category", "Select a sub-category", subCategories, isLoadingDropdownData || (!!selectedCategoryId && subCategories.length === 0 && !isLoadingDropdownData && form.getFieldState("categoryId").isDirty) , !selectedCategoryId)}
                 {renderSelect("locationId", "Location", "Select a location", locations, isLoadingDropdownData)}
                 {renderSelect("supplierId", "Supplier", "Select a supplier", suppliers, isLoadingDropdownData)}
-                {renderSelect("unitId", "Unit of Measurement", "Select a unit", units, isLoadingDropdownData)}
+                {renderSelect("unitId", "Unit of Measurement*", "Select a unit", units, isLoadingDropdownData)}
 
                 <FormField
                   control={form.control}
