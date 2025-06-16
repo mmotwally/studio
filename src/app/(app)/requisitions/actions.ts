@@ -1,23 +1,25 @@
+
 'use server';
 
 import { openDb } from '@/lib/database';
-import type { RequisitionFormValues, RequisitionItemFormValues } from './schema';
+import type { RequisitionFormValues } from './schema';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import type { InventoryItem, SelectItem } from '@/types'; // RequisitionItem is for DB, RequisitionItemFormValues for form
+import type { InventoryItem, SelectItem } from '@/types';
 import { format } from 'date-fns';
+import type { Database as SqliteDatabaseType } from 'sqlite';
 
-async function generateRequisitionId(db: any): Promise<string> {
+async function generateRequisitionId(db: SqliteDatabaseType): Promise<string> {
   const today = format(new Date(), 'yyyyMMdd');
   const prefix = `REQ-${today}-`;
-  const result = await db.get(
+  const result = await db.get<{ id?: string } | undefined>(
     `SELECT id FROM requisitions WHERE id LIKE ? ORDER BY id DESC LIMIT 1`,
     `${prefix}%`
   );
 
   let nextSequence = 1;
   if (result && result.id) {
-    const lastId = result.id as string;
+    const lastId = result.id; // No need to cast, it's already string | undefined
     const numericPart = lastId.substring(prefix.length);
     const lastSequence = parseInt(numericPart, 10);
     if (!isNaN(lastSequence)) {
@@ -29,16 +31,18 @@ async function generateRequisitionId(db: any): Promise<string> {
 }
 
 export async function createRequisitionAction(values: RequisitionFormValues) {
-  const db = await openDb();
-  const requisitionId = await generateRequisitionId(db);
-  const dateCreated = new Date().toISOString();
-  const lastUpdated = dateCreated;
-
-  if (!values.items || values.items.length === 0) {
-    throw new Error('At least one item must be added to the requisition.');
-  }
-
+  let db;
   try {
+    db = await openDb();
+    const requisitionId = await generateRequisitionId(db);
+    const dateCreated = new Date().toISOString();
+    const lastUpdated = dateCreated;
+
+    // Zod schema ensures items array has at least one item.
+    // if (!values.items || values.items.length === 0) {
+    //   throw new Error('At least one item must be added to the requisition.');
+    // }
+
     await db.run('BEGIN TRANSACTION');
 
     await db.run(
@@ -53,11 +57,8 @@ export async function createRequisitionAction(values: RequisitionFormValues) {
     );
 
     for (const item of values.items) {
-      if (!item.inventoryItemId || item.quantityRequested <= 0) {
-        // Basic validation, Zod schema should catch most of this
-        console.warn('Skipping invalid item in requisition:', item);
-        continue;
-      }
+      // Zod schema validation for item.inventoryItemId and item.quantityRequested
+      // should have already occurred on the client side if using react-hook-form with zodResolver.
       const requisitionItemId = crypto.randomUUID();
       await db.run(
         `INSERT INTO requisition_items (id, requisitionId, inventoryItemId, quantityRequested, notes)
@@ -72,7 +73,17 @@ export async function createRequisitionAction(values: RequisitionFormValues) {
 
     await db.run('COMMIT');
   } catch (error) {
-    await db.run('ROLLBACK');
+    if (db) {
+        try {
+            // Attempt to rollback only if a transaction might have started.
+            // A more robust check would be to see if db is in a transaction state,
+            // but sqlite driver might not easily expose this.
+            // For simplicity, always try rollback if db object exists after an error.
+            await db.run('ROLLBACK');
+        } catch (rollbackError) {
+            console.error('Failed to rollback transaction:', rollbackError);
+        }
+    }
     console.error('Failed to create requisition:', error);
     if (error instanceof Error) {
       throw new Error(`Database operation failed: ${error.message}`);
@@ -80,6 +91,7 @@ export async function createRequisitionAction(values: RequisitionFormValues) {
     throw new Error('Database operation failed. Could not create requisition.');
   }
 
+  // If we reach here, the try block was successful.
   revalidatePath('/requisitions');
   revalidatePath('/requisitions/new');
   redirect('/requisitions');

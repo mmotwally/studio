@@ -12,34 +12,42 @@ import { useRouter } from 'next/navigation';
 
 export default function CreateRequisitionPage() {
   const { toast } = useToast();
-  const router = useRouter();
+  const router = useRouter(); // Import router if you want to use client-side redirect as fallback
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   const handleSubmit = async (values: RequisitionFormValues) => {
     setIsSubmitting(true);
     try {
       await createRequisitionAction(values);
-      // Toast and redirect are handled by the action on success.
       // If createRequisitionAction is successful and calls redirect(),
       // this try block will effectively be exited by the redirect,
-      // and the catch block below should not be hit.
+      // and the catch block below should not be hit for a successful server-side redirect.
     } catch (error) {
       console.error("Failed to create requisition:", error);
+      let title = "Error Creating Requisition";
       let description = "Could not create requisition. Please try again.";
+      let variant: "destructive" | "default" = "destructive";
+
       if (error instanceof Error) {
-        // Check if the error message is "NEXT_REDIRECT"
-        // This can happen if the server action itself throws an error,
-        // but Next.js still processes the redirect call at the end of the action.
-        if (error.message.toUpperCase() === 'NEXT_REDIRECT') {
-          description = "An unexpected error occurred. Please check if the requisition was created or try again.";
+        if (error.message.includes('NEXT_REDIRECT')) {
+          // This suggests the server-side action likely finished its database operations
+          // and the issue arose during the redirect process itself or how its signal was handled.
+          title = "Requisition Submitted";
+          description = "Requisition process initiated. If you are not redirected automatically, please check the requisitions list.";
+          variant = "default"; // Use default variant for this potentially non-critical error
+          // Optionally, trigger a client-side redirect as a fallback:
+          // router.push('/requisitions'); 
+        } else if (error.message.startsWith('Database operation failed:')) {
+          description = error.message; // Show the specific database error
         } else {
-          description = error.message;
+          description = error.message; // Show other specific errors from the action
         }
       }
+      
       toast({
-        title: "Error Creating Requisition",
+        title: title,
         description: description,
-        variant: "destructive",
+        variant: variant,
       });
     } finally {
       setIsSubmitting(false);
