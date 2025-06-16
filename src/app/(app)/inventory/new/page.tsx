@@ -42,6 +42,8 @@ export default function AddInventoryItemPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [imagePreview, setImagePreview] = React.useState<string | null>(null);
+  const imageFileRef = React.useRef<HTMLInputElement>(null);
 
   const [categories, setCategories] = React.useState<SelectItemType[]>([]);
   const [subCategories, setSubCategories] = React.useState<SelectItemType[]>([]);
@@ -55,7 +57,7 @@ export default function AddInventoryItemPage() {
     defaultValues: {
       name: "",
       description: "",
-      imageUrl: "",
+      // imageUrl is no longer a direct input, it will be derived from file upload
       quantity: 0,
       unitCost: 0,
       minStockLevel: 0,
@@ -114,14 +116,14 @@ export default function AddInventoryItemPage() {
           setSubCategories(fetchedSubCategories.map(sc => ({ value: sc.id, label: sc.name })));
         } catch (error) {
            console.error("Failed to load sub-categories:", error);
-           setSubCategories([]); 
+           setSubCategories([]);
         }
       } else {
-        setSubCategories([]); 
+        setSubCategories([]);
         form.setValue("subCategoryId", ""); // Reset subcategory if parent category is cleared
       }
     }
-    if(!isLoadingDropdownData) { 
+    if(!isLoadingDropdownData) {
         loadSubCategories();
     }
   }, [selectedCategoryId, isLoadingDropdownData, form]);
@@ -129,8 +131,26 @@ export default function AddInventoryItemPage() {
 
   async function onSubmit(values: InventoryItemFormValues) {
     setIsSubmitting(true);
+    const formData = new FormData();
+
+    // Append all form values to formData
+    Object.entries(values).forEach(([key, value]) => {
+      if (value !== null && value !== undefined) {
+        if (typeof value === 'boolean') {
+          formData.append(key, value.toString());
+        } else {
+          formData.append(key, value as string | Blob);
+        }
+      }
+    });
+
+    // Append image file if selected
+    if (imageFileRef.current?.files && imageFileRef.current.files[0]) {
+      formData.append('imageFile', imageFileRef.current.files[0]);
+    }
+
     try {
-      await addInventoryItemAction(values);
+      await addInventoryItemAction(formData);
       // Server action handles redirect.
     } catch (error) {
       console.error("Submission error:", error);
@@ -139,9 +159,23 @@ export default function AddInventoryItemPage() {
         description: (error instanceof Error ? error.message : String(error)) || "Could not add item. Please try again.",
         variant: "destructive",
       });
-      setIsSubmitting(false); 
+    } finally {
+      setIsSubmitting(false);
     }
   }
+
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    } else {
+      setImagePreview(null);
+    }
+  };
 
   const renderSelect = (
     name: keyof InventoryItemFormValues,
@@ -225,20 +259,26 @@ export default function AddInventoryItemPage() {
                     </FormItem>
                   )}
                 />
-                 <FormField
-                  control={form.control}
-                  name="imageUrl"
-                  render={({ field }) => (
-                    <FormItem className="lg:col-span-3">
-                      <FormLabel>Image URL</FormLabel>
-                      <FormControl>
-                        <Input type="url" placeholder="https://placehold.co/600x400.png" {...field} value={field.value ?? ""} />
-                      </FormControl>
-                      <FormDescription>Provide a direct link to an image. For placeholders, you can use services like `https://placehold.co/WIDTHxHEIGHT.png`.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
+                <FormItem className="lg:col-span-3">
+                  <FormLabel>Item Image</FormLabel>
+                  <FormControl>
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      ref={imageFileRef}
+                      onChange={handleImageChange}
+                      className="block w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                    />
+                  </FormControl>
+                  {imagePreview && (
+                    <div className="mt-2">
+                      <img src={imagePreview} alt="Image preview" className="h-32 w-32 object-cover rounded-md" data-ai-hint="product image" />
+                    </div>
                   )}
-                />
+                  <FormDescription>Upload an image for the item.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+
                  <FormField
                   control={form.control}
                   name="quantity"
@@ -291,7 +331,7 @@ export default function AddInventoryItemPage() {
                     </FormItem>
                   )}
                 />
-                
+
                 {renderSelect("categoryId", "Category*", "Select a category", categories, isLoadingDropdownData)}
                 {renderSelect("subCategoryId", "Sub-Category", "Select a sub-category", subCategories, isLoadingDropdownData || (!!selectedCategoryId && subCategories.length === 0 && !isLoadingDropdownData && form.getFieldState("categoryId").isDirty) , !selectedCategoryId)}
                 {renderSelect("locationId", "Location", "Select a location", locations, isLoadingDropdownData)}

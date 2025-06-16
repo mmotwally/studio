@@ -176,7 +176,6 @@ export default function InventoryPage() {
                       width={40}
                       height={40}
                       className="rounded object-cover"
-                      data-ai-hint="product image"
                     />
                   ) : (
                     <div className="h-10 w-10 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground">
@@ -231,3 +230,4 @@ export default function InventoryPage() {
     </>
   );
 }
+

@@ -4,10 +4,66 @@
 import { openDb } from "@/lib/database";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { InventoryItemFormValues } from "./schema";
 import type { InventoryItem } from '@/types';
+import fs from 'fs/promises';
+import path from 'path';
+import crypto from 'crypto'; // For unique filenames
 
-export async function addInventoryItemAction(data: InventoryItemFormValues) {
+// Helper function to ensure directory exists
+async function ensureDirExists(dirPath: string) {
+  try {
+    await fs.mkdir(dirPath, { recursive: true });
+  } catch (error: any) {
+    if (error.code !== 'EEXIST') { // Ignore error if directory already exists
+      console.error(`Failed to create directory ${dirPath}:`, error);
+      throw error; // Re-throw other errors
+    }
+  }
+}
+
+export async function addInventoryItemAction(formData: FormData) {
+  const rawFormData = Object.fromEntries(formData.entries());
+
+  // Manually parse and coerce form data because FormData sends everything as string
+  const data = {
+    name: rawFormData.name as string,
+    description: rawFormData.description ? rawFormData.description as string : null,
+    quantity: parseInt(rawFormData.quantity as string, 10) || 0,
+    unitCost: parseFloat(rawFormData.unitCost as string) || 0,
+    lowStock: rawFormData.lowStock === 'on' || rawFormData.lowStock === 'true',
+    minStockLevel: parseInt(rawFormData.minStockLevel as string, 10) || 0,
+    maxStockLevel: parseInt(rawFormData.maxStockLevel as string, 10) || 0,
+    categoryId: rawFormData.categoryId ? rawFormData.categoryId as string : undefined,
+    subCategoryId: rawFormData.subCategoryId ? rawFormData.subCategoryId as string : undefined,
+    locationId: rawFormData.locationId ? rawFormData.locationId as string : undefined,
+    supplierId: rawFormData.supplierId ? rawFormData.supplierId as string : undefined,
+    unitId: rawFormData.unitId ? rawFormData.unitId as string : undefined,
+  };
+
+  let imageUrlToStore: string | null = null;
+  const imageFile = formData.get('imageFile') as File | null;
+
+  if (imageFile && imageFile.size > 0) {
+    try {
+      const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'inventory');
+      await ensureDirExists(uploadsDir);
+
+      const fileExtension = path.extname(imageFile.name) || '.png'; // default to png if no extension
+      const uniqueFileName = `${crypto.randomUUID()}${fileExtension}`;
+      const filePath = path.join(uploadsDir, uniqueFileName);
+
+      const buffer = Buffer.from(await imageFile.arrayBuffer());
+      await fs.writeFile(filePath, buffer);
+      imageUrlToStore = `/uploads/inventory/${uniqueFileName}`;
+    } catch (error) {
+      console.error("Failed to upload image:", error);
+      // Decide if you want to throw an error and stop item creation or proceed without image
+      // For now, proceeding without image if upload fails.
+      // throw new Error("Image upload failed.");
+    }
+  }
+
+
   try {
     const db = await openDb();
     const id = crypto.randomUUID();
@@ -18,19 +74,19 @@ export async function addInventoryItemAction(data: InventoryItemFormValues) {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       data.name,
-      data.description || null,
-      data.imageUrl || null,
+      data.description,
+      imageUrlToStore, // Use the path of the stored image
       data.quantity,
       data.unitCost,
       lastUpdated,
       data.lowStock ? 1 : 0,
-      data.minStockLevel || 0,
-      data.maxStockLevel || 0,
-      data.categoryId || null,
-      data.subCategoryId || null,
-      data.locationId || null,
-      data.supplierId || null,
-      data.unitId || null
+      data.minStockLevel,
+      data.maxStockLevel,
+      data.categoryId,
+      data.subCategoryId,
+      data.locationId,
+      data.supplierId,
+      data.unitId
     );
   } catch (error) {
     console.error("Failed to add inventory item:", error);
@@ -41,13 +97,13 @@ export async function addInventoryItemAction(data: InventoryItemFormValues) {
   }
 
   revalidatePath("/inventory");
-  revalidatePath("/inventory/new"); 
+  revalidatePath("/inventory/new");
   redirect("/inventory");
 }
 
 export async function getInventoryItems(): Promise<InventoryItem[]> {
   const db = await openDb();
-  const rawItems = await db.all<({ 
+  const rawItems = await db.all<({
       id: string;
       name: string;
       description: string | null;
@@ -55,7 +111,7 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
       quantity: number;
       unitCost: number;
       lastUpdated: string;
-      lowStock: number; 
+      lowStock: number;
       minStockLevel: number;
       maxStockLevel: number;
       categoryName?: string | null;
