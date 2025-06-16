@@ -1,4 +1,6 @@
 
+"use server";
+
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
 import path from 'path';

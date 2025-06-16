@@ -18,49 +18,14 @@ import { Dialog, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { InventoryItem } from '@/types';
 import { PlusCircle, MoreHorizontal, Edit, Trash2, FolderPlus, ListTree, Warehouse, Users, Boxes } from 'lucide-react';
-import { openDb } from '@/lib/database';
 import { AddCategoryDialog } from '@/components/settings/add-category-dialog';
+import { getInventoryItems } from './actions'; // Import Server Action
+
 // Import other dialogs as they are created
 // import { AddSubCategoryDialog } from '@/components/settings/add-sub-category-dialog';
 // import { AddLocationDialog } from '@/components/settings/add-location-dialog';
 // import { AddSupplierDialog } from '@/components/settings/add-supplier-dialog';
 // import { AddUnitDialog } from '@/components/settings/add-unit-dialog';
-
-
-async function getInventoryItems(): Promise<InventoryItem[]> {
-  const db = await openDb();
-  const rawItems = await db.all(`
-    SELECT 
-      i.id, i.name, i.quantity, i.unitCost, i.lastUpdated, i.lowStock,
-      c.name as categoryName,
-      sc.name as subCategoryName,
-      l.store || COALESCE(' - ' || l.rack, '') || COALESCE(' - ' || l.shelf, '') as locationName,
-      s.name as supplierName,
-      uom.name as unitName
-    FROM inventory i
-    LEFT JOIN categories c ON i.categoryId = c.id
-    LEFT JOIN sub_categories sc ON i.subCategoryId = sc.id
-    LEFT JOIN locations l ON i.locationId = l.id
-    LEFT JOIN suppliers s ON i.supplierId = s.id
-    LEFT JOIN units_of_measurement uom ON i.unitId = uom.id
-    ORDER BY i.name ASC
-  `);
-
-  return rawItems.map(item => ({
-    id: item.id,
-    name: item.name,
-    quantity: item.quantity,
-    unitCost: item.unitCost,
-    totalValue: item.quantity * item.unitCost,
-    lastUpdated: item.lastUpdated,
-    lowStock: Boolean(item.lowStock),
-    categoryName: item.categoryName,
-    subCategoryName: item.subCategoryName,
-    locationName: item.locationName,
-    supplierName: item.supplierName,
-    unitName: item.unitName,
-  }));
-}
 
 export default function InventoryPage() {
   const [inventoryItems, setInventoryItems] = React.useState<InventoryItem[]>([]);
@@ -77,12 +42,16 @@ export default function InventoryPage() {
   const fetchItems = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const items = await getInventoryItems();
+      const items = await getInventoryItems(); // Call Server Action
       setInventoryItems(items);
       setError(null);
     } catch (e) {
       console.error("Failed to fetch inventory items:", e);
-      setError("Error loading inventory data. Please ensure the database is initialized correctly. Run 'npm run db:init' if this is the first setup.");
+      let errorMessage = "Error loading inventory data.";
+      if (e instanceof Error && e.message) {
+         errorMessage += ` ${e.message}`;
+      }
+      setError(errorMessage);
       setInventoryItems([]);
     } finally {
       setIsLoading(false);
@@ -227,3 +196,4 @@ export default function InventoryPage() {
     </>
   );
 }
+
