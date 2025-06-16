@@ -11,7 +11,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
-import { PlusCircle, Eye } from 'lucide-react';
+import { PlusCircle, Eye, FileText } from 'lucide-react';
 import type { Requisition, RequisitionStatus } from '@/types';
 import { getRequisitions } from './actions';
 import { format } from 'date-fns';
@@ -21,8 +21,8 @@ function getStatusBadgeVariant(status: RequisitionStatus) {
     case 'PENDING_APPROVAL': return 'default';
     case 'APPROVED': return 'secondary';
     case 'REJECTED': return 'destructive';
-    case 'FULFILLED': return 'outline'; // Consider a more distinct "success" like variant
-    case 'PARTIALLY_FULFILLED': return 'default'; // Consider a more distinct "warning" like variant
+    case 'FULFILLED': return 'outline'; 
+    case 'PARTIALLY_FULFILLED': return 'default'; 
     case 'CANCELLED': return 'outline';
     default: return 'default';
   }
@@ -98,12 +98,12 @@ export default async function RequisitionsPage() {
                   <TableCell className="text-right">{req.totalItems || 0}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="ghost" size="icon" asChild title="View Details">
+                      {/* Ensure the href uses the dynamic segment name `requisitionId` */}
                       <Link href={`/requisitions/${req.id}`}> 
                         <Eye className="h-4 w-4" />
                         <span className="sr-only">View Details for {req.id}</span>
                       </Link>
                     </Button>
-                    {/* Future actions: Edit, Cancel, Approve, etc. could go into a DropdownMenu */}
                   </TableCell>
                 </TableRow>
               ))}
