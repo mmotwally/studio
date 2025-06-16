@@ -9,6 +9,11 @@ import { createRequisitionAction } from '../actions';
 import type { RequisitionFormValues } from '../schema';
 import { useToast } from "@/hooks/use-toast";
 
+// Define an interface for the error object that Next.js throws for redirects
+interface NextRedirectError extends Error {
+  digest?: string;
+}
+
 export default function CreateRequisitionPage() {
   const { toast } = useToast();
   const [isPending, startTransition] = React.useTransition();
@@ -17,17 +22,22 @@ export default function CreateRequisitionPage() {
     startTransition(async () => {
       try {
         await createRequisitionAction(values);
-        // If createRequisitionAction calls redirect(), this part should not be reached.
+        // If createRequisitionAction calls redirect(), Next.js should handle it,
+        // and this try...catch should ideally not catch the redirect signal
+        // if the re-throw logic below works correctly.
       } catch (error) {
-        console.error("Client-side error during requisition creation:", error);
+        const typedError = error as NextRedirectError;
 
-        if (error instanceof Error && error.message.includes('NEXT_REDIRECT')) {
-          // This is the special error Next.js throws for redirects.
-          // It MUST be re-thrown for Next.js to handle the redirect.
-          throw error;
+        // Check for the specific 'NEXT_REDIRECT' digest.
+        // This is the canonical way Next.js signals a redirect internally.
+        if (typedError.digest === 'NEXT_REDIRECT') {
+          // Re-throw the error so Next.js's router can handle the client-side navigation.
+          throw typedError;
         }
         
-        // Handle other, actual errors
+        // If it's not a NEXT_REDIRECT error, it's an actual application error from the server action.
+        console.error("Application error during requisition creation:", error);
+        
         let title = "Error Creating Requisition";
         let description = "Could not create requisition. Please try again.";
 
