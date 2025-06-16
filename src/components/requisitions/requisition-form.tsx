@@ -32,24 +32,30 @@ import { useToast } from "@/hooks/use-toast";
 import { type RequisitionFormValues, requisitionFormSchema } from "@/app/(app)/requisitions/schema";
 import { getInventoryItemsForSelect } from "@/app/(app)/requisitions/actions";
 import type { SelectItem as SelectItemType } from "@/types";
+import { useRouter } from "next/navigation";
+
 
 interface RequisitionFormProps {
-  onSubmit: (values: RequisitionFormValues) => Promise<void>;
+  onSubmit: (values: RequisitionFormValues) => Promise<void> | void;
   isLoading?: boolean;
-  // defaultValues could be added later for an edit mode
+  defaultValues?: RequisitionFormValues;
+  isEditMode?: boolean;
 }
 
 export function RequisitionForm({
   onSubmit,
   isLoading = false,
+  defaultValues,
+  isEditMode = false,
 }: RequisitionFormProps) {
   const { toast } = useToast();
+  const router = useRouter();
   const [inventoryItems, setInventoryItems] = React.useState<SelectItemType[]>([]);
   const [isLoadingItems, setIsLoadingItems] = React.useState(true);
 
   const form = useForm<RequisitionFormValues>({
     resolver: zodResolver(requisitionFormSchema),
-    defaultValues: {
+    defaultValues: defaultValues || {
       dateNeeded: null,
       notes: "",
       items: [{ inventoryItemId: "", quantityRequested: 1, notes: "" }],
@@ -60,6 +66,12 @@ export function RequisitionForm({
     control: form.control,
     name: "items",
   });
+
+  React.useEffect(() => {
+    if (defaultValues) {
+      form.reset(defaultValues);
+    }
+  }, [defaultValues, form]);
 
   React.useEffect(() => {
     async function loadInventoryItems() {
@@ -106,7 +118,7 @@ export function RequisitionForm({
                         )}
                       >
                         {field.value ? (
-                          format(field.value, "PPP")
+                          format(new Date(field.value), "PPP") // Ensure field.value is a Date object for format
                         ) : (
                           <span>Pick a date</span>
                         )}
@@ -117,7 +129,7 @@ export function RequisitionForm({
                   <PopoverContent className="w-auto p-0" align="start">
                     <Calendar
                       mode="single"
-                      selected={field.value ?? undefined}
+                      selected={field.value ? new Date(field.value) : undefined}
                       onSelect={field.onChange}
                       disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1)) } // Disable past dates
                       initialFocus
@@ -159,7 +171,7 @@ export function RequisitionForm({
                     <FormLabel>Item*</FormLabel>
                     <Select
                       onValueChange={f.onChange}
-                      defaultValue={f.value}
+                      value={f.value} // Use value directly
                       disabled={isLoadingItems}
                     >
                       <FormControl>
@@ -240,11 +252,11 @@ export function RequisitionForm({
         </div>
 
         <div className="flex justify-end space-x-4 pt-6">
-          <Button type="button" variant="outline" onClick={() => form.reset()} disabled={isLoading}>
-            Clear Form
+          <Button type="button" variant="outline" onClick={() => router.back()} disabled={isLoading}>
+            Cancel
           </Button>
           <Button type="submit" disabled={isLoading || isLoadingItems}>
-            {isLoading ? "Submitting..." : "Submit Requisition"}
+            {isLoading ? (isEditMode ? "Saving..." : "Submitting...") : (isEditMode ? "Save Changes" : "Submit Requisition")}
           </Button>
         </div>
       </form>

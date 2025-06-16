@@ -85,6 +85,65 @@ export async function createRequisitionAction(values: RequisitionFormValues) {
   redirect('/requisitions');
 }
 
+export async function updateRequisitionAction(requisitionId: string, values: RequisitionFormValues) {
+  let db;
+  try {
+    db = await openDb();
+    await db.run('BEGIN TRANSACTION');
+
+    const lastUpdated = new Date().toISOString();
+
+    // Update main requisition details
+    await db.run(
+      `UPDATE requisitions
+       SET dateNeeded = ?, notes = ?, lastUpdated = ?
+       WHERE id = ?`,
+      values.dateNeeded ? values.dateNeeded.toISOString() : null,
+      values.notes,
+      lastUpdated,
+      requisitionId
+    );
+
+    // Delete existing items for this requisition
+    await db.run('DELETE FROM requisition_items WHERE requisitionId = ?', requisitionId);
+
+    // Re-insert all items from the form
+    for (const item of values.items) {
+      const requisitionItemId = crypto.randomUUID(); // Generate new UUID for each item, even if it's an "update"
+      await db.run(
+        `INSERT INTO requisition_items (id, requisitionId, inventoryItemId, quantityRequested, notes)
+         VALUES (?, ?, ?, ?, ?)`,
+        requisitionItemId,
+        requisitionId,
+        item.inventoryItemId,
+        item.quantityRequested,
+        item.notes
+      );
+    }
+
+    await db.run('COMMIT');
+  } catch (error) {
+    if (db) {
+      try {
+        await db.run('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Failed to rollback transaction during update:', rollbackError);
+      }
+    }
+    console.error(`Failed to update requisition ${requisitionId}:`, error);
+    if (error instanceof Error) {
+      throw new Error(`Database operation failed: ${error.message}`);
+    }
+    throw new Error('Database operation failed. Could not update requisition.');
+  }
+
+  revalidatePath('/requisitions');
+  revalidatePath(`/requisitions/${requisitionId}`);
+  revalidatePath(`/requisitions/${requisitionId}/edit`);
+  redirect(`/requisitions/${requisitionId}`);
+}
+
+
 export async function getInventoryItemsForSelect(): Promise<SelectItem[]> {
   const db = await openDb();
   const items = await db.all<Pick<InventoryItem, 'id' | 'name' | 'quantity' | 'unitName'>[]>(`
@@ -101,9 +160,6 @@ export async function getInventoryItemsForSelect(): Promise<SelectItem[]> {
 
 export async function getRequisitions(): Promise<Requisition[]> {
   const db = await openDb();
-  // Note: For simplicity, requesterName is not joined yet.
-  // This would require joining with a 'users' table once user auth is in place.
-  // For now, 'requesterName' can be hardcoded or left undefined in the UI.
   const requisitions = await db.all<Omit<Requisition, 'items' | 'requesterName' | 'totalItems'>[] & { itemCount: number }>(`
     SELECT 
       r.id, 
@@ -121,7 +177,6 @@ export async function getRequisitions(): Promise<Requisition[]> {
     ...r,
     status: r.status as RequisitionStatus,
     totalItems: r.itemCount,
-    // requesterName: 'N/A' // Placeholder until user integration
   }));
 }
 
@@ -150,19 +205,11 @@ export async function getRequisitionById(requisitionId: string): Promise<Requisi
     requisitionId
   );
 
-  // In the future, if requesterId is used, fetch user details:
-  // let requesterName = 'N/A';
-  // if (requisitionData.requesterId) {
-  //   const user = await db.get('SELECT name FROM users WHERE id = ?', requisitionData.requesterId);
-  //   if (user) requesterName = user.name;
-  // }
-
   return {
     ...requisitionData,
-    status: requisitionData.status as RequisitionStatus, // Cast string status to RequisitionStatus type
+    status: requisitionData.status as RequisitionStatus,
     items: itemsData,
     totalItems: itemsData.length,
-    // requesterName: requesterName, // Assign fetched or placeholder name
   };
 }
 
@@ -176,9 +223,8 @@ export async function updateRequisitionStatusAction(requisitionId: string, newSt
     db = await openDb();
     const lastUpdated = new Date().toISOString();
     
-    // For now, workflowNotes (like rejection reason) are not stored in a separate field.
+    // For now, workflowNotes are not stored in a separate field.
     // They could be appended to the main 'notes' or a new field 'workflow_notes' could be added to the requisitions table.
-    // For simplicity, just updating status and lastUpdated.
     
     const result = await db.run(
       `UPDATE requisitions
@@ -196,7 +242,7 @@ export async function updateRequisitionStatusAction(requisitionId: string, newSt
   } catch (error) {
     console.error(`Failed to update status for requisition ${requisitionId} to ${newStatus}:`, error);
     if (db && error instanceof Error && error.message.includes("ROLLBACK")) {
-        // No explicit transaction here, but good to be aware if one was started
+        // No explicit transaction here
     }
     if (error instanceof Error) {
       throw new Error(`Database operation failed: ${error.message}`);
@@ -206,6 +252,4 @@ export async function updateRequisitionStatusAction(requisitionId: string, newSt
 
   revalidatePath(`/requisitions/${requisitionId}`);
   revalidatePath('/requisitions');
-  // No redirect here, as the user stays on the detail page to see the updated status.
 }
-

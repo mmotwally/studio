@@ -3,7 +3,7 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { ArrowLeft, Edit, CheckCircle, XCircle, Settings2, PackageSearch, CalendarDays, FileTextIcon, UserCircle, Info } from 'lucide-react';
+import { ArrowLeft, Edit, CheckCircle, XCircle, Settings2, PackageSearch, CalendarDays, FileTextIcon, UserCircle, Info, MoreVertical, Printer, FileX2 } from 'lucide-react';
 import { getRequisitionById, updateRequisitionStatusAction } from '../actions';
 import type { Requisition, RequisitionStatus } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { format } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 
 interface RequisitionDetailPageProps {
   params: {
@@ -57,15 +58,52 @@ export default async function RequisitionDetailPage({ params }: RequisitionDetai
     );
   }
 
+  const canEdit = requisition.status === 'PENDING_APPROVAL';
+  const canCancel = requisition.status === 'PENDING_APPROVAL' || requisition.status === 'APPROVED';
+
   return (
     <>
       <PageHeader
         title={`Requisition: ${requisition.id}`}
         description="View details and manage the workflow for this requisition."
         actions={
-          <Button variant="outline" asChild>
-            <Link href="/requisitions"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Requisitions</Link>
-          </Button>
+          <div className="flex items-center gap-2">
+            {canEdit && (
+              <Button variant="outline" asChild>
+                <Link href={`/requisitions/${requisition.id}/edit`}>
+                  <Edit className="mr-2 h-4 w-4" /> Edit Requisition
+                </Link>
+              </Button>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="icon">
+                  <MoreVertical className="h-4 w-4" />
+                  <span className="sr-only">More actions</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {canCancel && (
+                  <form action={updateRequisitionStatusAction.bind(null, requisition.id, 'CANCELLED')} className="w-full">
+                    <DropdownMenuItem asChild>
+                       <button type="submit" className="w-full text-left cursor-pointer">
+                        <FileX2 className="mr-2 h-4 w-4" /> Cancel Requisition
+                      </button>
+                    </DropdownMenuItem>
+                  </form>
+                )}
+                <DropdownMenuItem disabled>
+                  <Printer className="mr-2 h-4 w-4" /> Print Requisition
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled>
+                  <Settings2 className="mr-2 h-4 w-4" /> Other Settings (N/A)
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button variant="outline" asChild>
+              <Link href="/requisitions"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Requisitions</Link>
+            </Button>
+          </div>
         }
       />
       <div className="grid gap-6 md:grid-cols-3">
@@ -127,7 +165,7 @@ export default async function RequisitionDetailPage({ params }: RequisitionDetai
                     <AlertTitle>Approved</AlertTitle>
                     <AlertDescription>
                         This requisition is approved. Fulfillment processing can begin.
-                        <Button variant="default" size="sm" className="ml-4">
+                        <Button variant="default" size="sm" className="ml-4" disabled>
                             <PackageSearch className="mr-2 h-4 w-4" /> Process Fulfillment
                         </Button>
                     </AlertDescription>
@@ -147,16 +185,14 @@ export default async function RequisitionDetailPage({ params }: RequisitionDetai
                     <AlertDescription>This requisition has been fulfilled.</AlertDescription>
                 </Alert>
               )}
-              {/* Add more conditional UI based on other statuses as needed */}
+              {requisition.status === 'CANCELLED' && (
+                 <Alert variant="default" className="border-gray-500 bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-300 dark:border-gray-600">
+                    <FileX2 className="h-4 w-4" />
+                    <AlertTitle>Cancelled</AlertTitle>
+                    <AlertDescription>This requisition has been cancelled.</AlertDescription>
+                </Alert>
+              )}
             </CardContent>
-            <CardFooter className="flex-col items-start space-y-2 pt-4">
-                 <Button variant="outline" disabled>
-                    <Edit className="mr-2 h-4 w-4" /> Edit Requisition (Not Implemented)
-                 </Button>
-                 <Button variant="outline" disabled>
-                    <Settings2 className="mr-2 h-4 w-4" /> More Actions (Not Implemented)
-                 </Button>
-            </CardFooter>
           </Card>
         </div>
 
@@ -214,4 +250,3 @@ export default async function RequisitionDetailPage({ params }: RequisitionDetai
     </>
   );
 }
-
