@@ -237,12 +237,9 @@ export default function InventoryPage() {
               <TableHead>Sub-Category</TableHead>
               <TableHead>Location</TableHead>
               <TableHead>Supplier</TableHead>
-              <TableHead>Unit</TableHead>
               <TableHead className="text-right">Qty</TableHead>
               <TableHead className="text-right">Min Stock</TableHead>
               <TableHead className="text-right">Max Stock</TableHead>
-              <TableHead className="text-right">Unit Cost</TableHead>
-              <TableHead className="text-right">Total Value</TableHead>
               <TableHead>Last Updated</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -276,12 +273,9 @@ export default function InventoryPage() {
                 <TableCell>{item.subCategoryName || '-'}</TableCell>
                 <TableCell>{item.locationName || '-'}</TableCell>
                 <TableCell>{item.supplierName || '-'}</TableCell>
-                <TableCell>{item.unitName || '-'}</TableCell>
                 <TableCell className="text-right">{item.quantity}</TableCell>
                 <TableCell className="text-right">{item.minStockLevel ?? '-'}</TableCell>
                 <TableCell className="text-right">{item.maxStockLevel ?? '-'}</TableCell>
-                <TableCell className="text-right">${item.unitCost.toFixed(2)}</TableCell>
-                <TableCell className="text-right">${item.totalValue.toFixed(2)}</TableCell>
                 <TableCell>{new Date(item.lastUpdated).toLocaleDateString()}</TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
