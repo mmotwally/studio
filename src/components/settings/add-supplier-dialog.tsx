@@ -42,6 +42,7 @@ export function AddSupplierDialog({ setOpen, onSupplierAdded }: AddSupplierDialo
       name: "",
       contactPerson: "",
       contactMail: "",
+      contactPhone: "",
       address: "",
     },
   });
@@ -115,6 +116,19 @@ export function AddSupplierDialog({ setOpen, onSupplierAdded }: AddSupplierDialo
                 <FormLabel>Contact Email</FormLabel>
                 <FormControl>
                   <Input type="email" placeholder="e.g., jane.doe@example.com" {...field} value={field.value ?? ""}/>
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+           <FormField
+            control={form.control}
+            name="contactPhone"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Contact Phone</FormLabel>
+                <FormControl>
+                  <Input type="tel" placeholder="e.g., +1-555-123-4567" {...field} value={field.value ?? ""}/>
                 </FormControl>
                 <FormMessage />
               </FormItem>

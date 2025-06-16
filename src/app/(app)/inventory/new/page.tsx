@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { addInventoryItemAction } from "../actions";
 import { type InventoryItemFormValues, inventoryItemSchema } from "../schema";
-import type { SelectItem as SelectItemType, CategoryDB, SubCategoryDB, LocationDB, SupplierDB, UnitOfMeasurementDB } from "@/types";
+import type { SelectItem as SelectItemType } from "@/types";
 
 import { getCategories } from "@/app/(app)/settings/categories/actions";
 import { getSubCategories } from "@/app/(app)/settings/sub-categories/actions";
@@ -55,6 +55,8 @@ export default function AddInventoryItemPage() {
       name: "",
       quantity: 0,
       unitCost: 0,
+      minStockLevel: 0,
+      maxStockLevel: 0,
       lowStock: false,
       categoryId: "",
       subCategoryId: "",
@@ -72,13 +74,11 @@ export default function AddInventoryItemPage() {
       try {
         const [
           fetchedCategories,
-          // fetchedSubCategories, // Fetch subcategories dynamically or all initially
           fetchedLocations,
           fetchedSuppliers,
           fetchedUnits,
         ] = await Promise.all([
           getCategories(),
-          // getSubCategories(), // Pass selectedCategoryId if dynamic
           getLocations(),
           getSuppliers(),
           getUnitsOfMeasurement(),
@@ -111,13 +111,13 @@ export default function AddInventoryItemPage() {
           setSubCategories(fetchedSubCategories.map(sc => ({ value: sc.id, label: sc.name })));
         } catch (error) {
            console.error("Failed to load sub-categories:", error);
-           setSubCategories([]); // Clear previous if error
+           setSubCategories([]); 
         }
       } else {
-        setSubCategories([]); // Clear if no category selected
+        setSubCategories([]); 
       }
     }
-    if(!isLoadingDropdownData) { // Only run if initial data load is complete
+    if(!isLoadingDropdownData) { 
         loadSubCategories();
     }
   }, [selectedCategoryId, isLoadingDropdownData]);
@@ -127,10 +127,7 @@ export default function AddInventoryItemPage() {
     setIsSubmitting(true);
     try {
       await addInventoryItemAction(values);
-      // Action handles redirect, toast is shown by server action or upon redirect
-      // For client-side toast after server action:
-      // toast({ title: "Success", description: "Inventory item added."});
-      // router.push('/inventory'); // if redirect is not in server action
+      // Server action handles redirect.
     } catch (error) {
       console.error("Submission error:", error);
       toast({
@@ -138,7 +135,7 @@ export default function AddInventoryItemPage() {
         description: (error instanceof Error ? error.message : String(error)) || "Could not add item. Please try again.",
         variant: "destructive",
       });
-      setIsSubmitting(false);
+      setIsSubmitting(false); // Only set to false on error, success redirects
     }
   }
 
@@ -197,12 +194,12 @@ export default function AddInventoryItemPage() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 <FormField
                   control={form.control}
                   name="name"
                   render={({ field }) => (
-                    <FormItem>
+                    <FormItem className="lg:col-span-3">
                       <FormLabel>Item Name*</FormLabel>
                       <FormControl>
                         <Input placeholder="e.g., Office Chair" {...field} />
@@ -237,6 +234,32 @@ export default function AddInventoryItemPage() {
                     </FormItem>
                   )}
                 />
+                <FormField
+                  control={form.control}
+                  name="minStockLevel"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Min Stock Level</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 5" {...field} value={field.value === 0 && !form.formState.dirtyFields.minStockLevel ? "" : field.value} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="maxStockLevel"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Max Stock Level</FormLabel>
+                      <FormControl>
+                        <Input type="number" placeholder="e.g., 50" {...field} value={field.value === 0 && !form.formState.dirtyFields.maxStockLevel ? "" : field.value} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 
                 {renderSelect("categoryId", "Category", "Select a category", categories, isLoadingDropdownData)}
                 {renderSelect("subCategoryId", "Sub-Category", "Select a sub-category", subCategories, isLoadingDropdownData || (selectedCategoryId && subCategories.length === 0 && !isLoadingDropdownData) , !selectedCategoryId)}
@@ -248,7 +271,7 @@ export default function AddInventoryItemPage() {
                   control={form.control}
                   name="lowStock"
                   render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 md:col-span-2">
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 md:col-span-1 lg:col-span-3">
                       <FormControl>
                         <Checkbox
                           checked={field.value}
@@ -260,7 +283,7 @@ export default function AddInventoryItemPage() {
                           Mark as low stock
                         </FormLabel>
                         <FormDescription>
-                          Check this if the item quantity is considered low.
+                          Check this if the item quantity is considered low (e.g., below min stock level).
                         </FormDescription>
                       </div>
                     </FormItem>
@@ -282,3 +305,4 @@ export default function AddInventoryItemPage() {
     </>
   );
 }
+

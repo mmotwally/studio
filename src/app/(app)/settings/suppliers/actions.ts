@@ -12,11 +12,12 @@ export async function addSupplierAction(data: SupplierFormValues) {
     const id = crypto.randomUUID();
 
     const result = await db.run(
-      `INSERT INTO suppliers (id, name, contactPerson, contactMail, address) VALUES (?, ?, ?, ?, ?)`,
+      `INSERT INTO suppliers (id, name, contactPerson, contactMail, contactPhone, address) VALUES (?, ?, ?, ?, ?, ?)`,
       id,
       data.name,
       data.contactPerson || null,
       data.contactMail || null,
+      data.contactPhone || null,
       data.address || null
     );
 
@@ -35,12 +36,14 @@ export async function addSupplierAction(data: SupplierFormValues) {
     throw new Error("Database operation failed. Could not add supplier.");
   }
 
-  revalidatePath("/inventory");
-  revalidatePath("/inventory/new");
+  revalidatePath("/inventory"); // For dropdowns in add item
+  revalidatePath("/inventory/new"); // For dropdowns
+  // Potentially revalidate a settings page for suppliers if it exists
 }
 
 export async function getSuppliers(): Promise<SupplierDB[]> {
   const db = await openDb();
-  const suppliers = await db.all<SupplierDB[]>('SELECT id, name, contactPerson, contactMail, address FROM suppliers ORDER BY name ASC');
+  const suppliers = await db.all<SupplierDB[]>('SELECT id, name, contactPerson, contactMail, contactPhone, address FROM suppliers ORDER BY name ASC');
   return suppliers;
 }
+

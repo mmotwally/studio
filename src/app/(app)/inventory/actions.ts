@@ -14,14 +14,16 @@ export async function addInventoryItemAction(data: InventoryItemFormValues) {
     const lastUpdated = new Date().toISOString();
 
     await db.run(
-      `INSERT INTO inventory (id, name, quantity, unitCost, lastUpdated, lowStock, categoryId, subCategoryId, locationId, supplierId, unitId)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO inventory (id, name, quantity, unitCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       data.name,
       data.quantity,
       data.unitCost,
       lastUpdated,
       data.lowStock ? 1 : 0,
+      data.minStockLevel || 0,
+      data.maxStockLevel || 0,
       data.categoryId || null,
       data.subCategoryId || null,
       data.locationId || null,
@@ -37,24 +39,26 @@ export async function addInventoryItemAction(data: InventoryItemFormValues) {
   }
 
   revalidatePath("/inventory");
+  revalidatePath("/inventory/new"); // also revalidate new in case it shows a list or something later
   redirect("/inventory");
 }
 
 export async function getInventoryItems(): Promise<InventoryItem[]> {
   const db = await openDb();
-  const rawItems = await db.all<({ // Explicitly type rawItems if possible, or use any and map carefully
+  const rawItems = await db.all<({ 
       id: string;
       name: string;
       quantity: number;
       unitCost: number;
       lastUpdated: string;
-      lowStock: number; // 0 or 1
+      lowStock: number; 
+      minStockLevel: number;
+      maxStockLevel: number;
       categoryName?: string | null;
       subCategoryName?: string | null;
       locationName?: string | null;
       supplierName?: string | null;
       unitName?: string | null;
-      // Include FKs if they are part of the InventoryItem type and needed
       categoryId?: string | null;
       subCategoryId?: string | null;
       locationId?: string | null;
@@ -63,6 +67,7 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
     })[]>(`
     SELECT
       i.id, i.name, i.quantity, i.unitCost, i.lastUpdated, i.lowStock,
+      i.minStockLevel, i.maxStockLevel,
       c.name as categoryName, i.categoryId,
       sc.name as subCategoryName, i.subCategoryId,
       l.store || COALESCE(' - ' || l.rack, '') || COALESCE(' - ' || l.shelf, '') as locationName, i.locationId,
@@ -85,6 +90,8 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
     totalValue: (item.quantity || 0) * (item.unitCost || 0),
     lastUpdated: item.lastUpdated,
     lowStock: Boolean(item.lowStock),
+    minStockLevel: item.minStockLevel,
+    maxStockLevel: item.maxStockLevel,
     categoryName: item.categoryName || undefined,
     subCategoryName: item.subCategoryName || undefined,
     locationName: item.locationName || undefined,
@@ -97,3 +104,4 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
     unitId: item.unitId || undefined,
   }));
 }
+

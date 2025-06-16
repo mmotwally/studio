@@ -42,6 +42,7 @@ export interface SupplierDB {
   name: string;
   contactPerson?: string | null;
   contactMail?: string | null;
+  contactPhone?: string | null;
   address?: string | null;
 }
 
@@ -62,6 +63,8 @@ export interface InventoryItem {
   totalValue: number; // Calculated: quantity * unitCost
   lastUpdated: string;
   lowStock?: boolean;
+  minStockLevel?: number;
+  maxStockLevel?: number;
   categoryId?: string;
   categoryName?: string; // For display, from join
   subCategoryId?: string;
@@ -98,3 +101,4 @@ export type SelectItem = {
   value: string;
   label: string;
 };
+
