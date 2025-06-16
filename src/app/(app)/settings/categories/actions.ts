@@ -1,0 +1,36 @@
+
+"use server";
+
+import { openDb } from "@/lib/database";
+import { revalidatePath } from "next/cache";
+import type { CategoryFormValues } from "./schema";
+
+export async function addCategoryAction(data: CategoryFormValues) {
+  try {
+    const db = await openDb();
+    const id = crypto.randomUUID();
+
+    const result = await db.run(
+      `INSERT INTO categories (id, name) VALUES (?, ?)`,
+      id,
+      data.name
+    );
+
+    if (!result.lastID) {
+        throw new Error("Failed to insert category, no ID returned.");
+    }
+
+  } catch (error) {
+    console.error("Failed to add category:", error);
+    if (error instanceof Error) {
+        if (error.message.includes("UNIQUE constraint failed: categories.name")) {
+            throw new Error(`A category with the name "${data.name}" already exists.`);
+        }
+      throw new Error(`Database operation failed: ${error.message}`);
+    }
+    throw new Error("Database operation failed. Could not add category.");
+  }
+
+  revalidatePath("/inventory"); // Revalidate inventory page in case it displays categories
+  revalidatePath("/settings"); // Or a potential future settings/categories page
+}

@@ -1,4 +1,7 @@
 
+"use client";
+
+import * as React from 'react';
 import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -11,14 +14,21 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
+import { Dialog, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { InventoryItem } from '@/types';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, FolderPlus, ListTree, Warehouse, Users } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, FolderPlus, ListTree, Warehouse, Users, Boxes } from 'lucide-react';
 import { openDb } from '@/lib/database';
+import { AddCategoryDialog } from '@/components/settings/add-category-dialog';
+// Import other dialogs as they are created
+// import { AddSubCategoryDialog } from '@/components/settings/add-sub-category-dialog';
+// import { AddLocationDialog } from '@/components/settings/add-location-dialog';
+// import { AddSupplierDialog } from '@/components/settings/add-supplier-dialog';
+// import { AddUnitDialog } from '@/components/settings/add-unit-dialog';
+
 
 async function getInventoryItems(): Promise<InventoryItem[]> {
   const db = await openDb();
-  // This query will need to be enhanced with JOINs later to fetch names for IDs
   const rawItems = await db.all(`
     SELECT 
       i.id, i.name, i.quantity, i.unitCost, i.lastUpdated, i.lowStock,
@@ -52,22 +62,57 @@ async function getInventoryItems(): Promise<InventoryItem[]> {
   }));
 }
 
-export default async function InventoryPage() {
-  let inventoryItems: InventoryItem[] = [];
-  try {
-    inventoryItems = await getInventoryItems();
-  } catch (error) {
-    console.error("Failed to fetch inventory items:", error);
+export default function InventoryPage() {
+  const [inventoryItems, setInventoryItems] = React.useState<InventoryItem[]>([]);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = React.useState(false);
+  // Add states for other dialogs
+  // const [isSubCategoryDialogOpen, setIsSubCategoryDialogOpen] = React.useState(false);
+  // const [isLocationDialogOpen, setIsLocationDialogOpen] = React.useState(false);
+  // const [isSupplierDialogOpen, setIsSupplierDialogOpen] = React.useState(false);
+  // const [isUnitDialogOpen, setIsUnitDialogOpen] = React.useState(false);
+
+
+  const fetchItems = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const items = await getInventoryItems();
+      setInventoryItems(items);
+      setError(null);
+    } catch (e) {
+      console.error("Failed to fetch inventory items:", e);
+      setError("Error loading inventory data. Please ensure the database is initialized correctly. Run 'npm run db:init' if this is the first setup.");
+      setInventoryItems([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    fetchItems();
+  }, [fetchItems]);
+
+  if (isLoading) {
     return (
       <>
         <PageHeader
           title="Inventory"
           description="Manage your stock items and supplies."
         />
-        <div className="mt-4 text-center text-destructive">
-          Error loading inventory data. Please ensure the database is initialized correctly.
-          Run 'npm run db:init' if this is the first setup.
-        </div>
+        <div className="mt-4 text-center">Loading inventory...</div>
+      </>
+    );
+  }
+
+  if (error) {
+    return (
+      <>
+        <PageHeader
+          title="Inventory"
+          description="Manage your stock items and supplies."
+        />
+        <div className="mt-4 text-center text-destructive">{error}</div>
       </>
     );
   }
@@ -79,14 +124,23 @@ export default async function InventoryPage() {
         description="Manage your stock items and supplies."
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline">
-              <Link href="#"> {/* Placeholder: Link to Add Category Dialog */}
-                <FolderPlus className="mr-2 h-4 w-4" /> Add Category
-              </Link>
-            </Button>
+            <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <FolderPlus className="mr-2 h-4 w-4" /> Add Category
+                </Button>
+              </DialogTrigger>
+              <AddCategoryDialog setOpen={setIsCategoryDialogOpen} onCategoryAdded={fetchItems} />
+            </Dialog>
+
             <Button asChild variant="outline">
               <Link href="#"> {/* Placeholder: Link to Add Sub-Category Dialog */}
                 <ListTree className="mr-2 h-4 w-4" /> Add Sub-Category
+              </Link>
+            </Button>
+            <Button asChild variant="outline">
+              <Link href="#"> {/* Placeholder: Link to Add Unit of Measurement Dialog */}
+                <Boxes className="mr-2 h-4 w-4" /> Add Unit
               </Link>
             </Button>
              <Button asChild variant="outline">
@@ -167,7 +221,7 @@ export default async function InventoryPage() {
       </div>
       {inventoryItems.length === 0 && (
         <div className="mt-4 text-center text-muted-foreground">
-          No inventory items found. Add new items to get started or run 'npm run db:init' if this is the first setup.
+          No inventory items found. Add new items to get started. If you have run 'npm run db:init' and this persists, check console for errors.
         </div>
       )}
     </>
