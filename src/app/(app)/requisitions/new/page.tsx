@@ -19,12 +19,26 @@ export default function CreateRequisitionPage() {
     setIsSubmitting(true);
     try {
       await createRequisitionAction(values);
-      // Toast and redirect are handled by the action on success
+      // Toast and redirect are handled by the action on success.
+      // If createRequisitionAction is successful and calls redirect(),
+      // this try block will effectively be exited by the redirect,
+      // and the catch block below should not be hit.
     } catch (error) {
       console.error("Failed to create requisition:", error);
+      let description = "Could not create requisition. Please try again.";
+      if (error instanceof Error) {
+        // Check if the error message is "NEXT_REDIRECT"
+        // This can happen if the server action itself throws an error,
+        // but Next.js still processes the redirect call at the end of the action.
+        if (error.message.toUpperCase() === 'NEXT_REDIRECT') {
+          description = "An unexpected error occurred. Please check if the requisition was created or try again.";
+        } else {
+          description = error.message;
+        }
+      }
       toast({
         title: "Error Creating Requisition",
-        description: (error instanceof Error ? error.message : "Could not create requisition.") || "Could not create requisition.",
+        description: description,
         variant: "destructive",
       });
     } finally {
