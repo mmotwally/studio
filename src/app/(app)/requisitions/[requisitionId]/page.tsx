@@ -20,9 +20,9 @@ import { FulfillRequisitionDialog } from '@/components/requisitions/fulfill-requ
 
 
 interface RequisitionDetailPageProps {
-  params: {
+  params: Promise<{ // Updated to Promise as per Next.js warning
     requisitionId: string;
-  };
+  }>;
 }
 
 function getStatusBadgeVariant(status: RequisitionStatus) {
@@ -50,7 +50,8 @@ function getStatusColorClass(status: RequisitionStatus): string {
 }
 
 // Client component to fetch and display data
-export default function RequisitionDetailClientPage({ params }: RequisitionDetailPageProps) {
+export default function RequisitionDetailClientPage({ params: paramsPromise }: RequisitionDetailPageProps) {
+  const params = React.use(paramsPromise); // Unwrap the params promise
   const { requisitionId } = params;
   const [requisition, setRequisition] = React.useState<Requisition | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
@@ -76,8 +77,10 @@ export default function RequisitionDetailClientPage({ params }: RequisitionDetai
   }, [requisitionId]);
 
   React.useEffect(() => {
-    fetchRequisition();
-  }, [fetchRequisition]);
+    if (requisitionId) { // Ensure requisitionId is available
+        fetchRequisition();
+    }
+  }, [requisitionId, fetchRequisition]);
 
   const handleStatusUpdate = async (newStatus: RequisitionStatus) => {
     if (!requisition) return;
