@@ -19,30 +19,31 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import type { InventoryItem } from '@/types';
 import { PlusCircle, MoreHorizontal, Edit, Trash2, FolderPlus, ListTree, Warehouse, Users, Boxes } from 'lucide-react';
 import { AddCategoryDialog } from '@/components/settings/add-category-dialog';
-import { getInventoryItems } from './actions'; // Import Server Action
+import { AddUnitDialog } from '@/components/settings/add-unit-dialog';
+import { AddLocationDialog } from '@/components/settings/add-location-dialog';
+import { AddSupplierDialog } from '@/components/settings/add-supplier-dialog';
+import { getInventoryItems } from './actions';
 
 // Import other dialogs as they are created
 // import { AddSubCategoryDialog } from '@/components/settings/add-sub-category-dialog';
-// import { AddLocationDialog } from '@/components/settings/add-location-dialog';
-// import { AddSupplierDialog } from '@/components/settings/add-supplier-dialog';
-// import { AddUnitDialog } from '@/components/settings/add-unit-dialog';
+
 
 export default function InventoryPage() {
   const [inventoryItems, setInventoryItems] = React.useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = React.useState(false);
-  // Add states for other dialogs
+  const [isUnitDialogOpen, setIsUnitDialogOpen] = React.useState(false);
+  const [isLocationDialogOpen, setIsLocationDialogOpen] = React.useState(false);
+  const [isSupplierDialogOpen, setIsSupplierDialogOpen] = React.useState(false);
   // const [isSubCategoryDialogOpen, setIsSubCategoryDialogOpen] = React.useState(false);
-  // const [isLocationDialogOpen, setIsLocationDialogOpen] = React.useState(false);
-  // const [isSupplierDialogOpen, setIsSupplierDialogOpen] = React.useState(false);
-  // const [isUnitDialogOpen, setIsUnitDialogOpen] = React.useState(false);
 
 
   const fetchItems = React.useCallback(async () => {
     setIsLoading(true);
     try {
-      const items = await getInventoryItems(); // Call Server Action
+      const items = await getInventoryItems();
       setInventoryItems(items);
       setError(null);
     } catch (e) {
@@ -107,21 +108,34 @@ export default function InventoryPage() {
                 <ListTree className="mr-2 h-4 w-4" /> Add Sub-Category
               </Link>
             </Button>
-            <Button asChild variant="outline">
-              <Link href="#"> {/* Placeholder: Link to Add Unit of Measurement Dialog */}
-                <Boxes className="mr-2 h-4 w-4" /> Add Unit
-              </Link>
-            </Button>
-             <Button asChild variant="outline">
-              <Link href="#"> {/* Placeholder: Link to Add Location Dialog */}
-                <Warehouse className="mr-2 h-4 w-4" /> Add Location
-              </Link>
-            </Button>
-             <Button asChild variant="outline">
-              <Link href="#"> {/* Placeholder: Link to Add Supplier Dialog */}
-                <Users className="mr-2 h-4 w-4" /> Add Supplier
-              </Link>
-            </Button>
+
+            <Dialog open={isUnitDialogOpen} onOpenChange={setIsUnitDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Boxes className="mr-2 h-4 w-4" /> Add Unit
+                </Button>
+              </DialogTrigger>
+              <AddUnitDialog setOpen={setIsUnitDialogOpen} onUnitAdded={fetchItems} />
+            </Dialog>
+
+             <Dialog open={isLocationDialogOpen} onOpenChange={setIsLocationDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Warehouse className="mr-2 h-4 w-4" /> Add Location
+                </Button>
+              </DialogTrigger>
+              <AddLocationDialog setOpen={setIsLocationDialogOpen} onLocationAdded={fetchItems} />
+            </Dialog>
+
+             <Dialog open={isSupplierDialogOpen} onOpenChange={setIsSupplierDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <Users className="mr-2 h-4 w-4" /> Add Supplier
+                </Button>
+              </DialogTrigger>
+              <AddSupplierDialog setOpen={setIsSupplierDialogOpen} onSupplierAdded={fetchItems} />
+            </Dialog>
+
             <Button asChild>
               <Link href="/inventory/new">
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Item
@@ -196,4 +210,4 @@ export default function InventoryPage() {
     </>
   );
 }
-
+    
