@@ -21,7 +21,7 @@ async function getInventoryItems(): Promise<InventoryItem[]> {
   // The 'lowStock' column in the DB is INTEGER (0 or 1).
   // The 'totalValue' is not stored in DB, it's derived.
   const rawItems = await db.all('SELECT id, name, category, quantity, unitCost, location, supplier, lastUpdated, lowStock FROM inventory ORDER BY name ASC');
-  await db.close();
+  // Note: We don't call db.close() here if openDb provides a shared/managed instance.
 
   return rawItems.map(item => ({
     id: item.id,
@@ -32,13 +32,30 @@ async function getInventoryItems(): Promise<InventoryItem[]> {
     totalValue: item.quantity * item.unitCost,
     location: item.location,
     supplier: item.supplier,
-    lastUpdated: item.lastUpdated, // Store as ISO string, display as is for now
-    lowStock: Boolean(item.lowStock), // Convert 0/1 to false/true
+    lastUpdated: item.lastUpdated,
+    lowStock: Boolean(item.lowStock),
   }));
 }
 
 export default async function InventoryPage() {
-  const inventoryItems = await getInventoryItems();
+  let inventoryItems: InventoryItem[] = [];
+  try {
+    inventoryItems = await getInventoryItems();
+  } catch (error) {
+    console.error("Failed to fetch inventory items:", error);
+    // Optionally, render an error message to the user
+    return (
+      <>
+        <PageHeader
+          title="Inventory"
+          description="Manage your stock items and supplies."
+        />
+        <div className="mt-4 text-center text-destructive">
+          Error loading inventory data. Please ensure the database is initialized correctly.
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
@@ -109,7 +126,7 @@ export default async function InventoryPage() {
       </div>
       {inventoryItems.length === 0 && (
         <div className="mt-4 text-center text-muted-foreground">
-          No inventory items found. Add new items to get started.
+          No inventory items found. Add new items to get started or run 'npm run db:init' if this is the first setup.
         </div>
       )}
     </>
