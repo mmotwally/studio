@@ -14,36 +14,34 @@ export default function CreateRequisitionPage() {
   const [isPending, startTransition] = React.useTransition();
 
   const handleSubmit = (values: RequisitionFormValues) => {
-    startTransition(() => {
-      createRequisitionAction(values)
-        .catch((error) => {
-          const errorObj = error as Error & { digest?: string };
+    startTransition(async () => { // Make the transition callback async
+      try {
+        await createRequisitionAction(values); // Await the server action
+        // If createRequisitionAction successfully redirects, execution effectively stops here
+        // for this try block, and Next.js handles the navigation.
+        // No client-side success toast is needed as the redirect implies success.
+      } catch (error) {
+        const errorObj = error as Error & { digest?: string };
 
-          // Log the caught error structure for debugging
-          console.log("Client caught error in .catch():", {
-              message: errorObj.message,
-              digest: errorObj.digest,
-              name: errorObj.name,
-          });
+        // Log the raw error object for detailed inspection
+        console.log("Client caught error object in handleSubmit's catch:", errorObj);
 
-          if (errorObj.digest?.startsWith('NEXT_REDIRECT')) {
-            // This error should ideally be handled by Next.js before it's caught here.
-            // If it IS caught here, re-throwing it is the correct pattern.
-            // This allows Next.js to complete the client-side navigation.
-            console.log("Re-throwing NEXT_REDIRECT error from .catch().");
-            throw error;
-          }
-
-          // If it's a non-redirect error, it's an actual application error.
-          console.error("Application error during requisition creation (displaying toast):", error);
+        if (errorObj.digest?.startsWith('NEXT_REDIRECT')) {
+          // This is a redirect signal from the server action.
+          // Re-throw it so Next.js can handle the client-side navigation.
+          console.log(`Identified NEXT_REDIRECT (Digest: ${errorObj.digest}). Re-throwing to Next.js router.`);
+          throw error; // Crucial: re-throw to let Next.js process the redirect
+        } else {
+          // This is a genuine application error from the server action (not a redirect).
+          // Display an error toast to the user.
+          console.error("Application error during requisition creation (displaying toast):", errorObj.message);
           toast({
             title: "Error Creating Requisition",
             description: errorObj.message || "Could not create requisition. Please try again.",
             variant: "destructive",
           });
-        });
-      // No .then() is typically needed if the action's success is a redirect.
-      // The redirect itself handles the "success" navigation.
+        }
+      }
     });
   };
 
