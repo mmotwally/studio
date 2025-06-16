@@ -1,4 +1,5 @@
 
+import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,23 +14,42 @@ import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { InventoryItem } from '@/types';
 import { PlusCircle, MoreHorizontal, Edit, Trash2 } from 'lucide-react';
+import { openDb } from '@/lib/database';
 
-const sampleInventory: InventoryItem[] = [
-  { id: 'ITM001', name: 'Blue Widget', category: 'Widgets', quantity: 150, unitCost: 10.50, totalValue: 1575, location: 'Warehouse A', supplier: 'Supplier X', lastUpdated: '2023-10-26', lowStock: false },
-  { id: 'ITM002', name: 'Red Gadget', category: 'Gadgets', quantity: 25, unitCost: 25.00, totalValue: 625, location: 'Shelf B-2', supplier: 'Supplier Y', lastUpdated: '2023-10-25', lowStock: true },
-  { id: 'ITM003', name: 'Green Gizmo', category: 'Gizmos', quantity: 300, unitCost: 5.75, totalValue: 1725, location: 'Warehouse B', supplier: 'Supplier Z', lastUpdated: '2023-10-27' },
-  { id: 'ITM004', name: 'Yellow Thingamajig', category: 'Thingamajigs', quantity: 75, unitCost: 12.00, totalValue: 900, location: 'Bin C-5', supplier: 'Supplier X', lastUpdated: '2023-10-20', lowStock: false },
-];
+async function getInventoryItems(): Promise<InventoryItem[]> {
+  const db = await openDb();
+  // The 'lowStock' column in the DB is INTEGER (0 or 1).
+  // The 'totalValue' is not stored in DB, it's derived.
+  const rawItems = await db.all('SELECT id, name, category, quantity, unitCost, location, supplier, lastUpdated, lowStock FROM inventory ORDER BY name ASC');
+  await db.close();
 
-export default function InventoryPage() {
+  return rawItems.map(item => ({
+    id: item.id,
+    name: item.name,
+    category: item.category,
+    quantity: item.quantity,
+    unitCost: item.unitCost,
+    totalValue: item.quantity * item.unitCost,
+    location: item.location,
+    supplier: item.supplier,
+    lastUpdated: item.lastUpdated, // Store as ISO string, display as is for now
+    lowStock: Boolean(item.lowStock), // Convert 0/1 to false/true
+  }));
+}
+
+export default async function InventoryPage() {
+  const inventoryItems = await getInventoryItems();
+
   return (
     <>
       <PageHeader
         title="Inventory"
         description="Manage your stock items and supplies."
         actions={
-          <Button>
-            <PlusCircle className="mr-2 h-4 w-4" /> Add New Item
+          <Button asChild>
+            <Link href="/inventory/new">
+              <PlusCircle className="mr-2 h-4 w-4" /> Add New Item
+            </Link>
           </Button>
         }
       />
@@ -50,17 +70,20 @@ export default function InventoryPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sampleInventory.map((item) => (
+            {inventoryItems.map((item) => (
               <TableRow key={item.id} className={item.lowStock ? 'bg-destructive/10 hover:bg-destructive/20' : ''}>
                 <TableCell className="font-medium">{item.id}</TableCell>
-                <TableCell>{item.name} {item.lowStock && <Badge variant="destructive" className="ml-2">Low Stock</Badge>}</TableCell>
+                <TableCell>
+                  {item.name}
+                  {item.lowStock && <Badge variant="destructive" className="ml-2">Low Stock</Badge>}
+                </TableCell>
                 <TableCell>{item.category}</TableCell>
                 <TableCell className="text-right">{item.quantity}</TableCell>
                 <TableCell className="text-right">${item.unitCost.toFixed(2)}</TableCell>
                 <TableCell className="text-right">${item.totalValue.toFixed(2)}</TableCell>
                 <TableCell>{item.location}</TableCell>
                 <TableCell>{item.supplier}</TableCell>
-                <TableCell>{item.lastUpdated}</TableCell>
+                <TableCell>{new Date(item.lastUpdated).toLocaleDateString()}</TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -84,7 +107,7 @@ export default function InventoryPage() {
           </TableBody>
         </Table>
       </div>
-      {sampleInventory.length === 0 && (
+      {inventoryItems.length === 0 && (
         <div className="mt-4 text-center text-muted-foreground">
           No inventory items found. Add new items to get started.
         </div>
