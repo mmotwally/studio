@@ -5,7 +5,7 @@ import { openDb } from '@/lib/database';
 import type { RequisitionFormValues } from './schema';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import type { InventoryItem, Requisition, SelectItem } from '@/types';
+import type { InventoryItem, Requisition, RequisitionItem, RequisitionStatus, SelectItem } from '@/types';
 import { format } from 'date-fns';
 import type { Database as SqliteDatabaseType } from 'sqlite';
 
@@ -119,7 +119,49 @@ export async function getRequisitions(): Promise<Requisition[]> {
 
   return requisitions.map(r => ({
     ...r,
+    status: r.status as RequisitionStatus,
     totalItems: r.itemCount,
     // requesterName: 'N/A' // Placeholder until user integration
   }));
+}
+
+export async function getRequisitionById(requisitionId: string): Promise<Requisition | null> {
+  const db = await openDb();
+  const requisitionData = await db.get<Omit<Requisition, 'items' | 'requesterName' | 'totalItems' | 'status'> & { status: string }>(
+    `SELECT 
+      id, dateCreated, dateNeeded, status, notes, lastUpdated, requesterId, department 
+     FROM requisitions 
+     WHERE id = ?`,
+    requisitionId
+  );
+
+  if (!requisitionData) {
+    return null;
+  }
+
+  const itemsData = await db.all<RequisitionItem[]>(
+    `SELECT 
+      ri.id, ri.requisitionId, ri.inventoryItemId, i.name as inventoryItemName, 
+      ri.quantityRequested, ri.quantityIssued, ri.notes
+     FROM requisition_items ri
+     JOIN inventory i ON ri.inventoryItemId = i.id
+     WHERE ri.requisitionId = ?
+     ORDER BY i.name ASC`,
+    requisitionId
+  );
+
+  // In the future, if requesterId is used, fetch user details:
+  // let requesterName = 'N/A';
+  // if (requisitionData.requesterId) {
+  //   const user = await db.get('SELECT name FROM users WHERE id = ?', requisitionData.requesterId);
+  //   if (user) requesterName = user.name;
+  // }
+
+  return {
+    ...requisitionData,
+    status: requisitionData.status as RequisitionStatus, // Cast string status to RequisitionStatus type
+    items: itemsData,
+    totalItems: itemsData.length,
+    // requesterName: requesterName, // Assign fetched or placeholder name
+  };
 }
