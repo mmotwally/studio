@@ -5,7 +5,7 @@ import * as React from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -25,7 +25,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
+  // AlertDialogTrigger, // Removed from here as it's used inline or not at all if controlled
 } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { InventoryItem } from '@/types';
@@ -94,9 +94,9 @@ export default function InventoryPage() {
             'MaxStockLevel': item.maxStockLevel,
             'CategoryCode': item.categoryCode,
             'SubCategoryCode': item.subCategoryCode,
-            'LocationStore': item.locationStore,
-            'LocationRack': item.locationRack,
-            'LocationShelf': item.locationShelf,
+            'LocationStore': item.locationName ? item.locationName.split(' - ')[0] : "",
+            'LocationRack': item.locationName && item.locationName.includes(' - ') && item.locationName.split(' - ').length > 1 ? item.locationName.split(' - ')[1] : "",
+            'LocationShelf': item.locationName && item.locationName.includes(' - ') && item.locationName.split(' - ').length > 2 ? item.locationName.split(' - ')[2] : "",
             'SupplierName': item.supplierName,
             'UnitName': item.unitName,
             'ImageURL': item.imageUrl,
@@ -317,14 +317,16 @@ export default function InventoryPage() {
                           <Edit className="mr-2 h-4 w-4" /> Edit
                         </Link>
                       </DropdownMenuItem>
-                      <AlertDialogTrigger asChild>
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                          onSelect={() => setItemToDelete(item)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" /> Delete
-                        </DropdownMenuItem>
-                      </AlertDialogTrigger>
+                      {/* Removed AlertDialogTrigger wrapper */}
+                      <DropdownMenuItem
+                        className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                        onSelect={(e) => {
+                          e.preventDefault(); // Prevent dropdown from closing to allow dialog to show
+                          setItemToDelete(item);
+                        }}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" /> Delete
+                      </DropdownMenuItem>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
@@ -339,6 +341,7 @@ export default function InventoryPage() {
         </div>
       )}
 
+      {/* The AlertDialog is defined here, controlled by itemToDelete state */}
       {itemToDelete && (
         <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
           <AlertDialogContent>
@@ -362,4 +365,3 @@ export default function InventoryPage() {
     </>
   );
 }
-
