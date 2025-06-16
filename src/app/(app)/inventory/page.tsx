@@ -236,10 +236,7 @@ export default function InventoryPage() {
               <TableHead>Category</TableHead>
               <TableHead>Sub-Category</TableHead>
               <TableHead>Location</TableHead>
-              <TableHead>Supplier</TableHead>
               <TableHead className="text-right">Qty</TableHead>
-              <TableHead className="text-right">Min Stock</TableHead>
-              <TableHead className="text-right">Max Stock</TableHead>
               <TableHead>Last Updated</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -272,10 +269,7 @@ export default function InventoryPage() {
                 <TableCell>{item.categoryName || '-'}</TableCell>
                 <TableCell>{item.subCategoryName || '-'}</TableCell>
                 <TableCell>{item.locationName || '-'}</TableCell>
-                <TableCell>{item.supplierName || '-'}</TableCell>
                 <TableCell className="text-right">{item.quantity}</TableCell>
-                <TableCell className="text-right">{item.minStockLevel ?? '-'}</TableCell>
-                <TableCell className="text-right">{item.maxStockLevel ?? '-'}</TableCell>
                 <TableCell>{new Date(item.lastUpdated).toLocaleDateString()}</TableCell>
                 <TableCell className="text-right">
                   <DropdownMenu>
@@ -355,3 +349,4 @@ export default function InventoryPage() {
     </>
   );
 }
+
