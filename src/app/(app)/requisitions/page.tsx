@@ -80,7 +80,7 @@ export default async function RequisitionsPage() {
                 <TableHead>Date Needed</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Total Items</TableHead>
-                <TableHead className="text-right w-[120px]">Actions</TableHead>
+                <TableHead className="text-right w-[160px]">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>

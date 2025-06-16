@@ -3,14 +3,7 @@
 
 import * as React from "react";
 import Link from 'next/link';
-import { useRouter } from "next/navigation"; // For re-fetching data after action
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { useRouter } from "next/navigation";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +15,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { MoreHorizontal, Edit, Trash2, FileX2, Eye } from "lucide-react";
+import { Eye, Edit, FileX2, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Requisition } from "@/types";
 import { updateRequisitionStatusAction, deleteRequisitionAction } from "@/app/(app)/requisitions/actions";
@@ -50,7 +43,7 @@ export function RequisitionRowActions({ requisition }: RequisitionRowActionsProp
           title: "Requisition Cancelled",
           description: `Requisition ${requisition.id} has been cancelled.`,
         });
-        // router.refresh(); // Re-fetches data for the current route
+        // router.refresh(); // Handled by revalidatePath in action
       } catch (error) {
         console.error("Failed to cancel requisition:", error);
         toast({
@@ -73,7 +66,7 @@ export function RequisitionRowActions({ requisition }: RequisitionRowActionsProp
             title: "Requisition Deleted",
             description: result.message,
           });
-          // router.refresh(); 
+          // router.refresh(); // Handled by revalidatePath in action
         } else {
           throw new Error(result.message);
         }
@@ -92,47 +85,51 @@ export function RequisitionRowActions({ requisition }: RequisitionRowActionsProp
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="h-8 w-8 p-0">
-            <span className="sr-only">Open menu for {requisition.id}</span>
-            <MoreHorizontal className="h-4 w-4" />
+      <div className="flex items-center justify-end gap-1">
+        <Link href={`/requisitions/${requisition.id}`} passHref legacyBehavior>
+          <Button variant="ghost" size="icon" className="h-8 w-8" title="View Details">
+            <Eye className="h-4 w-4" />
+            <span className="sr-only">View Details for {requisition.id}</span>
           </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-[180px]">
-          <DropdownMenuItem asChild>
-            <Link href={`/requisitions/${requisition.id}`}>
-              <Eye className="mr-2 h-4 w-4" /> View Details
-            </Link>
-          </DropdownMenuItem>
+        </Link>
 
-          {canEdit && (
-            <DropdownMenuItem asChild>
-              <Link href={`/requisitions/${requisition.id}/edit`}>
-                <Edit className="mr-2 h-4 w-4" /> Edit Requisition
-              </Link>
-            </DropdownMenuItem>
-          )}
+        {canEdit && (
+          <Link href={`/requisitions/${requisition.id}/edit`} passHref legacyBehavior>
+            <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit Requisition">
+              <Edit className="h-4 w-4" />
+              <span className="sr-only">Edit {requisition.id}</span>
+            </Button>
+          </Link>
+        )}
 
-          {canCancel && (
-            <DropdownMenuItem onSelect={(e) => { e.preventDefault(); setIsCancelAlertOpen(true); }} className="cursor-pointer">
-              <FileX2 className="mr-2 h-4 w-4" /> Cancel Requisition
-            </DropdownMenuItem>
-          )}
-          
-          {canDelete && (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={(e) => { e.preventDefault(); setIsDeleteAlertOpen(true); }}
-                className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
-              >
-                <Trash2 className="mr-2 h-4 w-4" /> Delete Requisition
-              </DropdownMenuItem>
-            </>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+        {canCancel && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            title="Cancel Requisition"
+            onClick={(e) => { e.preventDefault(); setIsCancelAlertOpen(true); }}
+            disabled={isPending}
+          >
+            <FileX2 className="h-4 w-4" />
+            <span className="sr-only">Cancel {requisition.id}</span>
+          </Button>
+        )}
+        
+        {canDelete && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+            title="Delete Requisition"
+            onClick={(e) => { e.preventDefault(); setIsDeleteAlertOpen(true); }}
+            disabled={isPending}
+          >
+            <Trash2 className="h-4 w-4" />
+            <span className="sr-only">Delete {requisition.id}</span>
+          </Button>
+        )}
+      </div>
 
       {/* Cancel Confirmation Dialog */}
       <AlertDialog open={isCancelAlertOpen} onOpenChange={setIsCancelAlertOpen}>
@@ -149,7 +146,7 @@ export function RequisitionRowActions({ requisition }: RequisitionRowActionsProp
             <AlertDialogAction
               onClick={handleCancelRequisition}
               disabled={isPending}
-              className={buttonVariants({ variant: "outline" })} // Use a less destructive variant for cancel
+              className={buttonVariants({ variant: "outline" })}
             >
               {isPending ? "Cancelling..." : "Confirm Cancel"}
             </AlertDialogAction>
