@@ -10,6 +10,7 @@ import { getSubCategoryById } from "@/app/(app)/settings/sub-categories/actions"
 import fs from 'fs/promises';
 import path from 'path';
 import crypto from 'crypto'; // For unique filenames for images
+import type { Database } from 'sqlite'; // Import Database type for generateItemId
 
 // Helper function to ensure directory exists
 async function ensureDirExists(dirPath: string) {
@@ -40,9 +41,6 @@ async function generateItemId(db: Database, categoryId: string, subCategoryId?: 
     }
   }
   
-  // Query for the highest sequence number for this prefix
-  // The 'id' column stores the full ID, e.g., "WP-PLY-001"
-  // We need to extract the numeric part after the prefix.
   const likePattern = prefix + '%';
   const result = await db.get(
     `SELECT id FROM inventory WHERE id LIKE ? ORDER BY id DESC LIMIT 1`, 
@@ -75,7 +73,7 @@ export async function addInventoryItemAction(formData: FormData) {
     lowStock: rawFormData.lowStock === 'on' || rawFormData.lowStock === 'true',
     minStockLevel: parseInt(rawFormData.minStockLevel as string, 10) || 0,
     maxStockLevel: parseInt(rawFormData.maxStockLevel as string, 10) || 0,
-    categoryId: rawFormData.categoryId as string, // Now mandatory
+    categoryId: rawFormData.categoryId as string, 
     subCategoryId: rawFormData.subCategoryId ? rawFormData.subCategoryId as string : undefined,
     locationId: rawFormData.locationId ? rawFormData.locationId as string : undefined,
     supplierId: rawFormData.supplierId ? rawFormData.supplierId as string : undefined,
@@ -84,6 +82,9 @@ export async function addInventoryItemAction(formData: FormData) {
 
   if (!data.categoryId) {
     throw new Error("Category is required to add an inventory item.");
+  }
+  if (!data.unitId) {
+    throw new Error("Unit of Measurement is required to add an inventory item.");
   }
 
   let imageUrlToStore: string | null = null;
@@ -103,8 +104,14 @@ export async function addInventoryItemAction(formData: FormData) {
       imageUrlToStore = `/uploads/inventory/${uniqueFileName}`;
     } catch (error) {
       console.error("Failed to upload image:", error);
+      // Optionally, you might want to throw an error here or return a specific error message
+      // For now, it just logs and continues, which means item will be added without image if upload fails
     }
+  } else if (rawFormData.imageUrl && typeof rawFormData.imageUrl === 'string' && rawFormData.imageUrl.trim() !== '') {
+    // If no file is uploaded but an imageUrl is provided (e.g., from placeholder or direct URL input)
+    imageUrlToStore = rawFormData.imageUrl.trim();
   }
+
 
   try {
     const db = await openDb();
@@ -183,7 +190,7 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
     LEFT JOIN locations l ON i.locationId = l.id
     LEFT JOIN suppliers s ON i.supplierId = s.id
     LEFT JOIN units_of_measurement uom ON i.unitId = uom.id
-    ORDER BY i.id ASC -- Order by the new structured ID
+    ORDER BY i.id ASC 
   `);
 
   return rawItems.map(item => ({
@@ -213,4 +220,42 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
   }));
 }
 
-    
+// Placeholder action for Excel export
+export async function exportInventoryToExcelAction() {
+  console.log("Server Action: exportInventoryToExcelAction called (Placeholder)");
+  // In a real implementation:
+  // 1. Fetch inventory items (e.g., using getInventoryItems)
+  // 2. Format data for Excel (e.g., select specific columns, map values)
+  // 3. Use 'xlsx' library to create an Excel workbook and worksheet
+  // 4. Convert workbook to a buffer
+  // 5. Return the buffer or trigger a download (more complex with Next.js server actions, might need an API route)
+  // For now, this is a no-op to allow UI wiring.
+  // throw new Error("Export functionality is not yet implemented."); // Or just log
+  return { success: true, message: "Export initiated (placeholder)." };
+}
+
+// Placeholder action for Excel import
+export async function importInventoryFromExcelAction(formData: FormData) {
+  console.log("Server Action: importInventoryFromExcelAction called (Placeholder)");
+  const file = formData.get('excelFile') as File | null;
+
+  if (!file) {
+    throw new Error("No Excel file provided for import.");
+  }
+
+  console.log(`Received file: ${file.name}, size: ${file.size}, type: ${file.type}`);
+  // In a real implementation:
+  // 1. Read the file buffer (formData.get('excelFile') as File).arrayBuffer()
+  // 2. Use 'xlsx' library to parse the workbook and relevant sheet
+  // 3. Iterate through rows, validate data
+  // 4. For each valid row:
+  //    a. Look up categoryId, subCategoryId, locationId, supplierId, unitId based on codes/names from Excel
+  //    b. Generate itemId (using generateItemId)
+  //    c. Insert into 'inventory' table
+  // 5. Revalidate paths
+  // 6. Return success/failure/summary
+  // For now, this is a no-op.
+  // throw new Error("Import functionality is not yet implemented.");
+  revalidatePath("/inventory");
+  return { success: true, message: `File "${file.name}" received for import (placeholder).` };
+}

@@ -18,24 +18,27 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { InventoryItem } from '@/types';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, FolderPlus, ListTree, Warehouse, Users, Boxes } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, FolderPlus, ListTree, Warehouse, Users, Boxes, FileUp, FileDown } from 'lucide-react';
 import { AddCategoryDialog } from '@/components/settings/add-category-dialog';
 import { AddUnitDialog } from '@/components/settings/add-unit-dialog';
 import { AddLocationDialog } from '@/components/settings/add-location-dialog';
 import { AddSupplierDialog } from '@/components/settings/add-supplier-dialog';
 import { AddSubCategoryDialog } from '@/components/settings/add-sub-category-dialog';
-import { getInventoryItems } from './actions';
+import { getInventoryItems, exportInventoryToExcelAction, importInventoryFromExcelAction } from './actions';
+import { useToast } from "@/hooks/use-toast";
 
 export default function InventoryPage() {
   const [inventoryItems, setInventoryItems] = React.useState<InventoryItem[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
+  const { toast } = useToast();
 
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = React.useState(false);
   const [isSubCategoryDialogOpen, setIsSubCategoryDialogOpen] = React.useState(false);
   const [isUnitDialogOpen, setIsUnitDialogOpen] = React.useState(false);
   const [isLocationDialogOpen, setIsLocationDialogOpen] = React.useState(false);
   const [isSupplierDialogOpen, setIsSupplierDialogOpen] = React.useState(false);
+  // TODO: Add state for import dialog
 
   const fetchItems = React.useCallback(async () => {
     setIsLoading(true);
@@ -59,6 +62,37 @@ export default function InventoryPage() {
   React.useEffect(() => {
     fetchItems();
   }, [fetchItems]);
+
+  const handleExport = async () => {
+    try {
+      // In a real implementation, this action would return a file or a URL to a file
+      // For now, it's a placeholder
+      await exportInventoryToExcelAction(); 
+      toast({
+        title: "Export Started",
+        description: "Your inventory data is being prepared for export. (Placeholder)",
+      });
+    } catch (e) {
+      console.error("Export failed:", e);
+      toast({
+        title: "Export Failed",
+        description: (e instanceof Error ? e.message : String(e)) || "Could not export inventory.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleImport = () => {
+    // This will eventually open an import dialog
+    // For now, it's a placeholder
+    console.log("Import button clicked - placeholder for dialog opening");
+    toast({
+        title: "Import Clicked",
+        description: "Import functionality is under development. (Placeholder for dialog)",
+      });
+    // Example: call importInventoryFromExcelAction(formData) after getting file
+  };
+
 
   if (isLoading) {
     return (
@@ -91,6 +125,13 @@ export default function InventoryPage() {
         description="Manage your stock items and supplies."
         actions={
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={handleImport}>
+              <FileUp className="mr-2 h-4 w-4" /> Import from Excel
+            </Button>
+            <Button variant="outline" onClick={handleExport}>
+              <FileDown className="mr-2 h-4 w-4" /> Export to Excel
+            </Button>
+
             <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline">
@@ -176,6 +217,7 @@ export default function InventoryPage() {
                       width={40}
                       height={40}
                       className="rounded object-cover"
+                      data-ai-hint="product item"
                     />
                   ) : (
                     <div className="h-10 w-10 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground">
