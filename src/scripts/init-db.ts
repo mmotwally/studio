@@ -1,11 +1,12 @@
 
-import { initializeDatabaseForScript } from '@/lib/database'; // Changed import
+import { initializeDatabaseForScript } from '@/lib/database';
 
 async function main() {
   console.log('Initializing database via script...');
   let db;
   try {
-    db = await initializeDatabaseForScript(); // This creates tables
+    // Pass true to drop existing tables before creating new ones
+    db = await initializeDatabaseForScript(true);
     console.log('Database initialization script finished successfully.');
   } catch (err) {
     console.error('Failed to initialize database from script:', err);

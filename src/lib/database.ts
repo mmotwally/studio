@@ -23,7 +23,7 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       categoryId TEXT NOT NULL,
-      FOREIGN KEY (categoryId) REFERENCES categories(id)
+      FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE CASCADE
     );
   `);
 
@@ -33,7 +33,8 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       id TEXT PRIMARY KEY,
       store TEXT NOT NULL,
       rack TEXT,
-      shelf TEXT
+      shelf TEXT,
+      UNIQUE (store, rack, shelf)
     );
   `);
 
@@ -65,17 +66,17 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       quantity INTEGER NOT NULL DEFAULT 0,
       unitCost REAL NOT NULL DEFAULT 0,
       lastUpdated TEXT NOT NULL,
-      lowStock INTEGER NOT NULL DEFAULT 0,
+      lowStock INTEGER NOT NULL DEFAULT 0, /* Boolean: 0 for false, 1 for true */
       categoryId TEXT,
       subCategoryId TEXT,
       locationId TEXT,
       supplierId TEXT,
       unitId TEXT,
-      FOREIGN KEY (categoryId) REFERENCES categories(id),
-      FOREIGN KEY (subCategoryId) REFERENCES sub_categories(id),
-      FOREIGN KEY (locationId) REFERENCES locations(id),
-      FOREIGN KEY (supplierId) REFERENCES suppliers(id),
-      FOREIGN KEY (unitId) REFERENCES units_of_measurement(id)
+      FOREIGN KEY (categoryId) REFERENCES categories(id) ON DELETE SET NULL,
+      FOREIGN KEY (subCategoryId) REFERENCES sub_categories(id) ON DELETE SET NULL,
+      FOREIGN KEY (locationId) REFERENCES locations(id) ON DELETE SET NULL,
+      FOREIGN KEY (supplierId) REFERENCES suppliers(id) ON DELETE SET NULL,
+      FOREIGN KEY (unitId) REFERENCES units_of_measurement(id) ON DELETE SET NULL
     );
   `);
 
@@ -85,12 +86,12 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
-      role TEXT,
+      role TEXT, /* Could be a foreign key to a 'roles' table if roles become complex */
       avatarUrl TEXT
     );
   `);
 
-  // Roles Table
+  // Roles Table (example, can be expanded)
   await dbConnection.exec(`
     CREATE TABLE IF NOT EXISTS roles (
       id TEXT PRIMARY KEY,
@@ -99,6 +100,18 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
     );
   `);
   console.log('Tables schema checked/created by _createTables.');
+}
+
+async function _dropTables(dbConnection: Database<sqlite3.Database, sqlite3.Statement>) {
+  await dbConnection.exec(`DROP TABLE IF EXISTS inventory;`);
+  await dbConnection.exec(`DROP TABLE IF EXISTS units_of_measurement;`);
+  await dbConnection.exec(`DROP TABLE IF EXISTS suppliers;`);
+  await dbConnection.exec(`DROP TABLE IF EXISTS locations;`);
+  await dbConnection.exec(`DROP TABLE IF EXISTS sub_categories;`);
+  await dbConnection.exec(`DROP TABLE IF EXISTS categories;`);
+  await dbConnection.exec(`DROP TABLE IF EXISTS users;`);
+  await dbConnection.exec(`DROP TABLE IF EXISTS roles;`);
+  console.log('Existing tables dropped by _dropTables.');
 }
 
 // Function for the application to get a shared, initialized DB connection
@@ -112,6 +125,7 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
           driver: sqlite3.Database,
         });
         console.log('App database connection opened. Ensuring tables exist...');
+        await db.exec('PRAGMA foreign_keys = ON;'); // Enforce foreign key constraints
         await _createTables(db); // Initialize on first connection for the app
         console.log('App database tables ensured.');
         return db;
@@ -126,13 +140,19 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
 }
 
 // Function specifically for the init-db.ts script
-// This will open its own connection, create tables, and then the script can close it.
-export async function initializeDatabaseForScript(): Promise<Database<sqlite3.Database, sqlite3.Statement>> {
+export async function initializeDatabaseForScript(dropFirst: boolean = false): Promise<Database<sqlite3.Database, sqlite3.Statement>> {
   console.log(`Script is initializing database: ${DB_FILE}`);
   const db = await open({
     filename: DB_FILE,
     driver: sqlite3.Database,
   });
+  await db.exec('PRAGMA foreign_keys = ON;'); // Enforce foreign key constraints
+
+  if (dropFirst) {
+    console.log('Dropping existing tables as requested by script...');
+    await _dropTables(db);
+  }
+
   await _createTables(db);
   console.log('Database initialization by script complete. Tables created/ensured.');
   return db; // Return the connection so the script can close it
