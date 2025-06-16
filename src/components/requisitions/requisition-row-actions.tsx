@@ -31,18 +31,17 @@ export function RequisitionRowActions({ requisition }: RequisitionRowActionsProp
   const [isDeleteAlertOpen, setIsDeleteAlertOpen] = React.useState(false);
   const [isPending, startTransition] = React.useTransition();
 
-  const canEdit = requisition.status === 'PENDING_APPROVAL' || 
-                  requisition.status === 'APPROVED' || 
+  const canEdit = requisition.status === 'PENDING_APPROVAL' ||
+                  requisition.status === 'APPROVED' ||
                   requisition.status === 'PARTIALLY_FULFILLED' ||
-                  requisition.status === 'FULFILLED' || // Allow editing fulfilled to potentially adjust/correct
-                  requisition.status === 'REJECTED'; // Allow editing rejected to resubmit
+                  requisition.status === 'FULFILLED' || 
+                  requisition.status === 'REJECTED'; 
 
-  const canCancel = requisition.status === 'PENDING_APPROVAL' || 
-                    requisition.status === 'APPROVED' || 
-                    requisition.status === 'PARTIALLY_FULFILLED' || 
+  const canCancel = requisition.status === 'PENDING_APPROVAL' ||
+                    requisition.status === 'APPROVED' ||
+                    requisition.status === 'PARTIALLY_FULFILLED' ||
                     requisition.status === 'FULFILLED';
                     
-  // Allow deletion for most statuses, as stock will be returned.
   const canDelete = true; 
 
   const handleCancelRequisition = async () => {
@@ -96,7 +95,7 @@ export function RequisitionRowActions({ requisition }: RequisitionRowActionsProp
   return (
     <>
       <div className="flex items-center justify-end gap-1">
-        <Link href={`/requisitions/${requisition.id}`} passHref legacyBehavior>
+        <Link href={`/requisitions/${requisition.id}`}>
           <Button variant="ghost" size="icon" className="h-8 w-8" title="View Details">
             <Eye className="h-4 w-4" />
             <span className="sr-only">View Details for {requisition.id}</span>
@@ -104,7 +103,7 @@ export function RequisitionRowActions({ requisition }: RequisitionRowActionsProp
         </Link>
 
         {canEdit && (
-          <Link href={`/requisitions/${requisition.id}/edit`} passHref legacyBehavior>
+          <Link href={`/requisitions/${requisition.id}/edit`}>
             <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit Requisition">
               <Edit className="h-4 w-4" />
               <span className="sr-only">Edit {requisition.id}</span>
