@@ -4,7 +4,7 @@
 import { openDb } from "@/lib/database";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { InventoryItem } from '@/types';
+import type { InventoryItem, InventoryItemFormValues } from '@/types';
 import { getCategoryById, getCategories } from "@/app/(app)/settings/categories/actions";
 import { getSubCategoryById, getSubCategories } from "@/app/(app)/settings/sub-categories/actions";
 import { getLocations } from "@/app/(app)/settings/locations/actions";
@@ -69,7 +69,7 @@ async function generateItemId(db: Database, categoryId: string, subCategoryId?: 
 export async function addInventoryItemAction(formData: FormData) {
   const rawFormData = Object.fromEntries(formData.entries());
 
-  const data = {
+  const data: InventoryItemFormValues = {
     name: rawFormData.name as string,
     description: rawFormData.description ? rawFormData.description as string : null,
     quantity: parseInt(rawFormData.quantity as string, 10) || 0,
@@ -81,7 +81,8 @@ export async function addInventoryItemAction(formData: FormData) {
     subCategoryId: rawFormData.subCategoryId ? rawFormData.subCategoryId as string : undefined,
     locationId: rawFormData.locationId ? rawFormData.locationId as string : undefined,
     supplierId: rawFormData.supplierId ? rawFormData.supplierId as string : undefined,
-    unitId: rawFormData.unitId ? rawFormData.unitId as string : undefined,
+    unitId: rawFormData.unitId as string,
+    // imageUrl and removeImage are handled by file logic below
   };
 
   if (!data.categoryId) {
@@ -99,7 +100,7 @@ export async function addInventoryItemAction(formData: FormData) {
       const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'inventory');
       await ensureDirExists(uploadsDir);
 
-      const fileExtension = path.extname(imageFile.name) || '.png';
+      const fileExtension = path.extname(imageFile.name) || '.png'; // Default to .png if no extension
       const uniqueFileName = `${crypto.randomUUID()}${fileExtension}`;
       const filePath = path.join(uploadsDir, uniqueFileName);
 
@@ -108,12 +109,8 @@ export async function addInventoryItemAction(formData: FormData) {
       imageUrlToStore = `/uploads/inventory/${uniqueFileName}`;
     } catch (error) {
       console.error("Failed to upload image:", error);
-      // Potentially throw error or return a specific response if image upload is critical
+      throw new Error("Image upload failed. Could not add item.");
     }
-  } else if (rawFormData.imageUrl && typeof rawFormData.imageUrl === 'string' && rawFormData.imageUrl.trim() !== '') {
-    // This branch might be less relevant now with direct file uploads,
-    // but kept for potential future use or if manual URL input is re-enabled.
-    imageUrlToStore = rawFormData.imageUrl.trim();
   }
 
 
@@ -150,9 +147,117 @@ export async function addInventoryItemAction(formData: FormData) {
   }
 
   revalidatePath("/inventory");
-  revalidatePath("/inventory/new"); // In case user wants to add another
+  revalidatePath("/inventory/new");
   redirect("/inventory");
 }
+
+
+export async function updateInventoryItemAction(itemId: string, currentImageUrl: string | null, formData: FormData) {
+  const rawFormData = Object.fromEntries(formData.entries());
+
+  const data: InventoryItemFormValues = {
+    name: rawFormData.name as string,
+    description: rawFormData.description ? rawFormData.description as string : null,
+    quantity: parseInt(rawFormData.quantity as string, 10) || 0,
+    unitCost: parseFloat(rawFormData.unitCost as string) || 0,
+    lowStock: rawFormData.lowStock === 'on' || rawFormData.lowStock === 'true', // Checkbox sends 'on' or undefined
+    minStockLevel: parseInt(rawFormData.minStockLevel as string, 10) || 0,
+    maxStockLevel: parseInt(rawFormData.maxStockLevel as string, 10) || 0,
+    categoryId: rawFormData.categoryId as string,
+    subCategoryId: rawFormData.subCategoryId ? rawFormData.subCategoryId as string : undefined,
+    locationId: rawFormData.locationId ? rawFormData.locationId as string : undefined,
+    supplierId: rawFormData.supplierId ? rawFormData.supplierId as string : undefined,
+    unitId: rawFormData.unitId as string,
+    removeImage: rawFormData.removeImage === 'true', // Checkbox for remove image
+  };
+
+  if (!data.categoryId) {
+    throw new Error("Category is required.");
+  }
+  if (!data.unitId) {
+    throw new Error("Unit of Measurement is required.");
+  }
+
+  let imageUrlToStore: string | null = currentImageUrl; // Start with current image
+  const imageFile = formData.get('imageFile') as File | null;
+  const removeImage = data.removeImage;
+
+  try {
+    // 1. Handle new image upload
+    if (imageFile && imageFile.size > 0) {
+      // Delete old local image if it exists
+      if (currentImageUrl && currentImageUrl.startsWith('/uploads/inventory/')) {
+        const oldImagePath = path.join(process.cwd(), 'public', currentImageUrl);
+        try {
+          await fs.unlink(oldImagePath);
+        } catch (err: any) {
+          if (err.code !== 'ENOENT') console.warn(`Could not delete old image ${oldImagePath}: ${err.message}`);
+        }
+      }
+
+      // Save new image
+      const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'inventory');
+      await ensureDirExists(uploadsDir);
+      const fileExtension = path.extname(imageFile.name) || '.png';
+      const uniqueFileName = `${crypto.randomUUID()}${fileExtension}`;
+      const filePath = path.join(uploadsDir, uniqueFileName);
+      const buffer = Buffer.from(await imageFile.arrayBuffer());
+      await fs.writeFile(filePath, buffer);
+      imageUrlToStore = `/uploads/inventory/${uniqueFileName}`;
+    }
+    // 2. Handle image removal request
+    else if (removeImage) {
+      if (currentImageUrl && currentImageUrl.startsWith('/uploads/inventory/')) {
+        const imagePath = path.join(process.cwd(), 'public', currentImageUrl);
+        try {
+          await fs.unlink(imagePath);
+        } catch (err: any) {
+          if (err.code !== 'ENOENT') console.warn(`Could not delete image ${imagePath}: ${err.message}`);
+        }
+      }
+      imageUrlToStore = null;
+    }
+    // 3. If no new image and no removal, imageUrlToStore remains currentImageUrl
+
+    const db = await openDb();
+    const lastUpdated = new Date().toISOString();
+
+    // Note: Item ID (PK) cannot be changed. Category/SubCategory changes here do not regenerate ID.
+    await db.run(
+      `UPDATE inventory
+       SET name = ?, description = ?, imageUrl = ?, quantity = ?, unitCost = ?, lastUpdated = ?,
+           lowStock = ?, minStockLevel = ?, maxStockLevel = ?, categoryId = ?, subCategoryId = ?,
+           locationId = ?, supplierId = ?, unitId = ?
+       WHERE id = ?`,
+      data.name,
+      data.description,
+      imageUrlToStore,
+      data.quantity,
+      data.unitCost,
+      lastUpdated,
+      data.lowStock ? 1 : 0,
+      data.minStockLevel,
+      data.maxStockLevel,
+      data.categoryId,
+      data.subCategoryId,
+      data.locationId,
+      data.supplierId,
+      data.unitId,
+      itemId
+    );
+  } catch (error) {
+    console.error(`Failed to update inventory item ${itemId}:`, error);
+    if (error instanceof Error) {
+      throw new Error(`Database operation failed: ${error.message}`);
+    }
+    throw new Error("Database operation failed. Could not update item.");
+  }
+
+  revalidatePath("/inventory");
+  revalidatePath(`/inventory/${itemId}/edit`);
+  redirect("/inventory");
+}
+
 
 export async function getInventoryItems(): Promise<InventoryItem[]> {
   const db = await openDb();
@@ -224,6 +329,81 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
   }));
 }
 
+export async function getInventoryItemById(itemId: string): Promise<InventoryItem | null> {
+  const db = await openDb();
+  const item = await db.get<({
+      id: string;
+      name: string;
+      description: string | null;
+      imageUrl: string | null;
+      quantity: number;
+      unitCost: number;
+      lastUpdated: string;
+      lowStock: number;
+      minStockLevel: number;
+      maxStockLevel: number;
+      categoryName?: string | null;
+      categoryCode?: string | null;
+      subCategoryName?: string | null;
+      subCategoryCode?: string | null;
+      locationName?: string | null;
+      supplierName?: string | null;
+      unitName?: string | null;
+      categoryId?: string | null;
+      subCategoryId?: string | null;
+      locationId?: string | null;
+      supplierId?: string | null;
+      unitId?: string | null;
+    })>(`
+    SELECT
+      i.id, i.name, i.description, i.imageUrl, i.quantity, i.unitCost, i.lastUpdated, i.lowStock,
+      i.minStockLevel, i.maxStockLevel,
+      c.name as categoryName, c.code as categoryCode, i.categoryId,
+      sc.name as subCategoryName, sc.code as subCategoryCode, i.subCategoryId,
+      l.store || COALESCE(' - ' || l.rack, '') || COALESCE(' - ' || l.shelf, '') as locationName, i.locationId,
+      s.name as supplierName, i.supplierId,
+      uom.name as unitName, i.unitId
+    FROM inventory i
+    LEFT JOIN categories c ON i.categoryId = c.id
+    LEFT JOIN sub_categories sc ON i.subCategoryId = sc.id
+    LEFT JOIN locations l ON i.locationId = l.id
+    LEFT JOIN suppliers s ON i.supplierId = s.id
+    LEFT JOIN units_of_measurement uom ON i.unitId = uom.id
+    WHERE i.id = ?
+  `, itemId);
+
+  if (!item) {
+    return null;
+  }
+
+  return {
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    imageUrl: item.imageUrl,
+    quantity: item.quantity,
+    unitCost: item.unitCost,
+    totalValue: (item.quantity || 0) * (item.unitCost || 0),
+    lastUpdated: item.lastUpdated,
+    lowStock: Boolean(item.lowStock),
+    minStockLevel: item.minStockLevel,
+    maxStockLevel: item.maxStockLevel,
+    categoryName: item.categoryName || undefined,
+    categoryCode: item.categoryCode || undefined,
+    subCategoryName: item.subCategoryName || undefined,
+    subCategoryCode: item.subCategoryCode || undefined,
+    locationName: item.locationName || undefined,
+    supplierName: item.supplierName || undefined,
+    unitName: item.unitName || undefined,
+    categoryId: item.categoryId || undefined,
+    subCategoryId: item.subCategoryId || undefined,
+    locationId: item.locationId || undefined,
+    supplierId: item.supplierId || undefined,
+    unitId: item.unitId || undefined,
+  };
+}
+
+
 export async function deleteInventoryItemAction(itemId: string): Promise<{ success: boolean; message: string }> {
   if (!itemId) {
     return { success: false, message: "Item ID is required for deletion." };
@@ -249,7 +429,9 @@ export async function deleteInventoryItemAction(itemId: string): Promise<{ succe
         console.log(`Successfully deleted image file: ${imagePath}`);
       } catch (fileError: any) {
         // Log error but don't fail the whole operation if file deletion fails (e.g., file already gone)
-        console.warn(`Could not delete image file ${imagePath}: ${fileError.message}`);
+        if (fileError.code !== 'ENOENT') {
+          console.warn(`Could not delete image file ${imagePath}: ${fileError.message}`);
+        }
       }
     }
 
@@ -425,4 +607,3 @@ export async function importInventoryFromExcelAction(formData: FormData): Promis
     errors
   };
 }
-

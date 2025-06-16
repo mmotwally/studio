@@ -1,4 +1,5 @@
 
+
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavItem {
@@ -102,6 +103,24 @@ export interface InventoryItem {
   unitId?: string;
   unitName?: string; // For display (e.g. "Pieces" or "pcs")
 }
+
+export interface InventoryItemFormValues {
+  name: string;
+  description?: string | null;
+  imageUrl?: string | null; // This might not be directly in form values if using file input
+  quantity: number;
+  unitCost: number;
+  lowStock?: boolean;
+  minStockLevel?: number;
+  maxStockLevel?: number;
+  categoryId: string;
+  subCategoryId?: string | null;
+  locationId?: string | null;
+  supplierId?: string | null;
+  unitId: string;
+  removeImage?: boolean; // For edit form: to signal image removal
+}
+
 
 export interface User {
   id: string;

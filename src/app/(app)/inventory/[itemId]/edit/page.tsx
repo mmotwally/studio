@@ -1,52 +1,137 @@
 
-// src/app/(app)/inventory/[itemId]/edit/page.tsx
+"use client";
+import * as React from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-// We'll need to fetch the item data later
-// import { getInventoryItemById } from '../../actions'; // Assuming you'll create this
+import { InventoryItemForm } from '@/components/inventory/inventory-item-form';
+import { getInventoryItemById, updateInventoryItemAction } from '../../actions';
+import type { InventoryItem, InventoryItemFormValues } from '@/types';
+import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from '@/components/ui/skeleton';
 
-interface EditInventoryItemPageProps {
-  params: {
-    itemId: string;
+
+export default function EditInventoryItemPage() {
+  const router = useRouter();
+  const params = useParams();
+  const itemId = params.itemId as string;
+  const { toast } = useToast();
+
+  const [item, setItem] = React.useState<InventoryItem | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (itemId) {
+      setIsLoading(true);
+      getInventoryItemById(itemId)
+        .then(fetchedItem => {
+          if (fetchedItem) {
+            setItem(fetchedItem);
+          } else {
+            setError("Item not found.");
+            toast({ title: "Error", description: "Inventory item not found.", variant: "destructive" });
+          }
+        })
+        .catch(err => {
+          console.error("Failed to fetch item:", err);
+          setError("Failed to load item data.");
+          toast({ title: "Error", description: "Could not load item data.", variant: "destructive" });
+        })
+        .finally(() => setIsLoading(false));
+    }
+  }, [itemId, toast]);
+
+  const handleUpdateItem = async (values: InventoryItemFormValues, formData: FormData) => {
+    if (!item) return;
+    setIsSubmitting(true);
+    try {
+      await updateInventoryItemAction(item.id, item.imageUrl, formData);
+      toast({
+        title: "Success",
+        description: `Item "${values.name}" updated successfully.`,
+      });
+      // router.push('/inventory'); // Action handles redirect
+    } catch (err) {
+      console.error("Failed to update item:", err);
+      toast({
+        title: "Error Updating Item",
+        description: (err instanceof Error ? err.message : String(err)) || "Could not update item. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
   };
-}
 
-export default async function EditInventoryItemPage({ params }: EditInventoryItemPageProps) {
-  const { itemId } = params;
+  if (isLoading) {
+    return (
+      <>
+        <PageHeader title="Edit Item" description="Loading item details..." />
+        <Card className="shadow-lg">
+          <CardHeader>
+            <Skeleton className="h-8 w-3/4" />
+            <Skeleton className="h-4 w-1/2" />
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {[...Array(5)].map((_, i) => <Skeleton key={i} className="h-10 w-full" />)}
+            </div>
+          </CardContent>
+        </Card>
+      </>
+    );
+  }
 
-  // Placeholder: Fetch item data using itemId
-  // const item = await getInventoryItemById(itemId);
-  // if (!item) {
-  //   return <div>Item not found.</div>;
-  // }
+  if (error) {
+    return (
+      <>
+        <PageHeader title="Error" description={error} />
+         <Button onClick={() => router.push('/inventory')} variant="outline">Back to Inventory</Button>
+      </>
+    );
+  }
+
+  if (!item) {
+     return (
+      <>
+        <PageHeader title="Edit Item" description="Item not found." />
+         <Button onClick={() => router.push('/inventory')} variant="outline">Back to Inventory</Button>
+      </>
+    );
+  }
+
+  const defaultFormValues: InventoryItemFormValues = {
+    name: item.name,
+    description: item.description || "",
+    quantity: item.quantity,
+    unitCost: item.unitCost,
+    minStockLevel: item.minStockLevel || 0,
+    maxStockLevel: item.maxStockLevel || 0,
+    lowStock: item.lowStock || false,
+    categoryId: item.categoryId || "",
+    subCategoryId: item.subCategoryId || "",
+    locationId: item.locationId || "",
+    supplierId: item.supplierId || "",
+    unitId: item.unitId || "",
+    removeImage: false, // Initial state for remove image
+    // imageUrl is handled by the form's preview logic
+  };
 
   return (
     <>
       <PageHeader
-        title={`Edit Item: ${itemId}`} // Replace with item.name once fetched
+        title={`Edit Item: ${item.name}`}
         description="Modify the details of this inventory item."
       />
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle>Item Details</CardTitle>
-          <CardDescription>
-            Item ID: {itemId}
-            {/* Placeholder for the edit form */}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex h-64 items-center justify-center rounded-md border-2 border-dashed border-border bg-muted/20">
-            <p className="text-muted-foreground">Edit form for item ID: <span className="font-semibold">{itemId}</span> will be here.</p>
-          </div>
-          {/* 
-            Future implementation:
-            <InventoryItemForm 
-              defaultValues={item} // Pass fetched item data
-              onSubmit={handleUpdateItem} 
-            /> 
-          */}
-        </CardContent>
-      </Card>
+      <InventoryItemForm
+        onSubmit={handleUpdateItem}
+        defaultValues={defaultFormValues}
+        isEditMode={true}
+        isLoading={isSubmitting}
+        initialImageUrl={item.imageUrl} // Pass for initial preview
+      />
     </>
   );
 }
