@@ -18,9 +18,7 @@ export default function CreateRequisitionPage() {
       try {
         await createRequisitionAction(values);
         // If createRequisitionAction successfully calls redirect(), 
-        // Next.js router should handle client-side navigation, and the promise 
-        // from the action should not reject in a way that this catch block
-        // is hit with a redirect signal when used with startTransition.
+        // Next.js router should handle client-side navigation.
       } catch (error) {
         const errorObj = error as Error & { digest?: string }; // Cast for potential digest property
 
@@ -32,16 +30,16 @@ export default function CreateRequisitionPage() {
             // stack: errorObj.stack // Full stack can be verbose
         });
 
-        // Check for Next.js redirect signal (digest is the most reliable)
-        if (errorObj.digest === 'NEXT_REDIRECT') {
-          console.log("Re-throwing error based on digest: NEXT_REDIRECT");
+        // Prefer checking digest first for NEXT_REDIRECT
+        if (errorObj.digest?.startsWith('NEXT_REDIRECT')) { 
+          console.log("Re-throwing error based on digest prefix: NEXT_REDIRECT");
           throw error; // Re-throw for Next.js router to handle
         }
         
-        // Fallback: Check message if digest is not NEXT_REDIRECT (e.g., due to serialization)
-        // This addresses the case where the toast was showing "NEXT_REDIRECT" as the message.
+        // Fallback: Check message if digest is not the primary NEXT_REDIRECT signal
+        // (This might catch cases where digest isn't populated as expected but message is still NEXT_REDIRECT)
         if (errorObj.message === 'NEXT_REDIRECT') {
-          console.warn("Re-throwing error based on message: NEXT_REDIRECT (digest was: " + errorObj.digest + ")");
+          console.warn("Re-throwing error based on message: NEXT_REDIRECT (digest was: " + errorObj.digest + "). This is a fallback.");
           throw error; // Re-throw for Next.js router to handle
         }
 
