@@ -9,7 +9,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription as DialogDescriptionComponent, // Renamed to avoid conflict
+  DialogDescription as DialogDescriptionComponent,
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
@@ -20,7 +20,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-  FormDescription, // Added FormDescription here
+  FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
@@ -40,6 +40,8 @@ interface AddUnitDialogProps {
   onUnitAdded?: () => void;
 }
 
+const NO_BASE_UNIT_VALUE = "__NO_BASE_UNIT__";
+
 export function AddUnitDialog({ setOpen, onUnitAdded }: AddUnitDialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -58,7 +60,6 @@ export function AddUnitDialog({ setOpen, onUnitAdded }: AddUnitDialogProps) {
 
   const watchedBaseUnitId = form.watch("baseUnitId");
 
-  // Renamed to avoid conflict with DialogDescription component from Radix
   const DialogUIDescription = DialogDescriptionComponent;
 
 
@@ -166,14 +167,18 @@ export function AddUnitDialog({ setOpen, onUnitAdded }: AddUnitDialogProps) {
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Base Unit (Optional)</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoadingUnits}>
+                <Select
+                  onValueChange={(value) => field.onChange(value === NO_BASE_UNIT_VALUE ? undefined : value)}
+                  value={field.value || NO_BASE_UNIT_VALUE}
+                  disabled={isLoadingUnits}
+                >
                   <FormControl>
                     <SelectTrigger>
                       <SelectValue placeholder={isLoadingUnits ? "Loading units..." : "Select a base unit (if applicable)"} />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value="">None (This is a base unit)</SelectItem>
+                    <SelectItem value={NO_BASE_UNIT_VALUE}>None (This is a base unit)</SelectItem>
                     {existingUnits.map((unit) => (
                       <SelectItem key={unit.id} value={unit.id}>
                         {unit.name} ({unit.abbreviation || 'N/A'})
@@ -223,4 +228,3 @@ export function AddUnitDialog({ setOpen, onUnitAdded }: AddUnitDialogProps) {
     </DialogContent>
   );
 }
-
