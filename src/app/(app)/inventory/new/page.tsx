@@ -21,7 +21,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { PageHeader } from "@/components/page-header";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { addInventoryItemAction, type InventoryItemFormValues, inventoryItemSchema } from "../actions";
+import { addInventoryItemAction } from "../actions";
+import { type InventoryItemFormValues, inventoryItemSchema } from "../schema"; // Import from the new schema file
 
 export default function AddInventoryItemPage() {
   const router = useRouter();
@@ -45,18 +46,13 @@ export default function AddInventoryItemPage() {
     setIsSubmitting(true);
     try {
       await addInventoryItemAction(values);
-      // Toast for success is now handled within the component,
-      // as server actions redirect and might unmount the component before toast is shown from here.
-      // However, for client-side feedback before potential redirect, this can be kept.
-      // For robust success feedback, consider showing toast *after* redirect on the target page,
-      // or use a mechanism that survives navigation (e.g., query params, session flash messages).
-      // Given the current setup, the redirect in the action will likely make this toast not visible.
-      // Let's keep it simple for now; if issues arise, we can refine.
-      router.push('/inventory'); // Manually redirecting after success
-      toast({ // This toast might not be seen due to immediate redirect
-        title: "Success",
-        description: "Inventory item added successfully.",
-      });
+      // Server action handles redirect, so success toast might be better on the target page
+      // or using a flash message system if needed. For now, direct redirect is fine.
+      // router.push('/inventory'); // Action will redirect
+      // toast({
+      //   title: "Success",
+      //   description: "Inventory item added successfully.",
+      // });
     } catch (error) {
       console.error("Submission error:", error);
       toast({
@@ -64,21 +60,10 @@ export default function AddInventoryItemPage() {
         description: (error instanceof Error ? error.message : String(error)) || "Could not add item. Please try again.",
         variant: "destructive",
       });
-    } finally {
-      // Only set isSubmitting to false if there was an error, 
-      // because on success, the redirect will navigate away.
-      // If an error occurs, we stay on the page, so we need to re-enable the button.
-      if (form.formState.isSubmitSuccessful === false) {
-         setIsSubmitting(false);
-      }
-      // If there was an error, ensure isSubmitting is false
-      // If successful, the redirect happens in the action.
-      // To ensure button state is correct if error occurs BEFORE action's redirect:
-      const wasSuccessful = !Object.keys(form.formState.errors).length;
-      if (!wasSuccessful) {
-        setIsSubmitting(false);
-      }
+      setIsSubmitting(false); // Only set if error, on success redirect happens
     }
+    // Do not set isSubmitting to false here if successful, as redirect will unmount.
+    // It's handled in the catch block.
   }
 
   return (
