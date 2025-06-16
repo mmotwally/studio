@@ -5,21 +5,26 @@ import { openDb } from "@/lib/database";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { InventoryItem } from '@/types';
-import { getCategoryById } from "@/app/(app)/settings/categories/actions";
-import { getSubCategoryById } from "@/app/(app)/settings/sub-categories/actions";
+import { getCategoryById, getCategories } from "@/app/(app)/settings/categories/actions";
+import { getSubCategoryById, getSubCategories } from "@/app/(app)/settings/sub-categories/actions";
+import { getLocations } from "@/app/(app)/settings/locations/actions";
+import { getSuppliers } from "@/app/(app)/settings/suppliers/actions";
+import { getUnitsOfMeasurement } from "@/app/(app)/settings/units/actions";
+
 import fs from 'fs/promises';
 import path from 'path';
-import crypto from 'crypto'; // For unique filenames for images
-import type { Database } from 'sqlite'; // Import Database type for generateItemId
+import crypto from 'crypto'; 
+import type { Database } from 'sqlite';
+import * as XLSX from 'xlsx';
 
-// Helper function to ensure directory exists
+
 async function ensureDirExists(dirPath: string) {
   try {
     await fs.mkdir(dirPath, { recursive: true });
   } catch (error: any) {
-    if (error.code !== 'EEXIST') { // Ignore error if directory already exists
+    if (error.code !== 'EEXIST') { 
       console.error(`Failed to create directory ${dirPath}:`, error);
-      throw error; // Re-throw other errors
+      throw error; 
     }
   }
 }
@@ -36,7 +41,6 @@ async function generateItemId(db: Database, categoryId: string, subCategoryId?: 
     if (subCategory && subCategory.code) {
       prefix += subCategory.code + "-";
     } else if (subCategory && !subCategory.code) {
-      // This case should ideally not happen if codes are enforced
       console.warn(`Sub-category ${subCategoryId} is missing a code. Item ID will not include sub-category code.`);
     }
   }
@@ -104,11 +108,8 @@ export async function addInventoryItemAction(formData: FormData) {
       imageUrlToStore = `/uploads/inventory/${uniqueFileName}`;
     } catch (error) {
       console.error("Failed to upload image:", error);
-      // Optionally, you might want to throw an error here or return a specific error message
-      // For now, it just logs and continues, which means item will be added without image if upload fails
     }
   } else if (rawFormData.imageUrl && typeof rawFormData.imageUrl === 'string' && rawFormData.imageUrl.trim() !== '') {
-    // If no file is uploaded but an imageUrl is provided (e.g., from placeholder or direct URL input)
     imageUrlToStore = rawFormData.imageUrl.trim();
   }
 
@@ -220,42 +221,173 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
   }));
 }
 
-// Placeholder action for Excel export
-export async function exportInventoryToExcelAction() {
-  console.log("Server Action: exportInventoryToExcelAction called (Placeholder)");
-  // In a real implementation:
-  // 1. Fetch inventory items (e.g., using getInventoryItems)
-  // 2. Format data for Excel (e.g., select specific columns, map values)
-  // 3. Use 'xlsx' library to create an Excel workbook and worksheet
-  // 4. Convert workbook to a buffer
-  // 5. Return the buffer or trigger a download (more complex with Next.js server actions, might need an API route)
-  // For now, this is a no-op to allow UI wiring.
-  // throw new Error("Export functionality is not yet implemented."); // Or just log
-  return { success: true, message: "Export initiated (placeholder)." };
+
+export async function exportInventoryToExcelAction(): Promise<Omit<InventoryItem, 'totalValue' | 'lastUpdated' | 'lowStock' | 'categoryId' | 'subCategoryId' | 'locationId' | 'supplierId' | 'unitId'>[]> {
+  const items = await getInventoryItems();
+  // Map to the structure expected by the Excel template for easier re-import
+  return items.map(item => ({
+    id: item.id, // Item ID is useful for reference, even if not directly used in template for new items
+    name: item.name,
+    description: item.description || "",
+    quantity: item.quantity,
+    unitCost: item.unitCost,
+    minStockLevel: item.minStockLevel || 0,
+    maxStockLevel: item.maxStockLevel || 0,
+    categoryCode: item.categoryCode || "",
+    subCategoryCode: item.subCategoryCode || "",
+    locationStore: item.locationName ? item.locationName.split(' - ')[0] : "",
+    locationRack: item.locationName && item.locationName.includes(' - ') && item.locationName.split(' - ').length > 1 ? item.locationName.split(' - ')[1] : "",
+    locationShelf: item.locationName && item.locationName.includes(' - ') && item.locationName.split(' - ').length > 2 ? item.locationName.split(' - ')[2] : "",
+    supplierName: item.supplierName || "",
+    unitName: item.unitName || "",
+    imageUrl: item.imageUrl || "",
+  }));
 }
 
-// Placeholder action for Excel import
-export async function importInventoryFromExcelAction(formData: FormData) {
-  console.log("Server Action: importInventoryFromExcelAction called (Placeholder)");
+interface ExcelRow {
+  Name?: string;
+  Description?: string;
+  Quantity?: number;
+  UnitCost?: number;
+  MinStockLevel?: number;
+  MaxStockLevel?: number;
+  CategoryCode?: string;
+  SubCategoryCode?: string;
+  LocationStore?: string;
+  LocationRack?: string;
+  LocationShelf?: string;
+  SupplierName?: string;
+  UnitName?: string;
+  ImageURL?: string;
+}
+
+interface ImportError {
+  row: number;
+  field?: string;
+  message: string;
+}
+
+export async function importInventoryFromExcelAction(formData: FormData): Promise<{
+  success: boolean;
+  message: string;
+  importedCount: number;
+  failedCount: number;
+  errors: ImportError[];
+}> {
   const file = formData.get('excelFile') as File | null;
 
   if (!file) {
-    throw new Error("No Excel file provided for import.");
+    return { success: false, message: "No Excel file provided.", importedCount: 0, failedCount: 0, errors: [{row: 0, message: "No file"}] };
   }
 
-  console.log(`Received file: ${file.name}, size: ${file.size}, type: ${file.type}`);
-  // In a real implementation:
-  // 1. Read the file buffer (formData.get('excelFile') as File).arrayBuffer()
-  // 2. Use 'xlsx' library to parse the workbook and relevant sheet
-  // 3. Iterate through rows, validate data
-  // 4. For each valid row:
-  //    a. Look up categoryId, subCategoryId, locationId, supplierId, unitId based on codes/names from Excel
-  //    b. Generate itemId (using generateItemId)
-  //    c. Insert into 'inventory' table
-  // 5. Revalidate paths
-  // 6. Return success/failure/summary
-  // For now, this is a no-op.
-  // throw new Error("Import functionality is not yet implemented.");
+  let importedCount = 0;
+  const errors: ImportError[] = [];
+
+  try {
+    const db = await openDb();
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(buffer, { type: 'buffer' });
+    const worksheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[worksheetName];
+    const jsonData = XLSX.utils.sheet_to_json<ExcelRow>(worksheet);
+
+    const allCategories = await getCategories();
+    const allSubCategories = await getSubCategories(); // Fetch all, then filter by parent
+    const allLocations = await getLocations();
+    const allSuppliers = await getSuppliers();
+    const allUnits = await getUnitsOfMeasurement();
+
+    for (let i = 0; i < jsonData.length; i++) {
+      const row = jsonData[i];
+      const rowNum = i + 2; // Excel rows are 1-indexed, +1 for header
+
+      // --- Validation & Lookup ---
+      if (!row.Name) { errors.push({ row: rowNum, field: 'Name', message: 'Name is required.' }); continue; }
+      if (row.Quantity === undefined || isNaN(Number(row.Quantity))) { errors.push({ row: rowNum, field: 'Quantity', message: 'Quantity is required and must be a number.' }); continue; }
+      if (row.UnitCost === undefined || isNaN(Number(row.UnitCost))) { errors.push({ row: rowNum, field: 'UnitCost', message: 'UnitCost is required and must be a number.' }); continue; }
+      if (!row.CategoryCode) { errors.push({ row: rowNum, field: 'CategoryCode', message: 'CategoryCode is required.' }); continue; }
+      if (!row.UnitName) { errors.push({ row: rowNum, field: 'UnitName', message: 'UnitName is required.' }); continue; }
+
+      const category = allCategories.find(c => c.code === row.CategoryCode);
+      if (!category) { errors.push({ row: rowNum, field: 'CategoryCode', message: `Category with code "${row.CategoryCode}" not found.` }); continue; }
+
+      let subCategory = null;
+      if (row.SubCategoryCode) {
+        subCategory = allSubCategories.find(sc => sc.categoryId === category.id && sc.code === row.SubCategoryCode);
+        if (!subCategory) { errors.push({ row: rowNum, field: 'SubCategoryCode', message: `Sub-category with code "${row.SubCategoryCode}" under category "${category.name}" not found.` }); continue; }
+      }
+
+      let location = null;
+      if (row.LocationStore) {
+        location = allLocations.find(l => 
+          l.store === row.LocationStore && 
+          (l.rack || null) === (row.LocationRack || null) && // Handle empty strings from Excel as null
+          (l.shelf || null) === (row.LocationShelf || null)
+        );
+        if (!location) { errors.push({ row: rowNum, field: 'LocationStore/Rack/Shelf', message: `Location matching Store: "${row.LocationStore}", Rack: "${row.LocationRack || ''}", Shelf: "${row.LocationShelf || ''}" not found.` }); continue; }
+      }
+      
+      let supplier = null;
+      if (row.SupplierName) {
+        supplier = allSuppliers.find(s => s.name === row.SupplierName);
+        if (!supplier) { errors.push({ row: rowNum, field: 'SupplierName', message: `Supplier with name "${row.SupplierName}" not found.` }); continue; }
+      }
+      
+      const unit = allUnits.find(u => u.name === row.UnitName);
+      if (!unit) { errors.push({ row: rowNum, field: 'UnitName', message: `Unit of Measurement with name "${row.UnitName}" not found.` }); continue; }
+
+      // --- Prepare data for insertion ---
+      const itemId = await generateItemId(db, category.id, subCategory?.id || null);
+      const lastUpdated = new Date().toISOString();
+      const quantity = Number(row.Quantity);
+      const unitCost = Number(row.UnitCost);
+      const minStockLevel = row.MinStockLevel !== undefined ? Number(row.MinStockLevel) : 0;
+      const maxStockLevel = row.MaxStockLevel !== undefined ? Number(row.MaxStockLevel) : 0;
+
+
+      // Basic check for min/max stock levels
+      if (maxStockLevel > 0 && minStockLevel > maxStockLevel) {
+         errors.push({ row: rowNum, field: 'MaxStockLevel', message: 'Max stock level cannot be less than min stock level.' }); continue;
+      }
+
+
+      try {
+        await db.run(
+          `INSERT INTO inventory (id, name, description, imageUrl, quantity, unitCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          itemId,
+          row.Name,
+          row.Description || null,
+          row.ImageURL || null,
+          quantity,
+          unitCost,
+          lastUpdated,
+          (quantity < minStockLevel && minStockLevel > 0) ? 1 : 0, // Auto-set lowStock based on minStockLevel
+          minStockLevel,
+          maxStockLevel,
+          category.id,
+          subCategory?.id || null,
+          location?.id || null,
+          supplier?.id || null,
+          unit.id
+        );
+        importedCount++;
+      } catch (dbError: any) {
+        errors.push({ row: rowNum, message: `Database error: ${dbError.message}` });
+      }
+    }
+
+  } catch (error: any) {
+    console.error("Import failed:", error);
+    return { success: false, message: `Import process failed: ${error.message}`, importedCount, failedCount: 0, errors };
+  }
+  
   revalidatePath("/inventory");
-  return { success: true, message: `File "${file.name}" received for import (placeholder).` };
+  return { 
+    success: true, 
+    message: `Import processed. ${importedCount} items imported. ${errors.length} items failed.`,
+    importedCount,
+    failedCount: errors.length,
+    errors
+  };
 }

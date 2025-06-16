@@ -24,8 +24,11 @@ import { AddUnitDialog } from '@/components/settings/add-unit-dialog';
 import { AddLocationDialog } from '@/components/settings/add-location-dialog';
 import { AddSupplierDialog } from '@/components/settings/add-supplier-dialog';
 import { AddSubCategoryDialog } from '@/components/settings/add-sub-category-dialog';
-import { getInventoryItems, exportInventoryToExcelAction, importInventoryFromExcelAction } from './actions';
+import { getInventoryItems, exportInventoryToExcelAction } from './actions';
 import { useToast } from "@/hooks/use-toast";
+import * as XLSX from 'xlsx';
+import { ImportExcelDialog } from '@/components/inventory/import-excel-dialog';
+
 
 export default function InventoryPage() {
   const [inventoryItems, setInventoryItems] = React.useState<InventoryItem[]>([]);
@@ -38,7 +41,8 @@ export default function InventoryPage() {
   const [isUnitDialogOpen, setIsUnitDialogOpen] = React.useState(false);
   const [isLocationDialogOpen, setIsLocationDialogOpen] = React.useState(false);
   const [isSupplierDialogOpen, setIsSupplierDialogOpen] = React.useState(false);
-  // TODO: Add state for import dialog
+  const [isImportExcelDialogOpen, setIsImportExcelDialogOpen] = React.useState(false);
+
 
   const fetchItems = React.useCallback(async () => {
     setIsLoading(true);
@@ -65,13 +69,43 @@ export default function InventoryPage() {
 
   const handleExport = async () => {
     try {
-      // In a real implementation, this action would return a file or a URL to a file
-      // For now, it's a placeholder
-      await exportInventoryToExcelAction(); 
-      toast({
-        title: "Export Started",
-        description: "Your inventory data is being prepared for export. (Placeholder)",
-      });
+      const itemsToExport = await exportInventoryToExcelAction();
+      if (itemsToExport && itemsToExport.length > 0) {
+        // Map data to match the desired Excel template columns
+        const exportData = itemsToExport.map(item => ({
+            'Item ID': item.id, // For reference
+            'Name': item.name,
+            'Description': item.description,
+            'Quantity': item.quantity,
+            'UnitCost': item.unitCost,
+            'MinStockLevel': item.minStockLevel,
+            'MaxStockLevel': item.maxStockLevel,
+            'CategoryCode': item.categoryCode,
+            'SubCategoryCode': item.subCategoryCode,
+            'LocationStore': item.locationStore,
+            'LocationRack': item.locationRack,
+            'LocationShelf': item.locationShelf,
+            'SupplierName': item.supplierName,
+            'UnitName': item.unitName,
+            'ImageURL': item.imageUrl,
+        }));
+
+        const worksheet = XLSX.utils.json_to_sheet(exportData);
+        const workbook = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(workbook, worksheet, "Inventory");
+        XLSX.writeFile(workbook, "inventory_export.xlsx");
+        
+        toast({
+          title: "Export Successful",
+          description: "Inventory data has been exported to Excel.",
+        });
+      } else {
+        toast({
+          title: "Export Canceled",
+          description: "No inventory items to export.",
+          variant: "default",
+        });
+      }
     } catch (e) {
       console.error("Export failed:", e);
       toast({
@@ -80,17 +114,6 @@ export default function InventoryPage() {
         variant: "destructive",
       });
     }
-  };
-
-  const handleImport = () => {
-    // This will eventually open an import dialog
-    // For now, it's a placeholder
-    console.log("Import button clicked - placeholder for dialog opening");
-    toast({
-        title: "Import Clicked",
-        description: "Import functionality is under development. (Placeholder for dialog)",
-      });
-    // Example: call importInventoryFromExcelAction(formData) after getting file
   };
 
 
@@ -125,9 +148,14 @@ export default function InventoryPage() {
         description="Manage your stock items and supplies."
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={handleImport}>
-              <FileUp className="mr-2 h-4 w-4" /> Import from Excel
-            </Button>
+            <Dialog open={isImportExcelDialogOpen} onOpenChange={setIsImportExcelDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline">
+                  <FileUp className="mr-2 h-4 w-4" /> Import from Excel
+                </Button>
+              </DialogTrigger>
+              <ImportExcelDialog setOpen={setIsImportExcelDialogOpen} onImportCompleted={fetchItems} />
+            </Dialog>
             <Button variant="outline" onClick={handleExport}>
               <FileDown className="mr-2 h-4 w-4" /> Export to Excel
             </Button>
@@ -212,12 +240,13 @@ export default function InventoryPage() {
                 <TableCell>
                   {item.imageUrl ? (
                     <Image
-                      src={item.imageUrl}
+                      src={item.imageUrl.startsWith('/') ? item.imageUrl : `https://placehold.co/40x40.png?text=IMG`} // Basic check for local vs external
                       alt={item.name}
                       width={40}
                       height={40}
                       className="rounded object-cover"
                       data-ai-hint="product item"
+                      unoptimized={item.imageUrl.startsWith('http')} // If external, don't optimize
                     />
                   ) : (
                     <div className="h-10 w-10 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground">
@@ -272,4 +301,3 @@ export default function InventoryPage() {
     </>
   );
 }
-

@@ -57,6 +57,26 @@ export interface UnitOfMeasurementDB {
   conversionFactor: number;
 }
 
+// This type is used for the Excel export mapping
+export interface InventoryItemExport {
+  id: string;
+  name: string;
+  description?: string | null;
+  imageUrl?: string | null;
+  quantity: number;
+  unitCost: number;
+  minStockLevel?: number;
+  maxStockLevel?: number;
+  categoryCode?: string;
+  subCategoryCode?: string;
+  locationStore?: string;
+  locationRack?: string | null;
+  locationShelf?: string | null;
+  supplierName?: string;
+  unitName?: string;
+}
+
+
 export interface InventoryItem {
   id: string;
   name: string;
@@ -107,5 +127,3 @@ export type SelectItem = {
   value: string;
   label: string;
 };
-
-    
