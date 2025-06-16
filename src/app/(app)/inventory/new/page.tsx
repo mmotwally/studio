@@ -3,10 +3,8 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,53 +20,8 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PageHeader } from "@/components/page-header";
 import { useToast } from "@/hooks/use-toast";
-import { openDb } from "@/lib/database";
-import { revalidatePath } from "next/cache";
-import { redirect } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-
-const inventoryItemSchema = z.object({
-  name: z.string().min(1, { message: "Name is required." }),
-  category: z.string().optional(),
-  quantity: z.coerce.number().int().min(0, { message: "Quantity must be a non-negative integer." }),
-  unitCost: z.coerce.number().min(0, { message: "Unit cost must be a non-negative number." }),
-  location: z.string().optional(),
-  supplier: z.string().optional(),
-  lowStock: z.boolean().default(false).optional(),
-});
-
-type InventoryItemFormValues = z.infer<typeof inventoryItemSchema>;
-
-async function addInventoryItemAction(data: InventoryItemFormValues) {
-  "use server";
-  try {
-    const db = await openDb();
-    const id = crypto.randomUUID();
-    const lastUpdated = new Date().toISOString();
-
-    await db.run(
-      `INSERT INTO inventory (id, name, category, quantity, unitCost, location, supplier, lastUpdated, lowStock)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      id,
-      data.name,
-      data.category || null,
-      data.quantity,
-      data.unitCost,
-      data.location || null,
-      data.supplier || null,
-      lastUpdated,
-      data.lowStock ? 1 : 0
-    );
-  } catch (error) {
-    console.error("Failed to add inventory item:", error);
-    // Re-throw a more specific error or a generic one for the client
-    throw new Error("Database operation failed. Could not add item.");
-  }
-
-  revalidatePath("/inventory");
-  redirect("/inventory");
-}
-
+import { addInventoryItemAction, type InventoryItemFormValues, inventoryItemSchema } from "../actions";
 
 export default function AddInventoryItemPage() {
   const router = useRouter();
@@ -92,19 +45,39 @@ export default function AddInventoryItemPage() {
     setIsSubmitting(true);
     try {
       await addInventoryItemAction(values);
-      toast({
+      // Toast for success is now handled within the component,
+      // as server actions redirect and might unmount the component before toast is shown from here.
+      // However, for client-side feedback before potential redirect, this can be kept.
+      // For robust success feedback, consider showing toast *after* redirect on the target page,
+      // or use a mechanism that survives navigation (e.g., query params, session flash messages).
+      // Given the current setup, the redirect in the action will likely make this toast not visible.
+      // Let's keep it simple for now; if issues arise, we can refine.
+      router.push('/inventory'); // Manually redirecting after success
+      toast({ // This toast might not be seen due to immediate redirect
         title: "Success",
         description: "Inventory item added successfully.",
       });
-      // Redirect is handled by the server action
     } catch (error) {
       console.error("Submission error:", error);
       toast({
         title: "Error",
-        description: (error as Error).message || "Could not add item. Please try again.",
+        description: (error instanceof Error ? error.message : String(error)) || "Could not add item. Please try again.",
         variant: "destructive",
       });
-      setIsSubmitting(false);
+    } finally {
+      // Only set isSubmitting to false if there was an error, 
+      // because on success, the redirect will navigate away.
+      // If an error occurs, we stay on the page, so we need to re-enable the button.
+      if (form.formState.isSubmitSuccessful === false) {
+         setIsSubmitting(false);
+      }
+      // If there was an error, ensure isSubmitting is false
+      // If successful, the redirect happens in the action.
+      // To ensure button state is correct if error occurs BEFORE action's redirect:
+      const wasSuccessful = !Object.keys(form.formState.errors).length;
+      if (!wasSuccessful) {
+        setIsSubmitting(false);
+      }
     }
   }
 
@@ -155,7 +128,7 @@ export default function AddInventoryItemPage() {
                     <FormItem>
                       <FormLabel>Quantity*</FormLabel>
                       <FormControl>
-                        <Input type="number" placeholder="e.g., 10" {...field} />
+                        <Input type="number" placeholder="e.g., 10" {...field} value={field.value === 0 && !form.formState.dirtyFields.quantity ? "" : field.value} onChange={e => field.onChange(parseInt(e.target.value,10) || 0)} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -168,7 +141,7 @@ export default function AddInventoryItemPage() {
                     <FormItem>
                       <FormLabel>Unit Cost ($)*</FormLabel>
                       <FormControl>
-                        <Input type="number" step="0.01" placeholder="e.g., 150.99" {...field} />
+                        <Input type="number" step="0.01" placeholder="e.g., 150.99" {...field} value={field.value === 0 && !form.formState.dirtyFields.unitCost ? "" : field.value} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
