@@ -25,11 +25,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  // AlertDialogTrigger, // Removed from here as it's used inline or not at all if controlled
 } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { InventoryItem } from '@/types';
-import { PlusCircle, MoreHorizontal, Edit, Trash2, FolderPlus, ListTree, Warehouse, Users, Boxes, FileUp, FileDown } from 'lucide-react';
+import { PlusCircle, MoreHorizontal, Edit, Trash2, FolderPlus, ListTree, Warehouse, Users, Boxes, FileUp, FileDown, ListPlus } from 'lucide-react';
 import { AddCategoryDialog } from '@/components/settings/add-category-dialog';
 import { AddUnitDialog } from '@/components/settings/add-unit-dialog';
 import { AddLocationDialog } from '@/components/settings/add-location-dialog';
@@ -180,7 +179,7 @@ export default function InventoryPage() {
         title="Inventory"
         description="Manage your stock items and supplies."
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Dialog open={isImportExcelDialogOpen} onOpenChange={setIsImportExcelDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="outline">
@@ -189,55 +188,36 @@ export default function InventoryPage() {
               </DialogTrigger>
               <ImportExcelDialog setOpen={setIsImportExcelDialogOpen} onImportCompleted={fetchItems} />
             </Dialog>
+
             <Button variant="outline" onClick={handleExport}>
               <FileDown className="mr-2 h-4 w-4" /> Export to Excel
             </Button>
 
-            <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
-              <DialogTrigger asChild>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
                 <Button variant="outline">
+                  <ListPlus className="mr-2 h-4 w-4" /> Add Related Data
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={() => setIsCategoryDialogOpen(true)}>
                   <FolderPlus className="mr-2 h-4 w-4" /> Add Category
-                </Button>
-              </DialogTrigger>
-              <AddCategoryDialog setOpen={setIsCategoryDialogOpen} onCategoryAdded={fetchItems} />
-            </Dialog>
-
-            <Dialog open={isSubCategoryDialogOpen} onOpenChange={setIsSubCategoryDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setIsSubCategoryDialogOpen(true)}>
                   <ListTree className="mr-2 h-4 w-4" /> Add Sub-Category
-                </Button>
-              </DialogTrigger>
-              <AddSubCategoryDialog setOpen={setIsSubCategoryDialogOpen} onSubCategoryAdded={fetchItems} />
-            </Dialog>
-
-            <Dialog open={isUnitDialogOpen} onOpenChange={setIsUnitDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setIsUnitDialogOpen(true)}>
                   <Boxes className="mr-2 h-4 w-4" /> Add Unit
-                </Button>
-              </DialogTrigger>
-              <AddUnitDialog setOpen={setIsUnitDialogOpen} onUnitAdded={fetchItems} />
-            </Dialog>
-
-             <Dialog open={isLocationDialogOpen} onOpenChange={setIsLocationDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setIsLocationDialogOpen(true)}>
                   <Warehouse className="mr-2 h-4 w-4" /> Add Location
-                </Button>
-              </DialogTrigger>
-              <AddLocationDialog setOpen={setIsLocationDialogOpen} onLocationAdded={fetchItems} />
-            </Dialog>
-
-             <Dialog open={isSupplierDialogOpen} onOpenChange={setIsSupplierDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline">
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => setIsSupplierDialogOpen(true)}>
                   <Users className="mr-2 h-4 w-4" /> Add Supplier
-                </Button>
-              </DialogTrigger>
-              <AddSupplierDialog setOpen={setIsSupplierDialogOpen} onSupplierAdded={fetchItems} />
-            </Dialog>
-
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            
             <Button asChild>
               <Link href="/inventory/new">
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Item
@@ -317,11 +297,10 @@ export default function InventoryPage() {
                           <Edit className="mr-2 h-4 w-4" /> Edit
                         </Link>
                       </DropdownMenuItem>
-                      {/* Removed AlertDialogTrigger wrapper */}
                       <DropdownMenuItem
                         className="text-destructive focus:text-destructive focus:bg-destructive/10"
                         onSelect={(e) => {
-                          e.preventDefault(); // Prevent dropdown from closing to allow dialog to show
+                          e.preventDefault(); 
                           setItemToDelete(item);
                         }}
                       >
@@ -341,7 +320,24 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* The AlertDialog is defined here, controlled by itemToDelete state */}
+      {/* Dialog definitions for adding related data - triggered by state */}
+      <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
+        <AddCategoryDialog setOpen={setIsCategoryDialogOpen} onCategoryAdded={fetchItems} />
+      </Dialog>
+      <Dialog open={isSubCategoryDialogOpen} onOpenChange={setIsSubCategoryDialogOpen}>
+        <AddSubCategoryDialog setOpen={setIsSubCategoryDialogOpen} onSubCategoryAdded={fetchItems} />
+      </Dialog>
+      <Dialog open={isUnitDialogOpen} onOpenChange={setIsUnitDialogOpen}>
+        <AddUnitDialog setOpen={setIsUnitDialogOpen} onUnitAdded={fetchItems} />
+      </Dialog>
+      <Dialog open={isLocationDialogOpen} onOpenChange={setIsLocationDialogOpen}>
+        <AddLocationDialog setOpen={setIsLocationDialogOpen} onLocationAdded={fetchItems} />
+      </Dialog>
+      <Dialog open={isSupplierDialogOpen} onOpenChange={setIsSupplierDialogOpen}>
+        <AddSupplierDialog setOpen={setIsSupplierDialogOpen} onSupplierAdded={fetchItems} />
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
       {itemToDelete && (
         <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
           <AlertDialogContent>
