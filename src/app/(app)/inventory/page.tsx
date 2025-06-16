@@ -16,6 +16,17 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogTrigger } from '@/components/ui/dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import type { InventoryItem } from '@/types';
 import { PlusCircle, MoreHorizontal, Edit, Trash2, FolderPlus, ListTree, Warehouse, Users, Boxes, FileUp, FileDown } from 'lucide-react';
@@ -24,7 +35,7 @@ import { AddUnitDialog } from '@/components/settings/add-unit-dialog';
 import { AddLocationDialog } from '@/components/settings/add-location-dialog';
 import { AddSupplierDialog } from '@/components/settings/add-supplier-dialog';
 import { AddSubCategoryDialog } from '@/components/settings/add-sub-category-dialog';
-import { getInventoryItems, exportInventoryToExcelAction } from './actions';
+import { getInventoryItems, exportInventoryToExcelAction, deleteInventoryItemAction } from './actions';
 import { useToast } from "@/hooks/use-toast";
 import * as XLSX from 'xlsx';
 import { ImportExcelDialog } from '@/components/inventory/import-excel-dialog';
@@ -42,6 +53,8 @@ export default function InventoryPage() {
   const [isLocationDialogOpen, setIsLocationDialogOpen] = React.useState(false);
   const [isSupplierDialogOpen, setIsSupplierDialogOpen] = React.useState(false);
   const [isImportExcelDialogOpen, setIsImportExcelDialogOpen] = React.useState(false);
+
+  const [itemToDelete, setItemToDelete] = React.useState<InventoryItem | null>(null);
 
 
   const fetchItems = React.useCallback(async () => {
@@ -71,9 +84,8 @@ export default function InventoryPage() {
     try {
       const itemsToExport = await exportInventoryToExcelAction();
       if (itemsToExport && itemsToExport.length > 0) {
-        // Map data to match the desired Excel template columns
         const exportData = itemsToExport.map(item => ({
-            'Item ID': item.id, // For reference
+            'Item ID': item.id,
             'Name': item.name,
             'Description': item.description,
             'Quantity': item.quantity,
@@ -113,6 +125,27 @@ export default function InventoryPage() {
         description: (e instanceof Error ? e.message : String(e)) || "Could not export inventory.",
         variant: "destructive",
       });
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!itemToDelete) return;
+    try {
+      await deleteInventoryItemAction(itemToDelete.id);
+      toast({
+        title: "Item Deleted",
+        description: `Item "${itemToDelete.name}" has been successfully deleted.`,
+      });
+      fetchItems(); // Refresh the list
+    } catch (error) {
+      console.error("Failed to delete item:", error);
+      toast({
+        title: "Deletion Failed",
+        description: (error instanceof Error ? error.message : String(error)) || "Could not delete item.",
+        variant: "destructive",
+      });
+    } finally {
+      setItemToDelete(null); // Close dialog by resetting the item to delete
     }
   };
 
@@ -240,13 +273,13 @@ export default function InventoryPage() {
                 <TableCell>
                   {item.imageUrl ? (
                     <Image
-                      src={item.imageUrl.startsWith('/') ? item.imageUrl : `https://placehold.co/40x40.png?text=IMG`} // Basic check for local vs external
+                      src={item.imageUrl.startsWith('/') ? item.imageUrl : `https://placehold.co/40x40.png?text=IMG`}
                       alt={item.name}
                       width={40}
                       height={40}
                       className="rounded object-cover"
                       data-ai-hint="product item"
-                      unoptimized={item.imageUrl.startsWith('http')} // If external, don't optimize
+                      unoptimized={item.imageUrl.startsWith('http')}
                     />
                   ) : (
                     <div className="h-10 w-10 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground">
@@ -279,12 +312,19 @@ export default function InventoryPage() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem>
-                        <Edit className="mr-2 h-4 w-4" /> Edit
+                      <DropdownMenuItem asChild>
+                        <Link href={`/inventory/${item.id}/edit`}>
+                          <Edit className="mr-2 h-4 w-4" /> Edit
+                        </Link>
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                        <Trash2 className="mr-2 h-4 w-4" /> Delete
-                      </DropdownMenuItem>
+                      <AlertDialogTrigger asChild>
+                        <DropdownMenuItem
+                          className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                          onSelect={() => setItemToDelete(item)}
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" /> Delete
+                        </DropdownMenuItem>
+                      </AlertDialogTrigger>
                     </DropdownMenuContent>
                   </DropdownMenu>
                 </TableCell>
@@ -298,6 +338,28 @@ export default function InventoryPage() {
           No inventory items found. Add new items to get started.
         </div>
       )}
+
+      {itemToDelete && (
+        <AlertDialog open={!!itemToDelete} onOpenChange={(open) => !open && setItemToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action cannot be undone. This will permanently delete the item
+                <span className="font-semibold"> {itemToDelete.name} ({itemToDelete.id})</span> and remove its data from our servers.
+                If the item has a locally uploaded image, it will also be deleted.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDeleteConfirm} className={buttonVariants({variant: "destructive"})}>
+                Delete Item
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </>
   );
 }
+

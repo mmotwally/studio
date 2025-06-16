@@ -13,7 +13,7 @@ import { getUnitsOfMeasurement } from "@/app/(app)/settings/units/actions";
 
 import fs from 'fs/promises';
 import path from 'path';
-import crypto from 'crypto'; 
+import crypto from 'crypto';
 import type { Database } from 'sqlite';
 import * as XLSX from 'xlsx';
 
@@ -22,9 +22,9 @@ async function ensureDirExists(dirPath: string) {
   try {
     await fs.mkdir(dirPath, { recursive: true });
   } catch (error: any) {
-    if (error.code !== 'EEXIST') { 
+    if (error.code !== 'EEXIST') {
       console.error(`Failed to create directory ${dirPath}:`, error);
-      throw error; 
+      throw error;
     }
   }
 }
@@ -44,10 +44,10 @@ async function generateItemId(db: Database, categoryId: string, subCategoryId?: 
       console.warn(`Sub-category ${subCategoryId} is missing a code. Item ID will not include sub-category code.`);
     }
   }
-  
+
   const likePattern = prefix + '%';
   const result = await db.get(
-    `SELECT id FROM inventory WHERE id LIKE ? ORDER BY id DESC LIMIT 1`, 
+    `SELECT id FROM inventory WHERE id LIKE ? ORDER BY id DESC LIMIT 1`,
     likePattern
   );
 
@@ -60,7 +60,7 @@ async function generateItemId(db: Database, categoryId: string, subCategoryId?: 
       nextSequence = lastSequence + 1;
     }
   }
-  
+
   const formattedSequence = String(nextSequence).padStart(3, '0');
   return prefix + formattedSequence;
 }
@@ -77,7 +77,7 @@ export async function addInventoryItemAction(formData: FormData) {
     lowStock: rawFormData.lowStock === 'on' || rawFormData.lowStock === 'true',
     minStockLevel: parseInt(rawFormData.minStockLevel as string, 10) || 0,
     maxStockLevel: parseInt(rawFormData.maxStockLevel as string, 10) || 0,
-    categoryId: rawFormData.categoryId as string, 
+    categoryId: rawFormData.categoryId as string,
     subCategoryId: rawFormData.subCategoryId ? rawFormData.subCategoryId as string : undefined,
     locationId: rawFormData.locationId ? rawFormData.locationId as string : undefined,
     supplierId: rawFormData.supplierId ? rawFormData.supplierId as string : undefined,
@@ -99,7 +99,7 @@ export async function addInventoryItemAction(formData: FormData) {
       const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'inventory');
       await ensureDirExists(uploadsDir);
 
-      const fileExtension = path.extname(imageFile.name) || '.png'; 
+      const fileExtension = path.extname(imageFile.name) || '.png';
       const uniqueFileName = `${crypto.randomUUID()}${fileExtension}`;
       const filePath = path.join(uploadsDir, uniqueFileName);
 
@@ -108,8 +108,11 @@ export async function addInventoryItemAction(formData: FormData) {
       imageUrlToStore = `/uploads/inventory/${uniqueFileName}`;
     } catch (error) {
       console.error("Failed to upload image:", error);
+      // Potentially throw error or return a specific response if image upload is critical
     }
   } else if (rawFormData.imageUrl && typeof rawFormData.imageUrl === 'string' && rawFormData.imageUrl.trim() !== '') {
+    // This branch might be less relevant now with direct file uploads,
+    // but kept for potential future use or if manual URL input is re-enabled.
     imageUrlToStore = rawFormData.imageUrl.trim();
   }
 
@@ -147,7 +150,7 @@ export async function addInventoryItemAction(formData: FormData) {
   }
 
   revalidatePath("/inventory");
-  revalidatePath("/inventory/new");
+  revalidatePath("/inventory/new"); // In case user wants to add another
   redirect("/inventory");
 }
 
@@ -191,7 +194,7 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
     LEFT JOIN locations l ON i.locationId = l.id
     LEFT JOIN suppliers s ON i.supplierId = s.id
     LEFT JOIN units_of_measurement uom ON i.unitId = uom.id
-    ORDER BY i.id ASC 
+    ORDER BY i.id ASC
   `);
 
   return rawItems.map(item => ({
@@ -221,12 +224,48 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
   }));
 }
 
+export async function deleteInventoryItemAction(itemId: string): Promise<{ success: boolean; message: string }> {
+  if (!itemId) {
+    return { success: false, message: "Item ID is required for deletion." };
+  }
+
+  const db = await openDb();
+  try {
+    // 1. Fetch item to get imageUrl
+    const item = await db.get('SELECT imageUrl FROM inventory WHERE id = ?', itemId);
+
+    // 2. Delete item from database
+    const result = await db.run('DELETE FROM inventory WHERE id = ?', itemId);
+
+    if (result.changes === 0) {
+      return { success: false, message: `Item with ID "${itemId}" not found.` };
+    }
+
+    // 3. Delete local image file if it exists
+    if (item && item.imageUrl && typeof item.imageUrl === 'string' && item.imageUrl.startsWith('/uploads/inventory/')) {
+      const imagePath = path.join(process.cwd(), 'public', item.imageUrl);
+      try {
+        await fs.unlink(imagePath);
+        console.log(`Successfully deleted image file: ${imagePath}`);
+      } catch (fileError: any) {
+        // Log error but don't fail the whole operation if file deletion fails (e.g., file already gone)
+        console.warn(`Could not delete image file ${imagePath}: ${fileError.message}`);
+      }
+    }
+
+    revalidatePath("/inventory");
+    return { success: true, message: `Item "${itemId}" deleted successfully.` };
+  } catch (error: any) {
+    console.error(`Failed to delete item ${itemId}:`, error);
+    return { success: false, message: `Failed to delete item: ${error.message}` };
+  }
+}
+
 
 export async function exportInventoryToExcelAction(): Promise<Omit<InventoryItem, 'totalValue' | 'lastUpdated' | 'lowStock' | 'categoryId' | 'subCategoryId' | 'locationId' | 'supplierId' | 'unitId'>[]> {
   const items = await getInventoryItems();
-  // Map to the structure expected by the Excel template for easier re-import
   return items.map(item => ({
-    id: item.id, // Item ID is useful for reference, even if not directly used in template for new items
+    id: item.id,
     name: item.name,
     description: item.description || "",
     quantity: item.quantity,
@@ -240,7 +279,7 @@ export async function exportInventoryToExcelAction(): Promise<Omit<InventoryItem
     locationShelf: item.locationName && item.locationName.includes(' - ') && item.locationName.split(' - ').length > 2 ? item.locationName.split(' - ')[2] : "",
     supplierName: item.supplierName || "",
     unitName: item.unitName || "",
-    imageUrl: item.imageUrl || "",
+    imageUrl: item.imageUrl || "", // Keep imageUrl for export context, though not for re-import of local files
   }));
 }
 
@@ -258,7 +297,7 @@ interface ExcelRow {
   LocationShelf?: string;
   SupplierName?: string;
   UnitName?: string;
-  ImageURL?: string;
+  ImageURL?: string; // For importing external URLs if needed, not for local file paths.
 }
 
 interface ImportError {
@@ -292,16 +331,15 @@ export async function importInventoryFromExcelAction(formData: FormData): Promis
     const jsonData = XLSX.utils.sheet_to_json<ExcelRow>(worksheet);
 
     const allCategories = await getCategories();
-    const allSubCategories = await getSubCategories(); // Fetch all, then filter by parent
+    const allSubCategories = await getSubCategories();
     const allLocations = await getLocations();
     const allSuppliers = await getSuppliers();
     const allUnits = await getUnitsOfMeasurement();
 
     for (let i = 0; i < jsonData.length; i++) {
       const row = jsonData[i];
-      const rowNum = i + 2; // Excel rows are 1-indexed, +1 for header
+      const rowNum = i + 2;
 
-      // --- Validation & Lookup ---
       if (!row.Name) { errors.push({ row: rowNum, field: 'Name', message: 'Name is required.' }); continue; }
       if (row.Quantity === undefined || isNaN(Number(row.Quantity))) { errors.push({ row: rowNum, field: 'Quantity', message: 'Quantity is required and must be a number.' }); continue; }
       if (row.UnitCost === undefined || isNaN(Number(row.UnitCost))) { errors.push({ row: rowNum, field: 'UnitCost', message: 'UnitCost is required and must be a number.' }); continue; }
@@ -319,24 +357,23 @@ export async function importInventoryFromExcelAction(formData: FormData): Promis
 
       let location = null;
       if (row.LocationStore) {
-        location = allLocations.find(l => 
-          l.store === row.LocationStore && 
-          (l.rack || null) === (row.LocationRack || null) && // Handle empty strings from Excel as null
+        location = allLocations.find(l =>
+          l.store === row.LocationStore &&
+          (l.rack || null) === (row.LocationRack || null) &&
           (l.shelf || null) === (row.LocationShelf || null)
         );
         if (!location) { errors.push({ row: rowNum, field: 'LocationStore/Rack/Shelf', message: `Location matching Store: "${row.LocationStore}", Rack: "${row.LocationRack || ''}", Shelf: "${row.LocationShelf || ''}" not found.` }); continue; }
       }
-      
+
       let supplier = null;
       if (row.SupplierName) {
         supplier = allSuppliers.find(s => s.name === row.SupplierName);
         if (!supplier) { errors.push({ row: rowNum, field: 'SupplierName', message: `Supplier with name "${row.SupplierName}" not found.` }); continue; }
       }
-      
+
       const unit = allUnits.find(u => u.name === row.UnitName);
       if (!unit) { errors.push({ row: rowNum, field: 'UnitName', message: `Unit of Measurement with name "${row.UnitName}" not found.` }); continue; }
 
-      // --- Prepare data for insertion ---
       const itemId = await generateItemId(db, category.id, subCategory?.id || null);
       const lastUpdated = new Date().toISOString();
       const quantity = Number(row.Quantity);
@@ -344,12 +381,9 @@ export async function importInventoryFromExcelAction(formData: FormData): Promis
       const minStockLevel = row.MinStockLevel !== undefined ? Number(row.MinStockLevel) : 0;
       const maxStockLevel = row.MaxStockLevel !== undefined ? Number(row.MaxStockLevel) : 0;
 
-
-      // Basic check for min/max stock levels
       if (maxStockLevel > 0 && minStockLevel > maxStockLevel) {
          errors.push({ row: rowNum, field: 'MaxStockLevel', message: 'Max stock level cannot be less than min stock level.' }); continue;
       }
-
 
       try {
         await db.run(
@@ -358,11 +392,11 @@ export async function importInventoryFromExcelAction(formData: FormData): Promis
           itemId,
           row.Name,
           row.Description || null,
-          row.ImageURL || null,
+          row.ImageURL || null, // Excel import will only support URLs for images
           quantity,
           unitCost,
           lastUpdated,
-          (quantity < minStockLevel && minStockLevel > 0) ? 1 : 0, // Auto-set lowStock based on minStockLevel
+          (quantity < minStockLevel && minStockLevel > 0) ? 1 : 0,
           minStockLevel,
           maxStockLevel,
           category.id,
@@ -381,13 +415,14 @@ export async function importInventoryFromExcelAction(formData: FormData): Promis
     console.error("Import failed:", error);
     return { success: false, message: `Import process failed: ${error.message}`, importedCount, failedCount: 0, errors };
   }
-  
+
   revalidatePath("/inventory");
-  return { 
-    success: true, 
+  return {
+    success: true,
     message: `Import processed. ${importedCount} items imported. ${errors.length} items failed.`,
     importedCount,
     failedCount: errors.length,
     errors
   };
 }
+
