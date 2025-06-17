@@ -246,25 +246,31 @@ export function InventoryItemForm({
           >
             <FormControl>
               <SelectTrigger>
-                <SelectValue placeholder={isLoadingOpt ? "Loading..." : (options.length === 0 && name !== 'subCategoryId' && name !== 'locationId' && name !== 'supplierId' ? "No options available" : placeholder)} />
+                <SelectValue placeholder={
+                  isLoadingOpt ? "Loading..." : 
+                  (name === 'subCategoryId' && !selectedCategoryId) ? "Select a category first" :
+                  (name === 'subCategoryId' && selectedCategoryId && options.length === 0) ? "No sub-categories for this category" :
+                  (options.length === 0 && (name === 'categoryId' || name === 'unitId')) ? "No options available" :
+                  placeholder
+                } />
               </SelectTrigger>
             </FormControl>
             <SelectContent>
-              {options.length === 0 && !isLoadingOpt && name !== 'subCategoryId' && name !== 'locationId' && name !== 'supplierId' ? (
-                <SelectItem value="no-options" disabled>No options available</SelectItem>
-              ) : (
+              {isLoadingOpt ? (
+                <div className="p-4 text-center text-sm text-muted-foreground">Loading...</div>
+              ) : options.length > 0 ? (
                 options.map((option) => (
                   <SelectItem key={option.value} value={option.value}>
                     {option.label}
                   </SelectItem>
                 ))
+              ) : (
+                <div className="p-4 text-center text-sm text-muted-foreground">
+                  {name === 'subCategoryId' && !selectedCategoryId && "Select a category first to see sub-categories."}
+                  {name === 'subCategoryId' && selectedCategoryId && "No sub-categories for this category."}
+                  {name !== 'subCategoryId' && "No options available."}
+                </div>
               )}
-               {name === 'subCategoryId' && options.length === 0 && !isLoadingOpt && selectedCategoryId && (
-                 <SelectItem value="no-sub-options" disabled>No sub-categories for selected category</SelectItem>
-               )}
-               {(name === 'locationId' || name === 'supplierId' || (name === 'subCategoryId' && !selectedCategoryId) ) && options.length === 0 && !isLoadingOpt && (
-                <SelectItem value="" disabled>Select {name === 'subCategoryId' ? 'category first' : 'an option'}</SelectItem>
-               )}
             </SelectContent>
           </Select>
           <FormMessage />
@@ -349,8 +355,8 @@ export function InventoryItemForm({
                 <FormMessage />
               </FormItem>
 
-              {renderSelect("categoryId", "Category", "Select a category", categories, isLoadingDropdownData, isEditMode, true)}
-              {renderSelect("subCategoryId", "Sub-Category", "Select a sub-category (optional)", subCategories, isLoadingDropdownData || (!!selectedCategoryId && subCategories.length === 0 && !isLoadingDropdownData && form.getFieldState("categoryId").isDirty) , !selectedCategoryId || isEditMode, false)}
+              {renderSelect("categoryId", "Category", "Select a category", categories, isLoadingDropdownData, false, true)}
+              {renderSelect("subCategoryId", "Sub-Category", "Select a sub-category (optional)", subCategories, isLoadingDropdownData || (!!selectedCategoryId && subCategories.length === 0 && !isLoadingDropdownData && form.getFieldState("categoryId").isDirty) , !selectedCategoryId || (isLoadingDropdownData && !!selectedCategoryId), false)}
               {renderSelect("unitId", "Unit of Measurement", "Select a unit", units, isLoadingDropdownData, false, true)}
               
                <FormField
@@ -446,3 +452,4 @@ export function InventoryItemForm({
     </Card>
   );
 }
+
