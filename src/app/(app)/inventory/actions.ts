@@ -22,12 +22,11 @@ import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 import PdfPrinter from 'pdfmake';
 import type { TDocumentDefinitions } from 'pdfmake/interfaces';
 
-// Pre-load fonts at module scope
-// This requires 'pdfmake/build/vfs_fonts.js' to be correctly resolved by the server environment.
-// The vfs_fonts.js file populates pdfMake.vfs when required/imported.
+// This populates pdfMake.vfs with the Roboto font data
 const vfsFonts = require('pdfmake/build/vfs_fonts.js');
 const pdfMakeVfs = vfsFonts.pdfMake.vfs;
 
+// Create fonts object for PdfPrinter constructor
 const preloadedFonts = {
   Roboto: {
     normal: Buffer.from(pdfMakeVfs['Roboto-Regular.ttf'], 'base64'),
@@ -731,16 +730,12 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
     throw new Error(`Inventory item with ID ${inventoryItemId} not found.`);
   }
 
-  // Parse the input "yyyy-MM-dd" strings. These are treated as local dates.
   const fromDateLocal = parseISO(fromDateString); 
   const toDateLocal = parseISO(toDateString);     
 
-  // Get the start of the "from" day and end of the "to" day.
-  // These operations respect the local timezone of the server.
   const fromDateStart = startOfDay(fromDateLocal);
   const toDateEnd = endOfDay(toDateLocal);     
 
-  // Format them to ISO strings with Z (UTC) for SQLite comparison, as DB stores dates in UTC.
   const fromDateISOQuery = format(fromDateStart, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
   const toDateISOQuery = format(toDateEnd, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 
@@ -750,7 +745,7 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
      WHERE inventoryItemId = ? AND movementDate < ? 
      ORDER BY movementDate DESC, id DESC LIMIT 1`,
     inventoryItemId,
-    fromDateISOQuery // Use the UTC start of day for opening stock check
+    fromDateISOQuery 
   );
   
   const openingStock = openingStockResult?.balance ?? 0;
@@ -764,8 +759,8 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
      WHERE sm.inventoryItemId = ? AND sm.movementDate >= ? AND sm.movementDate <= ?
      ORDER BY sm.movementDate ASC, sm.id ASC`,
     inventoryItemId,
-    fromDateISOQuery, // Query from start of 'from' day (UTC)
-    toDateISOQuery    // Query until end of 'to' day (UTC)
+    fromDateISOQuery, 
+    toDateISOQuery    
   );
 
   let totalIn = 0;
@@ -783,21 +778,22 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
   return {
     inventoryItemId: item.id,
     inventoryItemName: item.name,
-    periodFrom: fromDateString, // Return the original input strings for display
-    periodTo: toDateString,     // Return the original input strings for display
+    periodFrom: fromDateString, 
+    periodTo: toDateString,     
     openingStock,
     totalIn,
     totalOut,
     closingStock,
     movements: movementsInPeriod.map(m => ({
         ...m,
-        movementDate: format(parseISO(m.movementDate), "yyyy-MM-dd HH:mm") // Format for display
+        movementDate: format(parseISO(m.movementDate), "yyyy-MM-dd HH:mm") 
     })),
   };
 }
 
 
 export async function generateStockMovementPdfAction(reportData: StockMovementReport): Promise<string> {
+  // The PdfPrinter constructor now takes the fonts object.
   const printer = new PdfPrinter(preloadedFonts);
 
   const movementTableBody = [
@@ -828,26 +824,26 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
   const docDefinition: TDocumentDefinitions = {
     pageSize: 'A4',
     pageOrientation: 'landscape',
-    pageMargins: [40, 60, 40, 60], // [left, top, right, bottom]
+    pageMargins: [40, 60, 40, 60], 
     header: {
       text: `Stock Movement Report - ${reportData.inventoryItemName} (${reportData.inventoryItemId})`,
       style: 'header',
       alignment: 'center',
-      margin: [0, 20, 0, 0], // [left, top, right, bottom]
+      margin: [0, 20, 0, 0], 
     },
     footer: function(currentPage, pageCount) {
       return {
         text: `Page ${currentPage.toString()} of ${pageCount}`,
         alignment: 'center',
         style: 'footer',
-        margin: [0,0,0,20] // Push footer up a bit
+        margin: [0,0,0,20] 
       };
     },
     content: [
       {
         text: `Period: ${reportData.periodFrom} to ${reportData.periodTo}`,
         style: 'subheader',
-        margin: [0, 0, 0, 10], // [left, top, right, bottom]
+        margin: [0, 0, 0, 10], 
       },
       {
         style: 'summaryTable',
@@ -876,7 +872,7 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
         style: 'movementsTable',
         table: {
           headerRows: 1,
-          widths: ['auto', 'auto', 'auto', 'auto', 'auto', '*', 'auto'], // Adjust widths as needed
+          widths: ['auto', 'auto', 'auto', 'auto', 'auto', '*', 'auto'], 
           body: movementTableBody,
         },
         layout: {
@@ -943,5 +939,6 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
     
 
     
+
 
 
