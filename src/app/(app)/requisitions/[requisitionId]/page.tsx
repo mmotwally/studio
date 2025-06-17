@@ -5,6 +5,7 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Dialog, DialogTrigger } from '@/components/ui/dialog';
 import { ArrowLeft, Edit, CheckCircle, XCircle, Settings2, PackageSearch, CalendarDays, FileTextIcon, UserCircle, Info, MoreVertical, Printer, FileX2, PackageCheck, PackageMinus, Briefcase, FileArchive, FileDigit, ShieldCheck } from 'lucide-react';
 import { getRequisitionById, updateRequisitionStatusAction } from '../actions';
@@ -15,7 +16,7 @@ import { format } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from "@/hooks/use-toast";
 import { FulfillRequisitionDialog } from '@/components/requisitions/fulfill-requisition-dialog';
 import { ApproveRequisitionItemsDialog } from '@/components/requisitions/approve-requisition-items-dialog';
 
@@ -57,8 +58,21 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
   const [isLoading, setIsLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
   const { toast } = useToast();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const [isFulfillmentDialogOpen, setIsFulfillmentDialogOpen] = React.useState(false);
   const [isApproveItemsDialogOpen, setIsApproveItemsDialogOpen] = React.useState(false);
+
+  React.useEffect(() => {
+    if (searchParams.get('approval_success') === 'true') {
+      toast({
+        title: "Success",
+        description: "Approval decisions processed successfully.",
+      });
+      // Remove the query parameter to prevent toast on refresh
+      router.replace(`/requisitions/${requisitionId}`, { scroll: false });
+    }
+  }, [searchParams, requisitionId, router, toast]);
 
   const fetchRequisition = React.useCallback(async () => {
     setIsLoading(true);
