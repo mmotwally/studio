@@ -18,9 +18,24 @@ import type { Database } from 'sqlite';
 import * as XLSX from 'xlsx';
 import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 
-// PDFMake imports - ensure fonts are configured if not using defaults
+// PDFMake imports
 import PdfPrinter from 'pdfmake';
 import type { TDocumentDefinitions } from 'pdfmake/interfaces';
+
+// Pre-load fonts at module scope
+// This requires 'pdfmake/build/vfs_fonts.js' to be correctly resolved by the server environment.
+// The vfs_fonts.js file populates pdfMake.vfs when required/imported.
+const vfsFonts = require('pdfmake/build/vfs_fonts.js');
+const pdfMakeVfs = vfsFonts.pdfMake.vfs;
+
+const preloadedFonts = {
+  Roboto: {
+    normal: Buffer.from(pdfMakeVfs['Roboto-Regular.ttf'], 'base64'),
+    bold: Buffer.from(pdfMakeVfs['Roboto-Medium.ttf'], 'base64'),
+    italics: Buffer.from(pdfMakeVfs['Roboto-Italic.ttf'], 'base64'),
+    bolditalics: Buffer.from(pdfMakeVfs['Roboto-MediumItalic.ttf'], 'base64'),
+  }
+};
 
 
 async function ensureDirExists(dirPath: string) {
@@ -781,17 +796,9 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
   };
 }
 
-const fonts = {
-  Roboto: {
-    normal: Buffer.from(require('pdfmake/build/vfs_fonts.js').pdfMake.vfs['Roboto-Regular.ttf'], 'base64'),
-    bold: Buffer.from(require('pdfmake/build/vfs_fonts.js').pdfMake.vfs['Roboto-Medium.ttf'], 'base64'),
-    italics: Buffer.from(require('pdfmake/build/vfs_fonts.js').pdfMake.vfs['Roboto-Italic.ttf'], 'base64'),
-    bolditalics: Buffer.from(require('pdfmake/build/vfs_fonts.js').pdfMake.vfs['Roboto-MediumItalic.ttf'], 'base64'),
-  }
-};
 
 export async function generateStockMovementPdfAction(reportData: StockMovementReport): Promise<string> {
-  const printer = new PdfPrinter(fonts);
+  const printer = new PdfPrinter(preloadedFonts);
 
   const movementTableBody = [
     [
@@ -936,4 +943,5 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
     
 
     
+
 
