@@ -80,22 +80,19 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
   });
 
   async function onSubmit(values: ApproveRequisitionFormValues) {
-    // Client-side pre-check based on the requisition data the dialog has
     if (requisition.status !== 'PENDING_APPROVAL') {
       toast({
         title: "Action Not Allowed",
         description: `This requisition is currently in "${requisition.status.replace(/_/g, ' ').toLowerCase()}" status and items cannot be approved. Please refresh the page or close this dialog.`,
         variant: "destructive",
       });
-      setIsSubmitting(false); // Ensure button is re-enabled
-      onApprovalProcessed(); // Refresh parent page data as it's stale
-      setOpen(false); // Close the dialog
+      onApprovalProcessed(); 
+      setOpen(false); 
       return;
     }
 
     setIsSubmitting(true);
     setServerError(null);
-    let caughtError: any = null;
 
     const itemsToSubmit = values.items.map(item => ({
         requisitionItemId: item.requisitionItemId,
@@ -104,13 +101,22 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
 
     try {
       await approveRequisitionItemsAction(values.requisitionId, itemsToSubmit);
-      // If action redirects, this part is usually not reached.
+      // This part should not be reached if approveRequisitionItemsAction successfully redirects.
+      // If it does, it means the action completed but didn't redirect (unexpected for current design).
+      // In such a case, we'd manually close and refresh.
+      setOpen(false);
+      setIsSubmitting(false);
+      onApprovalProcessed();
+
     } catch (error: any) {
-      caughtError = error;
       if (error.digest?.startsWith('NEXT_REDIRECT')) {
-        // Re-throw the redirect error so Next.js can handle it
-        throw error; 
+        // Server action initiated a redirect.
+        // Explicitly set dialog to closed and reset submitting state before re-throwing.
+        setOpen(false); 
+        setIsSubmitting(false);
+        throw error; // Re-throw for Next.js to handle navigation.
       }
+      
       // Handle actual application errors (not redirects)
       console.error("Failed to process item approvals:", error);
       const errorMessage = error instanceof Error ? error.message : "Could not process approvals. Please try again.";
@@ -121,19 +127,11 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
         variant: "destructive",
       });
 
-      // If the specific error about status not being PENDING_APPROVAL occurs,
-      // refresh parent data and close the dialog.
       if (errorMessage.includes("Cannot approve items for a requisition that is not in 'PENDING_APPROVAL' status")) {
-        onApprovalProcessed(); // Refresh parent page data
-        setOpen(false); // Close the dialog
+        onApprovalProcessed(); 
+        setOpen(false); 
       }
-
-    } finally {
-      // Only set isSubmitting to false if no redirect was thrown and caught.
-      // If a redirect is thrown, the component will unmount, so no need to update state.
-      if (!(caughtError && caughtError.digest?.startsWith('NEXT_REDIRECT'))) {
-        setIsSubmitting(false);
-      }
+      setIsSubmitting(false); // Reset submitting state for non-redirect errors
     }
   }
   
@@ -213,7 +211,6 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
           </ScrollArea>
 
           {serverError && !serverError.includes("Cannot approve items for a requisition that is not in 'PENDING_APPROVAL' status") && (
-            // Only show generic server error if it's not the specific status one handled by toast + auto-close
             <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
               <p>{serverError}</p>
