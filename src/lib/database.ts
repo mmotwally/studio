@@ -9,6 +9,37 @@ const DB_FILE = path.join(process.cwd(), 'local.db');
 
 let appDbPromise: Promise<Database<sqlite3.Database, sqlite3.Statement>> | null = null;
 
+// Define constant UUIDs for seeded entities
+const SEED_DEPT_ENGINEERING_ID = 'd0a1b2c3-0001-4000-8000-000000000001';
+const SEED_DEPT_PRODUCTION_ID  = 'd0a1b2c3-0002-4000-8000-000000000002';
+const SEED_DEPT_MAINTENANCE_ID = 'd0a1b2c3-0003-4000-8000-000000000003';
+const SEED_DEPT_DESIGN_ID      = 'd0a1b2c3-0004-4000-8000-000000000004';
+
+const SEED_UNIT_PCS_ID    = 'u0a1b2c3-0001-4000-8000-000000000001';
+const SEED_UNIT_SET_ID    = 'u0a1b2c3-0002-4000-8000-000000000002';
+const SEED_UNIT_PAIR_ID   = 'u0a1b2c3-0003-4000-8000-000000000003';
+const SEED_UNIT_SHEET_ID  = 'u0a1b2c3-0004-4000-8000-000000000004';
+const SEED_UNIT_METER_ID  = 'u0a1b2c3-0005-4000-8000-000000000005';
+const SEED_UNIT_SQM_ID    = 'u0a1b2c3-0006-4000-8000-000000000006';
+const SEED_UNIT_LITER_ID  = 'u0a1b2c3-0007-4000-8000-000000000007';
+const SEED_UNIT_KG_ID     = 'u0a1b2c3-0008-4000-8000-000000000008';
+const SEED_UNIT_BOX_ID    = 'u0a1b2c3-0009-4000-8000-000000000009';
+const SEED_UNIT_ROLL_ID   = 'u0a1b2c3-0010-4000-8000-000000000010';
+const SEED_UNIT_ML_ID     = 'u0a1b2c3-0011-4000-8000-000000000011'; // Derived from Liter
+const SEED_UNIT_GRAM_ID   = 'u0a1b2c3-0012-4000-8000-000000000012'; // Derived from Kg
+
+const SEED_CAT_WOOD_PANELS_ID   = 'c0a1b2c3-0001-4000-8000-000000000001';
+const SEED_CAT_EDGE_BANDING_ID  = 'c0a1b2c3-0002-4000-8000-000000000002';
+const SEED_CAT_HARDWARE_ID      = 'c0a1b2c3-0003-4000-8000-000000000003';
+const SEED_CAT_FASTENERS_ID     = 'c0a1b2c3-0004-4000-8000-000000000004';
+const SEED_CAT_FINISHES_ID      = 'c0a1b2c3-0005-4000-8000-000000000005';
+const SEED_CAT_ACCESSORIES_ID   = 'c0a1b2c3-0006-4000-8000-000000000006';
+const SEED_CAT_ADHESIVES_ID     = 'c0a1b2c3-0007-4000-8000-000000000007';
+
+// For sub-categories, locations, suppliers, their IDs can still be dynamic if not directly referenced by other seed data's FKs.
+// However, if inventory items were to reference specific supplier IDs, those supplier IDs would also need to be constant.
+// For now, inventory refers to supplierId by a dynamic UUID.
+
 async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.Statement>) {
   await dbConnection.exec(`
     CREATE TABLE IF NOT EXISTS departments (
@@ -136,12 +167,12 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       requisitionId TEXT NOT NULL,
       inventoryItemId TEXT NOT NULL,
       quantityRequested INTEGER NOT NULL,
-      quantityApproved INTEGER, -- New column for manager-approved quantity
+      quantityApproved INTEGER, 
       quantityIssued INTEGER DEFAULT 0,
-      isApproved INTEGER DEFAULT 0, -- 0 for false/pending, 1 for true/approved (derived from quantityApproved > 0)
+      isApproved INTEGER DEFAULT 0, 
       notes TEXT,
       FOREIGN KEY (requisitionId) REFERENCES requisitions(id) ON DELETE CASCADE,
-      FOREIGN KEY (inventoryItemId) REFERENCES inventory(id) ON DELETE RESTRICT -- Prevent deleting inventory items that are on requisitions
+      FOREIGN KEY (inventoryItemId) REFERENCES inventory(id) ON DELETE RESTRICT 
     );
   `);
 
@@ -167,97 +198,71 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   console.log('Seeding initial data...');
 
   // Departments
-  const deptEngId = crypto.randomUUID();
-  const deptProdId = crypto.randomUUID();
-  const deptMaintId = crypto.randomUUID();
-  const deptDesignId = crypto.randomUUID();
-
   const departmentsData = [
-    { id: deptEngId, name: 'Engineering', code: 'ENG' },
-    { id: deptProdId, name: 'Production', code: 'PROD' },
-    { id: deptMaintId, name: 'Maintenance', code: 'MAINT' },
-    { id: deptDesignId, name: 'Design Office', code: 'DESIGN' },
+    { id: SEED_DEPT_ENGINEERING_ID, name: 'Engineering', code: 'ENG' },
+    { id: SEED_DEPT_PRODUCTION_ID, name: 'Production', code: 'PROD' },
+    { id: SEED_DEPT_MAINTENANCE_ID, name: 'Maintenance', code: 'MAINT' },
+    { id: SEED_DEPT_DESIGN_ID, name: 'Design Office', code: 'DESIGN' },
   ];
   for (const dept of departmentsData) {
     try {
-      await db.run('INSERT INTO departments (id, name, code) VALUES (?, ?, ?) ON CONFLICT(name) DO NOTHING', dept.id, dept.name, dept.code);
+      await db.run('INSERT INTO departments (id, name, code) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, code=excluded.code', dept.id, dept.name, dept.code);
     } catch (e) {
-      console.warn(`Could not insert department ${dept.name}: ${(e as Error).message}`);
+      console.warn(`Could not insert/update department ${dept.name}: ${(e as Error).message}`);
     }
   }
   console.log('Departments seeded.');
 
   // Units of Measurement
-  const unitPcsId = crypto.randomUUID();
-  const unitSetId = crypto.randomUUID();
-  const unitPairId = crypto.randomUUID();
-  const unitSheetId = crypto.randomUUID();
-  const unitMeterId = crypto.randomUUID();
-  const unitSqMId = crypto.randomUUID();
-  const unitLiterId = crypto.randomUUID();
-  const unitKgId = crypto.randomUUID();
-  const unitBoxId = crypto.randomUUID();
-  const unitRollId = crypto.randomUUID();
-  const unitMlId = crypto.randomUUID();
-  const unitGramId = crypto.randomUUID();
-
   const units = [
-    { id: unitPcsId, name: 'Piece', abbreviation: 'pcs', base_unit_id: null, conversion_factor: 1.0 },
-    { id: unitSetId, name: 'Set', abbreviation: 'set', base_unit_id: null, conversion_factor: 1.0 },
-    { id: unitPairId, name: 'Pair', abbreviation: 'pr', base_unit_id: null, conversion_factor: 1.0 },
-    { id: unitSheetId, name: 'Sheet', abbreviation: 'sh', base_unit_id: null, conversion_factor: 1.0 },
-    { id: unitMeterId, name: 'Meter', abbreviation: 'm', base_unit_id: null, conversion_factor: 1.0 },
-    { id: unitSqMId, name: 'Square Meter', abbreviation: 'sqm', base_unit_id: null, conversion_factor: 1.0 },
-    { id: unitLiterId, name: 'Liter', abbreviation: 'L', base_unit_id: null, conversion_factor: 1.0 },
-    { id: unitKgId, name: 'Kilogram', abbreviation: 'kg', base_unit_id: null, conversion_factor: 1.0 },
-    { id: unitBoxId, name: 'Box', abbreviation: 'box', base_unit_id: null, conversion_factor: 1.0 },
-    { id: unitRollId, name: 'Roll', abbreviation: 'roll', base_unit_id: null, conversion_factor: 1.0 },
-    { id: unitMlId, name: 'Milliliter', abbreviation: 'mL', base_unit_id: unitLiterId, conversion_factor: 0.001 },
-    { id: unitGramId, name: 'Gram', abbreviation: 'g', base_unit_id: unitKgId, conversion_factor: 0.001 },
+    { id: SEED_UNIT_PCS_ID, name: 'Piece', abbreviation: 'pcs', base_unit_id: null, conversion_factor: 1.0 },
+    { id: SEED_UNIT_SET_ID, name: 'Set', abbreviation: 'set', base_unit_id: null, conversion_factor: 1.0 },
+    { id: SEED_UNIT_PAIR_ID, name: 'Pair', abbreviation: 'pr', base_unit_id: null, conversion_factor: 1.0 },
+    { id: SEED_UNIT_SHEET_ID, name: 'Sheet', abbreviation: 'sh', base_unit_id: null, conversion_factor: 1.0 },
+    { id: SEED_UNIT_METER_ID, name: 'Meter', abbreviation: 'm', base_unit_id: null, conversion_factor: 1.0 },
+    { id: SEED_UNIT_SQM_ID, name: 'Square Meter', abbreviation: 'sqm', base_unit_id: null, conversion_factor: 1.0 },
+    { id: SEED_UNIT_LITER_ID, name: 'Liter', abbreviation: 'L', base_unit_id: null, conversion_factor: 1.0 },
+    { id: SEED_UNIT_KG_ID, name: 'Kilogram', abbreviation: 'kg', base_unit_id: null, conversion_factor: 1.0 },
+    { id: SEED_UNIT_BOX_ID, name: 'Box', abbreviation: 'box', base_unit_id: null, conversion_factor: 1.0 },
+    { id: SEED_UNIT_ROLL_ID, name: 'Roll', abbreviation: 'roll', base_unit_id: null, conversion_factor: 1.0 },
+    { id: SEED_UNIT_ML_ID, name: 'Milliliter', abbreviation: 'mL', base_unit_id: SEED_UNIT_LITER_ID, conversion_factor: 0.001 },
+    { id: SEED_UNIT_GRAM_ID, name: 'Gram', abbreviation: 'g', base_unit_id: SEED_UNIT_KG_ID, conversion_factor: 0.001 },
   ];
   
   for (const unit of units) {
     try {
       await db.run(
         `INSERT INTO units_of_measurement (id, name, abbreviation, base_unit_id, conversion_factor) 
-         VALUES (?, ?, ?, ?, ?) ON CONFLICT(name) DO NOTHING`,
+         VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, abbreviation=excluded.abbreviation, base_unit_id=excluded.base_unit_id, conversion_factor=excluded.conversion_factor`,
         unit.id, unit.name, unit.abbreviation, unit.base_unit_id, unit.conversion_factor
       );
     } catch (e) {
-      console.warn(`Could not insert unit ${unit.name}: ${(e as Error).message}`);
+      console.warn(`Could not insert/update unit ${unit.name}: ${(e as Error).message}`);
     }
   }
   console.log('Units of Measurement seeded.');
 
   // Categories
-  const catWoodPanelsId = crypto.randomUUID();
-  const catEdgeBandingId = crypto.randomUUID();
-  const catHardwareId = crypto.randomUUID();
-  const catFastenersId = crypto.randomUUID();
-  const catFinishesId = crypto.randomUUID();
-  const catAccessoriesId = crypto.randomUUID();
-  const catAdhesivesId = crypto.randomUUID();
-
   const categoriesData = [
-    { id: catWoodPanelsId, name: 'Wood Panels', code: 'WP' },
-    { id: catEdgeBandingId, name: 'Edge Banding', code: 'EB' },
-    { id: catHardwareId, name: 'Hardware', code: 'HW' },
-    { id: catFastenersId, name: 'Fasteners', code: 'FS' },
-    { id: catFinishesId, name: 'Finishes', code: 'FN' },
-    { id: catAccessoriesId, name: 'Accessories', code: 'AC' },
-    { id: catAdhesivesId, name: 'Adhesives & Sealants', code: 'AS' },
+    { id: SEED_CAT_WOOD_PANELS_ID, name: 'Wood Panels', code: 'WP' },
+    { id: SEED_CAT_EDGE_BANDING_ID, name: 'Edge Banding', code: 'EB' },
+    { id: SEED_CAT_HARDWARE_ID, name: 'Hardware', code: 'HW' },
+    { id: SEED_CAT_FASTENERS_ID, name: 'Fasteners', code: 'FS' },
+    { id: SEED_CAT_FINISHES_ID, name: 'Finishes', code: 'FN' },
+    { id: SEED_CAT_ACCESSORIES_ID, name: 'Accessories', code: 'AC' },
+    { id: SEED_CAT_ADHESIVES_ID, name: 'Adhesives & Sealants', code: 'AS' },
   ];
 
   for (const cat of categoriesData) {
     try {
-      await db.run('INSERT INTO categories (id, name, code) VALUES (?, ?, ?) ON CONFLICT(name) DO NOTHING', cat.id, cat.name, cat.code);
+      await db.run('INSERT INTO categories (id, name, code) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, code=excluded.code', cat.id, cat.name, cat.code);
     } catch (e) {
-       console.warn(`Could not insert category ${cat.name}: ${(e as Error).message}`);
+       console.warn(`Could not insert/update category ${cat.name}: ${(e as Error).message}`);
     }
   }
   console.log('Categories seeded.');
 
-  // Sub-Categories
+  // Sub-Categories (Using dynamic UUIDs for these as they are less likely to be FK targets from UI state directly after load)
   const subCatPlywoodId = crypto.randomUUID();
   const subCatMdfId = crypto.randomUUID();
   const subCatParticleBoardId = crypto.randomUUID();
@@ -285,36 +290,37 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
 
 
   const subCategoriesData = [
-    { id: subCatPlywoodId, name: 'Plywood', categoryId: catWoodPanelsId, code: 'PLY' },
-    { id: subCatMdfId, name: 'MDF', categoryId: catWoodPanelsId, code: 'MDF' },
-    { id: subCatParticleBoardId, name: 'Particle Board', categoryId: catWoodPanelsId, code: 'PB' },
-    { id: subCatVeneerSheetsId, name: 'Veneer Sheets', categoryId: catWoodPanelsId, code: 'VEN' },
-    { id: subCatPvcEdgeId, name: 'PVC Edge Banding', categoryId: catEdgeBandingId, code: 'PVC' },
-    { id: subCatWoodVeneerEdgeId, name: 'Wood Veneer Edge Banding', categoryId: catEdgeBandingId, code: 'WVE' },
-    { id: subCatHingesId, name: 'Hinges', categoryId: catHardwareId, code: 'HNG' },
-    { id: subCatDrawerSlidesId, name: 'Drawer Slides', categoryId: catHardwareId, code: 'DRS' },
-    { id: subCatHandlesId, name: 'Handles & Knobs', categoryId: catHardwareId, code: 'HND' },
-    { id: subCatShelfSupportsId, name: 'Shelf Supports', categoryId: catHardwareId, code: 'SHS' },
-    { id: subCatCabinetLegsId, name: 'Cabinet Legs', categoryId: catHardwareId, code: 'LEG' },
-    { id: subCatScrewsId, name: 'Screws', categoryId: catFastenersId, code: 'SCR' },
-    { id: subCatNailsBradsId, name: 'Nails & Brads', categoryId: catFastenersId, code: 'NLB' },
-    { id: subCatDowelsId, name: 'Dowels', categoryId: catFastenersId, code: 'DWL' },
-    { id: subCatCamLocksId, name: 'Cam Locks & Fittings', categoryId: catFastenersId, code: 'CMF' },
-    { id: subCatPaintId, name: 'Paint', categoryId: catFinishesId, code: 'PNT' },
-    { id: subCatVarnishId, name: 'Varnish / Lacquer', categoryId: catFinishesId, code: 'VAR' },
-    { id: subCatWoodStainId, name: 'Wood Stain', categoryId: catFinishesId, code: 'STN' },
-    { id: subCatPrimerId, name: 'Primer', categoryId: catFinishesId, code: 'PRM' },
-    { id: subCatDrawerOrgId, name: 'Drawer Organizers', categoryId: catAccessoriesId, code: 'DOR' },
-    { id: subCatLazySusanId, name: 'Lazy Susans', categoryId: catAccessoriesId, code: 'LSN' },
-    { id: subCatLedStripId, name: 'LED Lighting Strips', categoryId: catAccessoriesId, code: 'LED' },
-    { id: subCatWoodGlueId, name: 'Wood Glue', categoryId: catAdhesivesId, code: 'WGL' },
-    { id: subCatSiliconeId, name: 'Silicone Sealant', categoryId: catAdhesivesId, code: 'SIL' },
+    { id: subCatPlywoodId, name: 'Plywood', categoryId: SEED_CAT_WOOD_PANELS_ID, code: 'PLY' },
+    { id: subCatMdfId, name: 'MDF', categoryId: SEED_CAT_WOOD_PANELS_ID, code: 'MDF' },
+    { id: subCatParticleBoardId, name: 'Particle Board', categoryId: SEED_CAT_WOOD_PANELS_ID, code: 'PB' },
+    { id: subCatVeneerSheetsId, name: 'Veneer Sheets', categoryId: SEED_CAT_WOOD_PANELS_ID, code: 'VEN' },
+    { id: subCatPvcEdgeId, name: 'PVC Edge Banding', categoryId: SEED_CAT_EDGE_BANDING_ID, code: 'PVC' },
+    { id: subCatWoodVeneerEdgeId, name: 'Wood Veneer Edge Banding', categoryId: SEED_CAT_EDGE_BANDING_ID, code: 'WVE' },
+    { id: subCatHingesId, name: 'Hinges', categoryId: SEED_CAT_HARDWARE_ID, code: 'HNG' },
+    { id: subCatDrawerSlidesId, name: 'Drawer Slides', categoryId: SEED_CAT_HARDWARE_ID, code: 'DRS' },
+    { id: subCatHandlesId, name: 'Handles & Knobs', categoryId: SEED_CAT_HARDWARE_ID, code: 'HND' },
+    { id: subCatShelfSupportsId, name: 'Shelf Supports', categoryId: SEED_CAT_HARDWARE_ID, code: 'SHS' },
+    { id: subCatCabinetLegsId, name: 'Cabinet Legs', categoryId: SEED_CAT_HARDWARE_ID, code: 'LEG' },
+    { id: subCatScrewsId, name: 'Screws', categoryId: SEED_CAT_FASTENERS_ID, code: 'SCR' },
+    { id: subCatNailsBradsId, name: 'Nails & Brads', categoryId: SEED_CAT_FASTENERS_ID, code: 'NLB' },
+    { id: subCatDowelsId, name: 'Dowels', categoryId: SEED_CAT_FASTENERS_ID, code: 'DWL' },
+    { id: subCatCamLocksId, name: 'Cam Locks & Fittings', categoryId: SEED_CAT_FASTENERS_ID, code: 'CMF' },
+    { id: subCatPaintId, name: 'Paint', categoryId: SEED_CAT_FINISHES_ID, code: 'PNT' },
+    { id: subCatVarnishId, name: 'Varnish / Lacquer', categoryId: SEED_CAT_FINISHES_ID, code: 'VAR' },
+    { id: subCatWoodStainId, name: 'Wood Stain', categoryId: SEED_CAT_FINISHES_ID, code: 'STN' },
+    { id: subCatPrimerId, name: 'Primer', categoryId: SEED_CAT_FINISHES_ID, code: 'PRM' },
+    { id: subCatDrawerOrgId, name: 'Drawer Organizers', categoryId: SEED_CAT_ACCESSORIES_ID, code: 'DOR' },
+    { id: subCatLazySusanId, name: 'Lazy Susans', categoryId: SEED_CAT_ACCESSORIES_ID, code: 'LSN' },
+    { id: subCatLedStripId, name: 'LED Lighting Strips', categoryId: SEED_CAT_ACCESSORIES_ID, code: 'LED' },
+    { id: subCatWoodGlueId, name: 'Wood Glue', categoryId: SEED_CAT_ADHESIVES_ID, code: 'WGL' },
+    { id: subCatSiliconeId, name: 'Silicone Sealant', categoryId: SEED_CAT_ADHESIVES_ID, code: 'SIL' },
   ];
-
+  // Clear existing sub-categories before seeding to prevent conflicts if codes change for same name/category.
+  await db.run('DELETE FROM sub_categories');
   for (const subCat of subCategoriesData) {
     try {
       await db.run(
-        'INSERT INTO sub_categories (id, name, categoryId, code) VALUES (?, ?, ?, ?) ON CONFLICT(name, categoryId) DO NOTHING',
+        'INSERT INTO sub_categories (id, name, categoryId, code) VALUES (?, ?, ?, ?)',
         subCat.id, subCat.name, subCat.categoryId, subCat.code
       );
     } catch (e) {
@@ -323,7 +329,7 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Sub-Categories seeded.');
 
-  // Locations
+  // Locations (Dynamic UUIDs)
   const locMainWarehouseA1S1Id = crypto.randomUUID();
   const locWorkshopStorageB2Id = crypto.randomUUID();
   const locShowroomBackstockId = crypto.randomUUID();
@@ -335,10 +341,11 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
     { id: locShowroomBackstockId, store: 'Showroom Backstock', rack: null, shelf: null },
     { id: locCuttingDeptRackCId, store: 'Cutting Department', rack: 'C', shelf: 'Bin 3' },
   ];
+  await db.run('DELETE FROM locations');
   for (const loc of locationsData) {
     try {
       await db.run(
-        'INSERT INTO locations (id, store, rack, shelf) VALUES (?, ?, ?, ?) ON CONFLICT(store, rack, shelf) DO NOTHING',
+        'INSERT INTO locations (id, store, rack, shelf) VALUES (?, ?, ?, ?)',
         loc.id, loc.store, loc.rack, loc.shelf
       );
     } catch (e) {
@@ -347,7 +354,7 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Locations seeded.');
 
-  // Suppliers
+  // Suppliers (Dynamic UUIDs)
   const supPanelProId = crypto.randomUUID();
   const supHardwareHubId = crypto.randomUUID();
   const supFinishingTouchesId = crypto.randomUUID();
@@ -359,10 +366,11 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
     { id: supFinishingTouchesId, name: 'Finishing Touches Co.', contactPerson: 'Sam Lee', contactMail: 'sales@finishing.co', contactPhone: '555-9012', address: '789 Varnish Rd, Paintville' },
     { id: supLocalTimberId, name: 'Local Timber Yard', contactPerson: null, contactMail: 'info@localtimber.com', contactPhone: '555-3456', address: '1 Forest Way, Timber Town' },
   ];
+  await db.run('DELETE FROM suppliers');
   for (const sup of suppliersData) {
     try {
       await db.run(
-        'INSERT INTO suppliers (id, name, contactPerson, contactMail, contactPhone, address) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(name) DO NOTHING',
+        'INSERT INTO suppliers (id, name, contactPerson, contactMail, contactPhone, address) VALUES (?, ?, ?, ?, ?, ?)',
         sup.id, sup.name, sup.contactPerson, sup.contactMail, sup.contactPhone, sup.address
       );
     } catch (e) {
@@ -371,31 +379,30 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Suppliers seeded.');
 
-  // Inventory Items (now using structured IDs from addInventoryItemAction logic if called, but for seeding, we'll pre-assign some)
+  // Inventory Items (Uses constant string IDs for items, but dynamic UUIDs for FKs to locations/suppliers)
   const inventoryItemsData = [
-    // These IDs are illustrative for seeding; actual generation is in addInventoryItemAction
     {
       id: 'WP-PLY-001', name: '18mm Birch Plywood (2440x1220mm)', description: 'High-quality birch plywood for structural and aesthetic applications.', imageUrl: 'https://placehold.co/300x200.png?text=Plywood',
       quantity: 50, unitCost: 45.50, lowStock: 0, minStockLevel: 10, maxStockLevel: 100,
-      categoryId: catWoodPanelsId, subCategoryId: subCatPlywoodId, locationId: locMainWarehouseA1S1Id, supplierId: supPanelProId, unitId: unitSheetId,
+      categoryId: SEED_CAT_WOOD_PANELS_ID, subCategoryId: subCatPlywoodId, locationId: locMainWarehouseA1S1Id, supplierId: supPanelProId, unitId: SEED_UNIT_SHEET_ID,
     },
     {
       id: 'WP-MDF-001', name: 'Standard MDF Sheet (2440x1220x18mm)', description: 'Medium-density fiberboard, ideal for paint-grade cabinet doors and panels.', imageUrl: 'https://placehold.co/300x200.png?text=MDF',
       quantity: 75, unitCost: 28.00, lowStock: 0, minStockLevel: 20, maxStockLevel: 150,
-      categoryId: catWoodPanelsId, subCategoryId: subCatMdfId, locationId: locMainWarehouseA1S1Id, supplierId: supPanelProId, unitId: unitSheetId,
+      categoryId: SEED_CAT_WOOD_PANELS_ID, subCategoryId: subCatMdfId, locationId: locMainWarehouseA1S1Id, supplierId: supPanelProId, unitId: SEED_UNIT_SHEET_ID,
     },
     {
       id: 'EB-PVC-001', name: 'White PVC Edge Banding (22mm x 0.45mm)', description: 'Durable PVC edge banding for finishing MDF and particle board edges.', imageUrl: 'https://placehold.co/300x200.png?text=Edge+Band',
       quantity: 5, unitCost: 15.00, lowStock: 1, minStockLevel: 2, maxStockLevel: 10,
-      categoryId: catEdgeBandingId, subCategoryId: subCatPvcEdgeId, locationId: locWorkshopStorageB2Id, supplierId: supFinishingTouchesId, unitId: unitRollId,
+      categoryId: SEED_CAT_EDGE_BANDING_ID, subCategoryId: subCatPvcEdgeId, locationId: locWorkshopStorageB2Id, supplierId: supFinishingTouchesId, unitId: SEED_UNIT_ROLL_ID,
     },
     {
       id: 'HW-HNG-001', name: 'Soft-Close Cabinet Hinges (Full Overlay)', description: 'European style soft-close hinges for a quiet and smooth cabinet door operation.', imageUrl: 'https://placehold.co/300x200.png?text=Hinges',
       quantity: 200, unitCost: 1.80, lowStock: 0, minStockLevel: 50, maxStockLevel: 300,
-      categoryId: catHardwareId, subCategoryId: subCatHingesId, locationId: locWorkshopStorageB2Id, supplierId: supHardwareHubId, unitId: unitPairId,
+      categoryId: SEED_CAT_HARDWARE_ID, subCategoryId: subCatHingesId, locationId: locWorkshopStorageB2Id, supplierId: supHardwareHubId, unitId: SEED_UNIT_PAIR_ID,
     },
   ];
-
+  await db.run('DELETE FROM inventory');
   for (const item of inventoryItemsData) {
     try {
       await db.run(
@@ -476,11 +483,18 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
             console.log('Categories table is empty, but no schema reset was triggered. Seeding initial data.');
             await _seedInitialData(db);
           } else {
-            const inventoryCountResult = await db.get('SELECT COUNT(*) as count FROM inventory');
-            const inventoryCount = inventoryCountResult?.count ?? 0;
-            if (inventoryCount === 0) {
-                 console.log('Inventory table is empty. Re-seeding initial data for inventory (and potentially related lookups if they were also empty).');
-                await _seedInitialData(db); // Re-seed all if inventory is empty as it might indicate a partial wipe or first seed
+            // Check if key seeded departments exist, if not, re-seed.
+            const seededDeptCheck = await db.get('SELECT id FROM departments WHERE id = ?', SEED_DEPT_ENGINEERING_ID);
+            if (!seededDeptCheck) {
+                 console.log('Key seeded department (Engineering) not found. Re-seeding all initial data.');
+                 await _seedInitialData(db);
+            } else {
+                const inventoryCountResult = await db.get('SELECT COUNT(*) as count FROM inventory');
+                const inventoryCount = inventoryCountResult?.count ?? 0;
+                if (inventoryCount === 0) {
+                     console.log('Inventory table is empty. Re-seeding initial data for inventory (and potentially related lookups if they were also empty).');
+                    await _seedInitialData(db); // Re-seed all if inventory is empty as it might indicate a partial wipe or first seed
+                }
             }
           }
         }
@@ -520,6 +534,7 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
   await _createTables(db);
   console.log('Database initialization by script complete. Tables created/ensured.');
 
+  // Always seed if dropping first, or if foundational tables like categories are empty or missing key seeded data.
   if (dropFirst) { 
     await _seedInitialData(db);
   } else { 
@@ -528,10 +543,16 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
     if (categoryCount === 0) {
         console.log('Script: Categories table is empty. Seeding initial data.');
         await _seedInitialData(db);
+    } else {
+        const seededDeptCheck = await db.get('SELECT id FROM departments WHERE id = ?', SEED_DEPT_ENGINEERING_ID);
+        if (!seededDeptCheck) {
+             console.log('Script: Key seeded department not found. Re-seeding all initial data.');
+             await _seedInitialData(db);
+        }
     }
   }
 
   return db;
 }
-
+    
     
