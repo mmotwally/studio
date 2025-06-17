@@ -11,11 +11,22 @@ export interface NavItem {
 
 export interface DashboardStat {
   title: string;
-  value: string;
+  value: string; // Values will be formatted strings
   icon: LucideIcon;
   description?: string;
-  color?: string; // Optional color for icon/text
+  color?: string; 
 }
+
+export interface DashboardData {
+  totalInventoryItems: number;
+  lowStockItems: number;
+  pendingRequisitions: number;
+  openPurchaseOrders: number;
+  monthlyExpenditure: number;
+  totalInventoryValue: number;
+  error?: string; // Optional error message
+}
+
 
 export interface Department {
   id: string;
@@ -275,6 +286,8 @@ export interface PurchaseOrderItem {
   inventoryItemId: string;
   inventoryItemName?: string; // For display
   inventoryItemCurrentStock?: number; // For display/validation during receiving
+  inventoryItemLastPurchasePrice?: number | null; // Added for PO form
+  averageCost?: number | null; // Added for PO form (current average cost)
   description?: string | null; // Can be custom or from inventory item
   quantityOrdered: number;
   unitCost: number;
@@ -369,5 +382,3 @@ export interface StockMovementReport {
   closingStock: number;
   movements: StockMovement[];
 }
-
-    

@@ -1,19 +1,43 @@
 
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { DashboardStat } from '@/types';
+import type { DashboardStat, DashboardData } from '@/types';
 import { Boxes, AlertTriangle, FileClock, Truck, Banknote, CircleDollarSign } from 'lucide-react';
+import { getDashboardData } from './actions';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Terminal } from 'lucide-react';
 
-const stats: DashboardStat[] = [
-  { title: 'Total Inventory Items', value: '1,250', icon: Boxes, description: '+20.1% from last month', color: 'text-primary' },
-  { title: 'Low Stock Items', value: '32', icon: AlertTriangle, description: 'Needs urgent reorder', color: 'text-destructive' },
-  { title: 'Pending Requisitions', value: '15', icon: FileClock, description: 'Awaiting approval', color: 'text-amber-500' },
-  { title: 'Open Purchase Orders', value: '8', icon: Truck, description: 'Awaiting delivery', color: 'text-blue-500' },
-  { title: 'Monthly Expenditure', value: '$12,345', icon: Banknote, description: 'Current month spending', color: 'text-green-500' },
-  { title: 'Total Inventory Value', value: '$250,800', icon: CircleDollarSign, description: 'Estimated current value', color: 'text-indigo-500' },
-];
+export default async function DashboardPage() {
+  const data: DashboardData = await getDashboardData();
 
-export default function DashboardPage() {
+  if (data.error) {
+    return (
+      <>
+        <PageHeader title="Dashboard" description="Overview of your cabinet console activities." />
+        <Alert variant="destructive">
+          <Terminal className="h-4 w-4" />
+          <AlertTitle>Error Loading Dashboard Data</AlertTitle>
+          <AlertDescription>
+            Could not load dashboard statistics. Please try again later.
+            <details className="mt-2">
+              <summary>Error details</summary>
+              <p className="text-xs">{data.error}</p>
+            </details>
+          </AlertDescription>
+        </Alert>
+      </>
+    );
+  }
+
+  const stats: DashboardStat[] = [
+    { title: 'Total Inventory Items', value: data.totalInventoryItems.toLocaleString(), icon: Boxes, description: 'All distinct items tracked', color: 'text-primary' },
+    { title: 'Low Stock Items', value: data.lowStockItems.toLocaleString(), icon: AlertTriangle, description: 'Items needing reorder', color: 'text-destructive' },
+    { title: 'Pending Requisitions', value: data.pendingRequisitions.toLocaleString(), icon: FileClock, description: 'Awaiting approval', color: 'text-amber-500' },
+    { title: 'Open Purchase Orders', value: data.openPurchaseOrders.toLocaleString(), icon: Truck, description: 'Awaiting delivery/receipt', color: 'text-blue-500' },
+    { title: 'Monthly Expenditure', value: `$${data.monthlyExpenditure.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, icon: Banknote, description: 'Approx. current month spending on received POs', color: 'text-green-500' },
+    { title: 'Total Inventory Value', value: `$${data.totalInventoryValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, icon: CircleDollarSign, description: 'Estimated current value', color: 'text-indigo-500' },
+  ];
+
   return (
     <>
       <PageHeader title="Dashboard" description="Overview of your cabinet console activities." />
@@ -41,8 +65,8 @@ export default function DashboardPage() {
             <CardTitle>Recent Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">No recent activity to display.</p>
-            {/* Placeholder for recent activity feed */}
+            <p className="text-muted-foreground">No recent activity to display. (Placeholder)</p>
+            {/* Placeholder for recent activity feed - to be implemented if requested */}
           </CardContent>
         </Card>
         <Card className="shadow-lg">
