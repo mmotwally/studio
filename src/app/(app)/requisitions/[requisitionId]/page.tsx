@@ -1,4 +1,3 @@
-
 "use client";
 import * as React from 'react';
 import { PageHeader } from '@/components/page-header';
@@ -6,9 +5,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Dialog, DialogTrigger } from '@/components/ui/dialog';
-import { ArrowLeft, Edit, CheckCircle, XCircle, Settings2, PackageSearch, CalendarDays, FileTextIcon, UserCircle, Info, MoreVertical, Printer, FileX2, PackageCheck, PackageMinus, Briefcase, FileArchive, FileDigit, ShieldCheck } from 'lucide-react';
-import { getRequisitionById, updateRequisitionStatusAction } from '../actions';
+import { Dialog } from '@/components/ui/dialog'; // DialogTrigger removed as it's not used directly here for PDF download
+import { ArrowLeft, Edit, CheckCircle, XCircle, Settings2, PackageSearch, CalendarDays, FileTextIcon, UserCircle, Info, MoreVertical, FileDown, FileX2, PackageCheck, PackageMinus, Briefcase, FileArchive, FileDigit, ShieldCheck, Loader2 } from 'lucide-react';
+import { getRequisitionById, updateRequisitionStatusAction, generateRequisitionPdfAction } from '../actions';
 import type { Requisition, RequisitionStatus } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -62,6 +61,7 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
   const router = useRouter();
   const [isFulfillmentDialogOpen, setIsFulfillmentDialogOpen] = React.useState(false);
   const [isApproveItemsDialogOpen, setIsApproveItemsDialogOpen] = React.useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = React.useState(false);
 
   React.useEffect(() => {
     let toastShown = false;
@@ -80,8 +80,6 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
     }
 
     if (toastShown) {
-      // Remove the query parameter to prevent toast on refresh
-      // Keep other query params if they exist
       const newSearchParams = new URLSearchParams(searchParams.toString());
       newSearchParams.delete('approval_success');
       newSearchParams.delete('fulfillment_success');
@@ -122,6 +120,30 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
       toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
     }
   };
+  
+  const handleDownloadPdf = async () => {
+    if (!requisition) {
+      toast({ title: "Error", description: "Requisition data not loaded.", variant: "destructive" });
+      return;
+    }
+    setIsDownloadingPdf(true);
+    try {
+      const pdfDataUri = await generateRequisitionPdfAction(requisition);
+      const link = document.createElement('a');
+      link.href = pdfDataUri;
+      link.download = `Requisition_Issue_Voucher_${requisition.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: "PDF Downloaded", description: `Issue Voucher for ${requisition.id} has been downloaded.` });
+    } catch (err) {
+      console.error("Failed to download Requisition PDF:", err);
+      toast({ title: "PDF Generation Failed", description: (err as Error).message || "Could not generate PDF.", variant: "destructive" });
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
 
   if (isLoading) {
     return <PageHeader title="Loading Requisition..." description="Please wait." />;
@@ -164,6 +186,7 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
                      requisition.items && requisition.items.some(item => item.isApproved && (item.quantityApproved ?? 0) > 0 && (item.quantityIssued || 0) < (item.quantityApproved ?? 0));
   
   const canManageApprovals = requisition.status === 'PENDING_APPROVAL';
+  const canDownloadIssueVoucher = requisition.status === 'FULFILLED' || requisition.status === 'PARTIALLY_FULFILLED';
 
 
   return (
@@ -188,14 +211,17 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                {canDownloadIssueVoucher && (
+                  <DropdownMenuItem onClick={handleDownloadPdf} disabled={isDownloadingPdf} className="cursor-pointer">
+                    {isDownloadingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
+                    {isDownloadingPdf ? "Downloading..." : "Download Issue Voucher"}
+                  </DropdownMenuItem>
+                )}
                 {canCancel && (
                    <DropdownMenuItem onSelect={() => handleStatusUpdate('CANCELLED')} className="cursor-pointer">
                     <FileX2 className="mr-2 h-4 w-4" /> Cancel Requisition
                   </DropdownMenuItem>
                 )}
-                <DropdownMenuItem disabled>
-                  <Printer className="mr-2 h-4 w-4" /> Print Requisition
-                </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
             <Button variant="outline" asChild>
@@ -402,4 +428,3 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
     </>
   );
 }
-

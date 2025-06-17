@@ -6,8 +6,9 @@ import type { RequisitionFormValues } from './schema';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import type { InventoryItem, Requisition, RequisitionItem, RequisitionStatus, SelectItem, ApproveRequisitionFormValues } from '@/types';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import type { Database as SqliteDatabaseType } from 'sqlite';
+import { PDFDocument, StandardFonts, rgb, PageSizes } from 'pdf-lib';
 
 async function generateRequisitionId(db: SqliteDatabaseType): Promise<string> {
   const today = format(new Date(), 'yyyyMMdd');
@@ -230,11 +231,13 @@ export async function getRequisitions(): Promise<Requisition[]> {
       r.lastUpdated,
       r.departmentId,
       d.name as departmentName,
+      u.name as requesterName,
       r.orderNumber,
       r.bomNumber,
       (SELECT COUNT(*) FROM requisition_items ri WHERE ri.requisitionId = r.id) as itemCount
     FROM requisitions r
     LEFT JOIN departments d ON r.departmentId = d.id
+    LEFT JOIN users u ON r.requesterId = u.id
     ORDER BY r.dateCreated DESC
   `);
 
@@ -248,12 +251,14 @@ export async function getRequisitions(): Promise<Requisition[]> {
 
 export async function getRequisitionById(requisitionId: string): Promise<Requisition | null> {
   const db = await openDb();
-  const requisitionData = await db.get<Omit<Requisition, 'items' | 'requesterName' | 'totalItems' | 'status' | 'departmentName'> & { status: string, departmentName?: string }>(
+  const requisitionData = await db.get<Omit<Requisition, 'items' | 'totalItems' | 'status' | 'departmentName'> & { status: string, departmentName?: string, requesterName?: string }>(
     `SELECT 
       r.id, r.dateCreated, r.dateNeeded, r.status, r.notes, r.lastUpdated, r.requesterId, 
+      u.name as requesterName,
       r.departmentId, d.name as departmentName, r.orderNumber, r.bomNumber
      FROM requisitions r
      LEFT JOIN departments d ON r.departmentId = d.id
+     LEFT JOIN users u ON r.requesterId = u.id
      WHERE r.id = ?`,
     requisitionId
   );
@@ -278,6 +283,7 @@ export async function getRequisitionById(requisitionId: string): Promise<Requisi
     ...requisitionData,
     status: requisitionData.status as RequisitionStatus,
     departmentName: requisitionData.departmentName || undefined,
+    requesterName: requisitionData.requesterName || undefined,
     items: itemsData.map(item => ({
         ...item, 
         quantityApproved: item.quantityApproved === null ? undefined : item.quantityApproved,
@@ -672,6 +678,142 @@ export async function deleteRequisitionAction(requisitionId: string): Promise<{ 
     return { success: false, message: `Failed to delete requisition: ${error.message}` };
   }
 }
+
+
+export async function generateRequisitionPdfAction(reqData: Requisition): Promise<string> {
+  try {
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage(PageSizes.A4);
+    const { width, height } = page.getSize();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    const margin = 50;
+    let y = height - margin;
+    const lineSpacing = 14;
+    const smallLineSpacing = 12;
+    const sectionGap = 20;
+
+    // Title
+    page.setFont(boldFont);
+    page.setFontSize(18);
+    page.drawText("Requisition Issue Voucher", { x: margin, y, font: boldFont });
+    y -= lineSpacing * 1.8;
+
+    // Requisition Details
+    page.setFont(font);
+    page.setFontSize(10);
+    page.drawText(`Requisition ID: ${reqData.id}`, { x: margin, y, font: boldFont });
+    y -= lineSpacing;
+    page.drawText(`Department: ${reqData.departmentName || 'N/A'}`, { x: margin, y });
+    page.drawText(`Requester: ${reqData.requesterName || 'N/A'}`, { x: width / 2, y });
+    y -= lineSpacing;
+    page.drawText(`Date Created: ${format(parseISO(reqData.dateCreated), "PP")}`, { x: margin, y });
+    if (reqData.dateNeeded) {
+      page.drawText(`Date Needed: ${format(parseISO(reqData.dateNeeded), "PP")}`, { x: width / 2, y });
+    }
+    y -= lineSpacing;
+    page.drawText(`Status: ${reqData.status.replace(/_/g, ' ')}`, { x: margin, y });
+    y -= sectionGap;
+
+    // Items Table
+    page.setFont(boldFont);
+    page.setFontSize(11);
+    page.drawText("Issued Items", { x: margin, y, font: boldFont });
+    y -= lineSpacing * 1.5;
+
+    const tableTopY = y;
+    const colWidths = [250, 100, 100]; // Item Name, Item ID, Qty Issued
+    const headers = ["Item Name", "Item ID", "Quantity Issued"];
+    let currentX = margin;
+
+    page.setFont(boldFont);
+    page.setFontSize(10);
+    headers.forEach((header, i) => {
+      page.drawText(header, { x: currentX + 2, y, font: boldFont });
+      currentX += colWidths[i];
+    });
+    y -= 5;
+    page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 0.5, color: rgb(0.5, 0.5, 0.5) });
+    y -= lineSpacing;
+
+    page.setFont(font);
+    page.setFontSize(9);
+    
+    const issuedItems = reqData.items?.filter(item => (item.quantityIssued ?? 0) > 0) || [];
+
+    if (issuedItems.length > 0) {
+      issuedItems.forEach(item => {
+        if (y < margin + lineSpacing * 2) { // Check for page break
+          page.addPage(PageSizes.A4);
+          y = height - margin;
+          // Optionally redraw headers on new page for very long tables
+           currentX = margin;
+           page.setFont(boldFont);
+           page.setFontSize(10);
+           headers.forEach((header, i) => {
+             page.drawText(header, { x: currentX + 2, y, font: boldFont });
+             currentX += colWidths[i];
+           });
+           y -= 5;
+           page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 0.5, color: rgb(0.5, 0.5, 0.5) });
+           y -= lineSpacing;
+           page.setFont(font);
+           page.setFontSize(9);
+        }
+        currentX = margin;
+        page.drawText(item.inventoryItemName || 'N/A', { x: currentX + 2, y });
+        currentX += colWidths[0];
+        page.drawText(item.inventoryItemId, { x: currentX + 2, y });
+        currentX += colWidths[1];
+        page.drawText((item.quantityIssued || 0).toString(), { x: currentX + 2, y });
+        y -= lineSpacing;
+      });
+    } else {
+        page.drawText("No items have been issued for this requisition.", { x: margin, y, font: font, size: 9, color: rgb(0.5,0.5,0.5) });
+        y -= lineSpacing;
+    }
+
+
+    // Receiver Confirmation Section
+    y -= sectionGap * 2; // More space before this section
+    if (y < margin + lineSpacing * 4) { // Check if enough space for signature lines
+        page.addPage(PageSizes.A4);
+        y = height - margin;
+    }
+
+    page.setFont(boldFont);
+    page.setFontSize(11);
+    page.drawText("Received By:", { x: margin, y, font: boldFont });
+    y -= lineSpacing * 1.5;
+
+    page.setFont(font);
+    page.setFontSize(10);
+    const fieldWidth = (width - 2 * margin - 20) / 2; // For two fields per line
+    const signatureLineY = y - lineSpacing;
+
+    page.drawText("Name:", { x: margin, y });
+    page.drawLine({ start: { x: margin + 40, y: y - 2 }, end: { x: margin + 40 + fieldWidth * 0.8, y: y - 2 }, thickness: 0.5 });
+    
+    page.drawText("Date:", { x: margin + 40 + fieldWidth * 0.8 + 20, y });
+    page.drawLine({ start: { x: margin + 40 + fieldWidth * 0.8 + 20 + 35, y: y - 2 }, end: { x: width - margin, y: y - 2 }, thickness: 0.5 });
+    
+    y -= lineSpacing * 2;
+
+    page.drawText("Signature:", { x: margin, y });
+    page.drawLine({ start: { x: margin + 60, y: y - 2 }, end: { x: margin + 60 + fieldWidth, y: y - 2 }, thickness: 0.5 });
+
+
+    const pdfBytes = await pdfDoc.save();
+    const base64String = Buffer.from(pdfBytes).toString('base64');
+    return `data:application/pdf;base64,${base64String}`;
+
+  } catch (error) {
+    console.error("Error generating Requisition PDF:", error);
+    throw new Error(`Failed to generate Requisition PDF: ${(error as Error).message}`);
+  }
+}
     
     
+
 
