@@ -18,6 +18,10 @@ import type { Database } from 'sqlite';
 import * as XLSX from 'xlsx';
 import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 
+// PDFMake imports - ensure fonts are configured if not using defaults
+import PdfPrinter from 'pdfmake';
+import type { TDocumentDefinitions } from 'pdfmake/interfaces';
+
 
 async function ensureDirExists(dirPath: string) {
   try {
@@ -776,6 +780,160 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
     })),
   };
 }
+
+const fonts = {
+  Roboto: {
+    normal: Buffer.from(require('pdfmake/build/vfs_fonts.js').pdfMake.vfs['Roboto-Regular.ttf'], 'base64'),
+    bold: Buffer.from(require('pdfmake/build/vfs_fonts.js').pdfMake.vfs['Roboto-Medium.ttf'], 'base64'),
+    italics: Buffer.from(require('pdfmake/build/vfs_fonts.js').pdfMake.vfs['Roboto-Italic.ttf'], 'base64'),
+    bolditalics: Buffer.from(require('pdfmake/build/vfs_fonts.js').pdfMake.vfs['Roboto-MediumItalic.ttf'], 'base64'),
+  }
+};
+
+export async function generateStockMovementPdfAction(reportData: StockMovementReport): Promise<string> {
+  const printer = new PdfPrinter(fonts);
+
+  const movementTableBody = [
+    [
+      { text: 'Date', style: 'tableHeader' },
+      { text: 'Type', style: 'tableHeader' },
+      { text: 'Reference', style: 'tableHeader' },
+      { text: 'Qty Changed', style: 'tableHeader', alignment: 'right' },
+      { text: 'Balance', style: 'tableHeader', alignment: 'right' },
+      { text: 'Notes', style: 'tableHeader' },
+      { text: 'User', style: 'tableHeader' },
+    ],
+    ...reportData.movements.map(mov => [
+      mov.movementDate,
+      mov.movementType.replace(/_/g, ' '),
+      mov.referenceId || '-',
+      { text: mov.quantityChanged > 0 ? `+${mov.quantityChanged}` : mov.quantityChanged.toString(), alignment: 'right' },
+      { text: mov.balanceAfterMovement.toString(), alignment: 'right' },
+      mov.notes || '-',
+      mov.userName || mov.userId || '-',
+    ])
+  ];
+
+  if (reportData.movements.length === 0) {
+    movementTableBody.push([{ text: 'No movements recorded for this period.', colSpan: 7, alignment: 'center', italics: true, margin: [0, 10, 0, 10] }]);
+  }
+
+  const docDefinition: TDocumentDefinitions = {
+    pageSize: 'A4',
+    pageOrientation: 'landscape',
+    pageMargins: [40, 60, 40, 60], // [left, top, right, bottom]
+    header: {
+      text: `Stock Movement Report - ${reportData.inventoryItemName} (${reportData.inventoryItemId})`,
+      style: 'header',
+      alignment: 'center',
+      margin: [0, 20, 0, 0], // [left, top, right, bottom]
+    },
+    footer: function(currentPage, pageCount) {
+      return {
+        text: `Page ${currentPage.toString()} of ${pageCount}`,
+        alignment: 'center',
+        style: 'footer',
+        margin: [0,0,0,20] // Push footer up a bit
+      };
+    },
+    content: [
+      {
+        text: `Period: ${reportData.periodFrom} to ${reportData.periodTo}`,
+        style: 'subheader',
+        margin: [0, 0, 0, 10], // [left, top, right, bottom]
+      },
+      {
+        style: 'summaryTable',
+        table: {
+          widths: ['*', '*', '*', '*'],
+          body: [
+            [
+              { text: 'Opening Stock:', bold: true }, reportData.openingStock.toString(),
+              { text: 'Total In (+):', bold: true }, reportData.totalIn.toString(),
+            ],
+            [
+              { text: 'Closing Stock:', bold: true }, reportData.closingStock.toString(),
+              { text: 'Total Out (-):', bold: true }, reportData.totalOut.toString(),
+            ],
+          ]
+        },
+        layout: 'noBorders',
+        margin: [0, 0, 0, 20],
+      },
+      {
+        text: 'Movement Details:',
+        style: 'subheader',
+        margin: [0, 0, 0, 5],
+      },
+      {
+        style: 'movementsTable',
+        table: {
+          headerRows: 1,
+          widths: ['auto', 'auto', 'auto', 'auto', 'auto', '*', 'auto'], // Adjust widths as needed
+          body: movementTableBody,
+        },
+        layout: {
+          hLineWidth: function (i, node) { return (i === 0 || i === node.table.body.length) ? 1 : 1; },
+          vLineWidth: function (i, node) { return 1; },
+          hLineColor: function (i, node) { return '#AAAAAA'; },
+          vLineColor: function (i, node) { return '#AAAAAA'; },
+          paddingLeft: function(i, node) { return 4; },
+          paddingRight: function(i, node) { return 4; },
+          paddingTop: function(i, node) { return 2; },
+          paddingBottom: function(i, node) { return 2; }
+        }
+      },
+    ],
+    styles: {
+      header: {
+        fontSize: 18,
+        bold: true,
+        margin: [0, 0, 0, 10]
+      },
+      subheader: {
+        fontSize: 14,
+        bold: true,
+        margin: [0, 10, 0, 5]
+      },
+      summaryTable: {
+        fontSize: 10,
+      },
+      movementsTable: {
+        fontSize: 9,
+      },
+      tableHeader: {
+        bold: true,
+        fontSize: 10,
+        color: 'black',
+        fillColor: '#EEEEEE',
+      },
+      footer: {
+        fontSize: 8,
+        italics: true,
+      }
+    },
+    defaultStyle: {
+      font: 'Roboto', // Ensure Roboto font is used
+    }
+  };
+
+  const pdfDoc = printer.createPdfKitDocument(docDefinition);
+  
+  return new Promise<string>((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    pdfDoc.on('data', chunk => chunks.push(chunk));
+    pdfDoc.on('end', () => {
+      const result = Buffer.concat(chunks);
+      resolve(`data:application/pdf;base64,${result.toString('base64')}`);
+    });
+    pdfDoc.on('error', err => {
+      console.error("Error generating PDF stream:", err);
+      reject(err);
+    });
+    pdfDoc.end();
+  });
+}
     
 
     
+

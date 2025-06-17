@@ -30,8 +30,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { SelectItem as SelectItemType, StockMovementReport, StockMovement } from "@/types";
-import { getStockMovementDetailsAction } from "@/app/(app)/inventory/actions"; 
+import type { SelectItem as SelectItemType, StockMovementReport } from "@/types";
+import { getStockMovementDetailsAction, generateStockMovementPdfAction } from "@/app/(app)/inventory/actions"; 
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
@@ -50,6 +50,7 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
   });
   const [reportData, setReportData] = React.useState<StockMovementReport | null>(null);
   const [isLoadingReport, setIsLoadingReport] = React.useState(false);
+  const [isGeneratingPdf, setIsGeneratingPdf] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const { toast } = useToast();
 
@@ -93,10 +94,32 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
   };
 
   const handlePrint = () => {
-    // This direct call might be blocked by sandbox restrictions in some environments (like IDX).
-    // User might need to use browser's print functionality (Ctrl/Cmd+P).
     window.print();
   };
+
+  const handleDownloadPdf = async () => {
+    if (!reportData) {
+      toast({ title: "No Report Data", description: "Please generate a report first.", variant: "default" });
+      return;
+    }
+    setIsGeneratingPdf(true);
+    try {
+      const pdfDataUri = await generateStockMovementPdfAction(reportData);
+      const link = document.createElement('a');
+      link.href = pdfDataUri;
+      link.download = `StockMovementReport_${reportData.inventoryItemName.replace(/\s/g, '_')}_${reportData.periodFrom}_to_${reportData.periodTo}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: "PDF Downloaded", description: "The report has been downloaded." });
+    } catch (err) {
+      console.error("Error generating PDF:", err);
+      toast({ title: "PDF Generation Failed", description: (err as Error).message || "Could not generate PDF.", variant: "destructive" });
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
 
   return (
     <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[90vh] flex flex-col print:max-h-none print:shadow-none print:border-none">
@@ -104,7 +127,6 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
         <DialogTitle>Stock Movement Report</DialogTitle>
         <DialogDescription>
           Select an item and a period to view its stock movement details.
-          To save as PDF, use your browser's print dialog options.
         </DialogDescription>
       </DialogHeader>
       
@@ -218,8 +240,12 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
             <Button type="button" onClick={handlePrint} variant="outline">
               <Printer className="mr-2 h-4 w-4" /> Print Report
             </Button>
-            <Button type="button" onClick={handlePrint} variant="outline">
-              <Download className="mr-2 h-4 w-4" /> Download PDF
+            <Button type="button" onClick={handleDownloadPdf} variant="outline" disabled={isGeneratingPdf}>
+              {isGeneratingPdf ? (
+                <><span className="animate-spin mr-2 h-4 w-4 border-2 border-current border-t-transparent rounded-full"></span> Generating...</>
+              ) : (
+                <><Download className="mr-2 h-4 w-4" /> Download PDF</>
+              )}
             </Button>
           </>
         )}
@@ -232,3 +258,4 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
     </DialogContent>
   );
 }
+
