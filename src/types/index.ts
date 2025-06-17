@@ -17,6 +17,30 @@ export interface DashboardStat {
   color?: string; 
 }
 
+// New types for Recent Activity
+export type ActivityType = 
+  | 'INVENTORY_NEW' 
+  | 'REQUISITION_NEW' 
+  | 'REQUISITION_STATUS_CHANGE'
+  | 'PO_NEW'
+  | 'PO_STATUS_CHANGE'
+  | 'STOCK_MOVEMENT_PO_RECEIPT'
+  | 'STOCK_MOVEMENT_REQ_ISSUE'
+  | 'STOCK_MOVEMENT_REQ_RETURN'
+  | 'STOCK_MOVEMENT_ADJUSTMENT'
+  | 'STOCK_MOVEMENT_INITIAL';
+
+export interface ActivityLogEntry {
+  id: string; // Unique ID for the log entry (e.g., movement ID, item ID, PO ID)
+  timestamp: string; // ISO date string
+  type: ActivityType;
+  description: string;
+  referenceId?: string; // Original ID of the item, PO, Req
+  linkHref?: string;
+  user?: string; // Optional user associated with the activity
+  details?: Record<string, any>; // Optional additional details
+}
+
 export interface DashboardData {
   totalInventoryItems: number;
   lowStockItems: number;
@@ -24,6 +48,7 @@ export interface DashboardData {
   openPurchaseOrders: number;
   monthlyExpenditure: number;
   totalInventoryValue: number;
+  recentActivities?: ActivityLogEntry[];
   error?: string; // Optional error message
 }
 

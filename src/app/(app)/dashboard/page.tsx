@@ -1,16 +1,54 @@
 
+import Link from 'next/link';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import type { DashboardStat, DashboardData } from '@/types';
-import { Boxes, AlertTriangle, FileClock, Truck, Banknote, CircleDollarSign } from 'lucide-react';
+import type { DashboardStat, DashboardData, ActivityLogEntry, ActivityType } from '@/types';
+import { 
+    Boxes, AlertTriangle, FileClock, Truck, Banknote, CircleDollarSign, 
+    PackagePlus, FilePlus2, ShoppingCart, History as HistoryIcon, MoveUp, MoveDown, Settings2, FileCheck2, FileX2, PackageCheck, Ban, Activity, Info
+} from 'lucide-react';
 import { getDashboardData } from './actions';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Terminal } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Avatar, AvatarFallback } from '@/components/ui/avatar';
+import { Button } from '@/components/ui/button';
+import { formatDistanceToNowStrict, parseISO } from 'date-fns';
+
+function getActivityIcon(type: ActivityType) {
+    switch (type) {
+        case 'INVENTORY_NEW': return <PackagePlus className="h-5 w-5 text-green-500" />;
+        case 'REQUISITION_NEW': return <FilePlus2 className="h-5 w-5 text-blue-500" />;
+        case 'PO_NEW': return <ShoppingCart className="h-5 w-5 text-purple-500" />;
+        case 'STOCK_MOVEMENT_PO_RECEIPT': return <MoveDown className="h-5 w-5 text-teal-500" />;
+        case 'STOCK_MOVEMENT_REQ_ISSUE': return <MoveUp className="h-5 w-5 text-orange-500" />;
+        case 'STOCK_MOVEMENT_REQ_RETURN': return <HistoryIcon className="h-5 w-5 text-yellow-500" />;
+        case 'STOCK_MOVEMENT_ADJUSTMENT': return <Settings2 className="h-5 w-5 text-gray-500" />;
+        case 'STOCK_MOVEMENT_INITIAL': return <PackagePlus className="h-5 w-5 text-sky-500" />;
+        // Add more cases for REQUISITION_STATUS_CHANGE, PO_STATUS_CHANGE if needed
+        default: return <Activity className="h-5 w-5 text-muted-foreground" />;
+    }
+}
+
+function getActivityFallbackLetter(type: ActivityType): string {
+    switch (type) {
+        case 'INVENTORY_NEW': return 'I';
+        case 'REQUISITION_NEW': return 'R';
+        case 'PO_NEW': return 'P';
+        case 'STOCK_MOVEMENT_PO_RECEIPT': 
+        case 'STOCK_MOVEMENT_REQ_ISSUE':
+        case 'STOCK_MOVEMENT_REQ_RETURN':
+        case 'STOCK_MOVEMENT_ADJUSTMENT':
+        case 'STOCK_MOVEMENT_INITIAL':
+            return 'S';
+        default: return 'A';
+    }
+}
 
 export default async function DashboardPage() {
   const data: DashboardData = await getDashboardData();
 
-  if (data.error) {
+  if (data.error && !data.recentActivities) { // Only show full error if everything failed
     return (
       <>
         <PageHeader title="Dashboard" description="Overview of your cabinet console activities." />
@@ -41,6 +79,15 @@ export default async function DashboardPage() {
   return (
     <>
       <PageHeader title="Dashboard" description="Overview of your cabinet console activities." />
+      {data.error && data.recentActivities && ( // Show a less intrusive error if only recent activities failed or partial data came through
+         <Alert variant="default" className="mb-4 border-amber-500 bg-amber-50 text-amber-700 dark:bg-amber-700/20 dark:text-amber-300 dark:border-amber-600">
+          <Info className="h-4 w-4" />
+          <AlertTitle>Partial Data Error</AlertTitle>
+          <AlertDescription>
+            There was an issue loading some dashboard components. The displayed data might be incomplete. Error: {data.error}
+          </AlertDescription>
+        </Alert>
+      )}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {stats.map((stat) => (
           <Card key={stat.title} className="shadow-lg hover:shadow-xl transition-shadow duration-300">
@@ -65,8 +112,38 @@ export default async function DashboardPage() {
             <CardTitle>Recent Activity</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-muted-foreground">No recent activity to display. (Placeholder)</p>
-            {/* Placeholder for recent activity feed - to be implemented if requested */}
+            {data.recentActivities && data.recentActivities.length > 0 ? (
+              <ScrollArea className="h-[300px]">
+                <ul className="space-y-4">
+                  {data.recentActivities.map((activity) => (
+                    <li key={activity.id + activity.timestamp} className="flex items-start space-x-3">
+                      <Avatar className="h-8 w-8 border">
+                        {/* Icon can be rendered here if available in activity object or mapped */}
+                        {getActivityIcon(activity.type)}
+                        <AvatarFallback className="text-xs">{getActivityFallbackLetter(activity.type)}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1">
+                        <p className="text-sm text-foreground leading-tight">
+                            {activity.linkHref ? (
+                                <Link href={activity.linkHref} className="hover:underline font-medium">{activity.description.split('.')[0]}.</Link>
+                            ) : (
+                                <span className="font-medium">{activity.description.split('.')[0]}.</span>
+                            )}
+                            {activity.description.includes('.') && activity.description.split('.').slice(1).join('.').trim() && (
+                                <span className="text-muted-foreground"> {activity.description.split('.').slice(1).join('.').trim()}</span>
+                            )}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDistanceToNowStrict(parseISO(activity.timestamp), { addSuffix: true })}
+                        </p>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </ScrollArea>
+            ) : (
+              <p className="text-muted-foreground">No recent activity to display.</p>
+            )}
           </CardContent>
         </Card>
         <Card className="shadow-lg">
@@ -74,9 +151,15 @@ export default async function DashboardPage() {
             <CardTitle>Quick Links</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col space-y-2">
-            <a href="/inventory/new" className="text-primary hover:underline">Add New Item</a>
-            <a href="/requisitions/new" className="text-primary hover:underline">Create Requisition</a>
-            <a href="/purchase-orders/new" className="text-primary hover:underline">Create Purchase Order</a>
+            <Button variant="link" asChild className="p-0 justify-start text-primary hover:underline h-auto">
+                <Link href="/inventory/new">Add New Item</Link>
+            </Button>
+             <Button variant="link" asChild className="p-0 justify-start text-primary hover:underline h-auto">
+                <Link href="/requisitions/new">Create Requisition</Link>
+            </Button>
+            <Button variant="link" asChild className="p-0 justify-start text-primary hover:underline h-auto">
+                 <Link href="/purchase-orders/new">Create Purchase Order</Link>
+            </Button>
           </CardContent>
         </Card>
       </div>
