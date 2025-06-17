@@ -101,13 +101,22 @@ export function ApprovePurchaseOrderItemsDialog({ purchaseOrder, setOpen, onAppr
 
     try {
       await approvePurchaseOrderItemsAction(values.purchaseOrderId, itemsToSubmit);
-      // Redirect is handled by server action
-      // No explicit success toast here, it's handled by the detail page after redirect
+      // This part should ideally not be reached if the action always redirects on success.
+      // If it is, it implies the action completed but didn't throw a redirect error (e.g., an internal error handled by the action itself).
+      toast({
+        title: "Approval Processed",
+        description: "Approval decisions were submitted, but a redirect did not occur as expected.",
+        variant: "default"
+      });
+      setOpen(false);
+      setIsSubmitting(false);
+      onApprovalProcessed(); // Refresh data on parent page
     } catch (error: any) {
       if (error.digest?.startsWith('NEXT_REDIRECT')) {
-        setOpen(false); 
+        setOpen(false);
         setIsSubmitting(false);
-        throw error; 
+        onApprovalProcessed(); // Attempt to refresh parent data immediately
+        throw error; // Re-throw to let Next.js handle the redirect
       }
       
       console.error("Failed to process PO item approvals:", error);
