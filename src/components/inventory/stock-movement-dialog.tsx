@@ -93,7 +93,8 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
   };
 
   const handlePrint = () => {
-    console.log("handlePrint called in StockMovementDialog"); // Diagnostic log
+    // This direct call is blocked by sandbox restrictions in IDX.
+    // User should use browser's print functionality.
     window.print();
   };
 
