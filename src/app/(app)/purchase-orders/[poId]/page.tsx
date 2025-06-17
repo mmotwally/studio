@@ -5,9 +5,9 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation'; // useParams is correct for App Router
+import { useRouter } from 'next/navigation'; 
 import { ArrowLeft, Edit, MoreVertical, Printer, FileX2, ShoppingCart, Truck, UserCircle, CalendarDays, FileTextIcon, Sigma, Banknote, Tag } from 'lucide-react';
-import { getPurchaseOrderById, updatePurchaseOrderStatusAction } from '../actions'; // Assuming update status action exists
+import { getPurchaseOrderById, updatePurchaseOrderStatusAction } from '../actions'; 
 import type { PurchaseOrder, PurchaseOrderStatus, PurchaseOrderItem } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -18,9 +18,9 @@ import { Skeleton } from '@/components/ui/skeleton';
 // import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'; // For more actions
 
 interface PurchaseOrderDetailPageProps {
-  params: { // params is an object, not a Promise here for client components
+  params: Promise<{ 
     poId: string;
-  };
+  }>;
 }
 
 function getStatusBadgeVariant(status: PurchaseOrderStatus) {
@@ -55,7 +55,8 @@ function getStatusColorClass(status: PurchaseOrderStatus): string {
   }
 }
 
-export default function PurchaseOrderDetailPage({ params }: PurchaseOrderDetailPageProps) {
+export default function PurchaseOrderDetailPage({ params: paramsPromise }: PurchaseOrderDetailPageProps) {
+  const params = React.use(paramsPromise);
   const { poId } = params;
   const [purchaseOrder, setPurchaseOrder] = React.useState<PurchaseOrder | null>(null);
   const [isLoading, setIsLoading] = React.useState(true);
