@@ -6,7 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation'; 
-import { ArrowLeft, Edit, MoreVertical, Printer, FileX2, ShoppingCart, Truck, UserCircle, CalendarDays, FileTextIcon, Sigma, Banknote, Tag, CheckCircle, Send } from 'lucide-react';
+import { Dialog, DialogTrigger } from '@/components/ui/dialog';
+import { ArrowLeft, Edit, MoreVertical, Printer, FileX2, ShoppingCart, Truck, UserCircle, CalendarDays, FileTextIcon, Sigma, Banknote, Tag, CheckCircle, Send, ShieldCheck, PackageSearch } from 'lucide-react';
 import { getPurchaseOrderById, updatePurchaseOrderStatusAction } from '../actions'; 
 import type { PurchaseOrder, PurchaseOrderStatus, PurchaseOrderItem } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -16,7 +17,7 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { buttonVariants } from '@/components/ui/button'; // Import buttonVariants
+import { buttonVariants } from '@/components/ui/button';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,6 +28,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { ApprovePurchaseOrderItemsDialog } from '@/components/purchase-orders/approve-purchase-order-items-dialog';
 
 
 interface PurchaseOrderDetailPageProps {
@@ -78,6 +80,7 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
   const searchParams = useSearchParams();
   const [isPending, startTransition] = React.useTransition();
   const [isCancelAlertOpen, setIsCancelAlertOpen] = React.useState(false);
+  const [isApproveItemsDialogOpen, setIsApproveItemsDialogOpen] = React.useState(false);
 
    React.useEffect(() => {
     let toastShown = false;
@@ -87,12 +90,17 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
     } else if (searchParams.get('created') === 'true') {
       toast({ title: "Success", description: "Purchase Order created successfully." });
       toastShown = true;
+    } else if (searchParams.get('approval_success') === 'true') {
+      toast({ title: "Success", description: "Item approval decisions processed." });
+      toastShown = true;
     }
+
 
     if (toastShown) {
       const newSearchParams = new URLSearchParams(searchParams.toString());
       newSearchParams.delete('updated');
       newSearchParams.delete('created');
+      newSearchParams.delete('approval_success');
       router.replace(`/purchase-orders/${poId}?${newSearchParams.toString()}`, { scroll: false });
     }
   }, [searchParams, poId, router, toast]);
@@ -137,6 +145,13 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
   const handleConfirmCancel = () => {
     setIsCancelAlertOpen(false);
     handleStatusUpdate('CANCELLED');
+  };
+
+  const handleApprovalDialogClose = (processed: boolean) => {
+    setIsApproveItemsDialogOpen(false);
+    if (processed) {
+        fetchPurchaseOrder(); // Re-fetch if items were approved
+    }
   };
 
 
@@ -192,6 +207,9 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
   
   const canEdit = purchaseOrder.status === 'DRAFT' || purchaseOrder.status === 'PENDING_APPROVAL';
   const canCancel = !['RECEIVED', 'CANCELLED'].includes(purchaseOrder.status);
+  const canApproveItems = purchaseOrder.status === 'PENDING_APPROVAL';
+  const canMarkAsOrdered = purchaseOrder.status === 'APPROVED';
+  const canReceiveStock = purchaseOrder.status === 'ORDERED' || purchaseOrder.status === 'PARTIALLY_RECEIVED';
 
   return (
     <>
@@ -288,24 +306,19 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
                         <Send className="mr-2 h-4 w-4" /> Submit for Approval
                     </Button>
                  )}
-                 {purchaseOrder.status === 'PENDING_APPROVAL' && (
-                    <>
-                        <Button onClick={() => handleStatusUpdate('APPROVED')} variant="default" disabled={isPending}>
-                            <CheckCircle className="mr-2 h-4 w-4" /> Approve PO
-                        </Button>
-                        <Button onClick={() => handleStatusUpdate('DRAFT')} variant="outline" disabled={isPending}>
-                             Revert to Draft
-                        </Button>
-                    </>
+                 {canApproveItems && (
+                    <Button onClick={() => setIsApproveItemsDialogOpen(true)} variant="default" disabled={isPending}>
+                        <ShieldCheck className="mr-2 h-4 w-4" /> Approve Items
+                    </Button>
                  )}
-                  {purchaseOrder.status === 'APPROVED' && (
+                  {canMarkAsOrdered && (
                     <Button onClick={() => handleStatusUpdate('ORDERED')} disabled={isPending}>
                         <Send className="mr-2 h-4 w-4" /> Mark as Ordered
                     </Button>
                  )}
-                 {purchaseOrder.status === 'ORDERED' && ( // This will eventually open a "Receive Stock" dialog
+                 {canReceiveStock && ( 
                     <Button onClick={() => router.push(`/purchase-orders/${poId}/receive`)} disabled={isPending}> 
-                        <Truck className="mr-2 h-4 w-4" /> Receive Stock
+                        <PackageSearch className="mr-2 h-4 w-4" /> Receive Stock
                     </Button>
                  )}
                  {purchaseOrder.status === 'RECEIVED' && (
@@ -417,6 +430,15 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {isApproveItemsDialogOpen && purchaseOrder && (
+         <Dialog open={isApproveItemsDialogOpen} onOpenChange={setIsApproveItemsDialogOpen}>
+             <ApprovePurchaseOrderItemsDialog
+                purchaseOrder={purchaseOrder}
+                setOpen={setIsApproveItemsDialogOpen}
+                onApprovalProcessed={() => handleApprovalDialogClose(true)}
+            />
+         </Dialog>
+      )}
     </>
   );
 }

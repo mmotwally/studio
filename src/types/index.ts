@@ -270,16 +270,17 @@ export interface PurchaseOrder {
 }
 
 export interface PurchaseOrderItem {
-  id: string;
+  id: string; // This is the purchase_order_item_id
   purchaseOrderId: string;
   inventoryItemId: string;
   inventoryItemName?: string; // For display
+  inventoryItemCurrentStock?: number; // For display/validation during receiving
   description?: string | null; // Can be custom or from inventory item
   quantityOrdered: number;
   unitCost: number;
-  quantityApproved?: number | null;
+  quantityApproved?: number | null; // Quantity approved by manager
   totalCost?: number; // Calculated: quantityOrdered * unitCost
-  quantityReceived: number;
+  quantityReceived: number; // Total quantity received so far for this item
   notes?: string | null;
 }
 
@@ -288,7 +289,7 @@ export interface PurchaseOrderItemFormValues {
   description?: string | null;
   quantityOrdered: number;
   unitCost: number;
-  quantityApproved?: number | null; // Added for consistency, though approval is a separate step
+  // quantityApproved is not part of the main PO form values, it's handled in a separate approval step
 }
 
 export interface PurchaseOrderFormValues {
@@ -301,5 +302,36 @@ export interface PurchaseOrderFormValues {
   items: PurchaseOrderItemFormValues[];
 }
 
+// For Approving PO Items
+export interface ApprovePOItemFormValues {
+  poItemId: string; // Corresponds to PurchaseOrderItem.id
+  inventoryItemId: string;
+  itemName: string;
+  quantityOrdered: number;
+  quantityApproved: number;
+}
+
+export interface ApprovePOFormValues {
+  purchaseOrderId: string;
+  items: ApprovePOItemFormValues[];
+}
+
+// For Receiving PO Items
+export interface ReceivePOItemFormValues {
+  poItemId: string; // Corresponds to PurchaseOrderItem.id
+  inventoryItemId: string;
+  itemName: string;
+  quantityOrdered: number;
+  quantityApproved: number | null; // What was approved
+  quantityAlreadyReceived: number; // What's been received so far
+  quantityToReceiveNow: number; // What's being received in this transaction
+  inventoryItemCurrentStock?: number; // For display/context
+  unitCostAtReceipt: number; // The cost at which these items are being received (usually from POItem.unitCost)
+}
+
+export interface ReceivePOFormValues {
+  purchaseOrderId: string;
+  items: ReceivePOItemFormValues[];
+}
 
     
