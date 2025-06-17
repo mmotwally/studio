@@ -65,7 +65,6 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
         inventoryItemId: item.inventoryItemId,
         itemName: item.inventoryItemName || "Unknown Item",
         quantityRequested: item.quantityRequested,
-        // Default quantityToApprove to original requested, or 0 if already decided as 0, or previously approved quantity
         quantityToApprove: item.quantityApproved === null || item.quantityApproved === undefined ? item.quantityRequested : item.quantityApproved,
     })) || [],
   };
@@ -83,6 +82,7 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
   async function onSubmit(values: ApproveRequisitionFormValues) {
     setIsSubmitting(true);
     setServerError(null);
+    let caughtError: any = null;
 
     const itemsToSubmit = values.items.map(item => ({
         requisitionItemId: item.requisitionItemId,
@@ -90,17 +90,26 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
     }));
 
     try {
+      // This action is expected to redirect on success or throw an application error.
       await approveRequisitionItemsAction(values.requisitionId, itemsToSubmit);
+      
+      // If we reach here, it means the action completed without an error and without redirecting,
+      // which is not the typical success path for this action as it's designed to redirect.
+      // This part acts as a fallback.
       toast({
-        title: "Success",
-        description: "Requisition item approval decisions processed.",
+        title: "Processing Complete",
+        description: "Approval decisions sent. The page should refresh shortly.",
       });
-      onApprovalProcessed(); 
+      if (onApprovalProcessed) onApprovalProcessed(); 
       setOpen(false);
+
     } catch (error: any) {
+      caughtError = error; // Capture error to check for redirect in finally
       if (error.digest?.startsWith('NEXT_REDIRECT')) {
+        // Re-throw the redirect error so Next.js can handle it
         throw error; 
       }
+      // Handle actual application errors (not redirects)
       console.error("Failed to process item approvals:", error);
       const errorMessage = error instanceof Error ? error.message : "Could not process approvals. Please try again.";
       setServerError(errorMessage); 
@@ -110,9 +119,10 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
         variant: "destructive",
       });
     } finally {
-      // Check if component is still mounted before setting state
-       if (!(isSubmitting && (serverError === null && !((Error as any).digest?.startsWith('NEXT_REDIRECT'))))) {
-         setIsSubmitting(false);
+      // Only set isSubmitting to false if no redirect was thrown and caught.
+      // If a redirect is thrown, the component will unmount, so no need to update state.
+      if (!(caughtError && (caughtError as any).digest?.startsWith('NEXT_REDIRECT'))) {
+        setIsSubmitting(false);
       }
     }
   }
@@ -175,7 +185,7 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
                               {...formField} 
                               placeholder="Qty" 
                               min="0"
-                              max={itemData.quantityRequested} // Ensure client-side max is original requested
+                              max={itemData.quantityRequested}
                               onChange={(e) => {
                                 const val = parseInt(e.target.value, 10);
                                 formField.onChange(isNaN(val) ? 0 : val);
