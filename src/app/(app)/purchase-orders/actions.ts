@@ -415,15 +415,15 @@ export async function receivePurchaseOrderItemsAction(
   await db.run('BEGIN TRANSACTION');
 
   try {
-    const lastUpdated = new Date().toISOString();
+    const currentTime = new Date().toISOString();
 
     for (const item of itemsReceived) {
       if (item.quantityReceivedNow <= 0) {
-        continue; // Skip if no quantity is being received for this item
+        continue; 
       }
 
       const poItemDetails = await db.get<PurchaseOrderItem>(
-        'SELECT quantityApproved, quantityReceived, unitCost FROM purchase_order_items WHERE id = ? AND purchaseOrderId = ?',
+        'SELECT quantityOrdered, quantityApproved, quantityReceived, unitCost FROM purchase_order_items WHERE id = ? AND purchaseOrderId = ?',
         item.poItemId, purchaseOrderId
       );
 
@@ -431,7 +431,7 @@ export async function receivePurchaseOrderItemsAction(
         throw new Error(`Purchase order item ${item.poItemId} not found for PO ${purchaseOrderId}.`);
       }
       
-      const qtyApproved = poItemDetails.quantityApproved ?? poItemDetails.quantityOrdered; // Fallback to ordered if somehow not approved
+      const qtyApproved = poItemDetails.quantityApproved ?? poItemDetails.quantityOrdered; 
       const alreadyReceived = poItemDetails.quantityReceived || 0;
       const maxReceivable = qtyApproved - alreadyReceived;
 
@@ -447,29 +447,23 @@ export async function receivePurchaseOrderItemsAction(
         throw new Error(`Inventory item with ID ${item.inventoryItemId} not found.`);
       }
 
-      // Update inventory quantity
+      const newInventoryQuantity = (inventoryItem.quantity || 0) + item.quantityReceivedNow;
+
       await db.run(
-        'UPDATE inventory SET quantity = quantity + ?, lastUpdated = ? WHERE id = ?',
-        item.quantityReceivedNow,
-        lastUpdated,
+        'UPDATE inventory SET quantity = ?, lastUpdated = ?, lastPurchasePrice = ? WHERE id = ?',
+        newInventoryQuantity,
+        currentTime,
+        item.unitCostAtReceipt, 
         item.inventoryItemId
       );
       
-      // Update inventory lastPurchasePrice
-      await db.run(
-        'UPDATE inventory SET lastPurchasePrice = ? WHERE id = ?',
-        item.unitCostAtReceipt, // Use the cost from this PO receipt
-        item.inventoryItemId
-      );
-
-      // Update inventory averageCost
       const oldQuantity = inventoryItem.quantity || 0;
       const oldAverageCost = inventoryItem.averageCost || 0;
       let newAverageCost = oldAverageCost;
 
-      if (oldQuantity + item.quantityReceivedNow > 0) { // Avoid division by zero
-          newAverageCost = ((oldAverageCost * oldQuantity) + (item.quantityReceivedNow * item.unitCostAtReceipt)) / (oldQuantity + item.quantityReceivedNow);
-      } else if (item.quantityReceivedNow > 0) { // If old quantity was 0
+      if (newInventoryQuantity > 0) { 
+          newAverageCost = ((oldAverageCost * oldQuantity) + (item.quantityReceivedNow * item.unitCostAtReceipt)) / newInventoryQuantity;
+      } else if (item.quantityReceivedNow > 0) { 
           newAverageCost = item.unitCostAtReceipt;
       }
       
@@ -479,16 +473,28 @@ export async function receivePurchaseOrderItemsAction(
         item.inventoryItemId
       );
 
-      // Update PO item quantityReceived
       await db.run(
         'UPDATE purchase_order_items SET quantityReceived = quantityReceived + ? WHERE id = ? AND purchaseOrderId = ?',
         item.quantityReceivedNow,
         item.poItemId,
         purchaseOrderId
       );
+
+      // Log stock movement
+      await db.run(
+        `INSERT INTO stock_movements (id, inventoryItemId, movementType, quantityChanged, balanceAfterMovement, referenceId, movementDate, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        crypto.randomUUID(),
+        item.inventoryItemId,
+        'PO_RECEIPT',
+        item.quantityReceivedNow,
+        newInventoryQuantity,
+        purchaseOrderId,
+        currentTime,
+        `Received via PO ${purchaseOrderId}`
+      );
     }
 
-    // Determine new PO status
     const allPoItems = await db.all<PurchaseOrderItem>(
       'SELECT quantityApproved, quantityOrdered, quantityReceived FROM purchase_order_items WHERE purchaseOrderId = ?',
       purchaseOrderId
@@ -507,8 +513,6 @@ export async function receivePurchaseOrderItemsAction(
     } else if (anyItemPartiallyReceived || allPoItems.some(pItem => (pItem.quantityReceived || 0) > 0)) {
       newPoStatus = 'PARTIALLY_RECEIVED';
     } else {
-      // If no items were received or fully received, keep current status (should be ORDERED)
-      // This branch might need refinement based on exact desired logic if no items are received.
       const currentPO = await db.get('SELECT status FROM purchase_orders WHERE id = ?', purchaseOrderId);
       newPoStatus = currentPO?.status as PurchaseOrderStatus || 'ORDERED';
     }
@@ -516,13 +520,19 @@ export async function receivePurchaseOrderItemsAction(
     await db.run(
       'UPDATE purchase_orders SET status = ?, lastUpdated = ? WHERE id = ?',
       newPoStatus,
-      lastUpdated,
+      currentTime,
       purchaseOrderId
     );
 
     await db.run('COMMIT');
   } catch (error) {
-    await db.run('ROLLBACK');
+    if (db) { // Ensure db is defined before trying to rollback
+        try {
+            await db.run('ROLLBACK');
+        } catch (rollbackError) {
+            console.error('Failed to rollback transaction for stock receipt:', rollbackError);
+        }
+    }
     console.error(`Failed to process stock receipt for PO ${purchaseOrderId}:`, error);
     if (error instanceof Error) {
       throw new Error(`Stock receiving failed: ${error.message}`);
@@ -533,5 +543,6 @@ export async function receivePurchaseOrderItemsAction(
   revalidatePath(`/purchase-orders/${purchaseOrderId}`);
   revalidatePath('/purchase-orders');
   revalidatePath('/inventory');
+  revalidatePath(`/inventory/${itemsReceived.map(i => i.inventoryItemId).join(',')}`); // Revalidate specific items
   redirect(`/purchase-orders/${purchaseOrderId}?receive_success=true`);
 }

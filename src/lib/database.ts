@@ -460,7 +460,11 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
     },
   ];
   
-  await db.run('DELETE FROM inventory'); // Clear existing inventory before seeding new set
+  await db.run('DELETE FROM inventory'); 
+  await db.run('DELETE FROM stock_movements'); // Clear stock movements when reseeding inventory
+
+  const seedDate = new Date().toISOString();
+
   for (const item of inventoryItemsData) {
     try {
       await db.run(
@@ -470,15 +474,29 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
          lastPurchasePrice=excluded.lastPurchasePrice, averageCost=excluded.averageCost, 
          lastUpdated=excluded.lastUpdated, lowStock=excluded.lowStock, minStockLevel=excluded.minStockLevel, maxStockLevel=excluded.maxStockLevel, categoryId=excluded.categoryId, subCategoryId=excluded.subCategoryId, locationId=excluded.locationId, supplierId=excluded.supplierId, unitId=excluded.unitId`,
         item.id, item.name, item.description, item.imageUrl, item.quantity, item.unitCost, 
-        item.unitCost, item.unitCost, // Initialize lastPurchasePrice and averageCost with unitCost
-        new Date().toISOString(), item.lowStock, item.minStockLevel, item.maxStockLevel,
+        item.unitCost, item.unitCost, 
+        seedDate, item.lowStock, item.minStockLevel, item.maxStockLevel,
         item.categoryId, item.subCategoryId, item.locationId, item.supplierId, item.unitId
       );
+
+      // Seed INITIAL_STOCK movement
+      await db.run(
+        `INSERT INTO stock_movements (id, inventoryItemId, movementType, quantityChanged, balanceAfterMovement, movementDate, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        crypto.randomUUID(),
+        item.id,
+        'INITIAL_STOCK',
+        item.quantity,
+        item.quantity, // Balance after initial stock is just the quantity
+        seedDate,
+        'Initial stock seeding'
+      );
+
     } catch (e) {
       console.warn(`Could not insert/update inventory item ${item.name} with ID ${item.id}: ${(e as Error).message}`);
     }
   }
-  console.log('Inventory Items seeded.');
+  console.log('Inventory Items and initial stock movements seeded.');
   console.log('Initial data seeding complete.');
 }
 

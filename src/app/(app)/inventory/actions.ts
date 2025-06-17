@@ -651,9 +651,8 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
     throw new Error(`Inventory item with ID ${inventoryItemId} not found.`);
   }
 
-  // Parse date strings and set to UTC boundaries
-  const fromDate = startOfDay(parseISO(fromDateString)); // parseISO assumes "yyyy-MM-dd" is UTC midnight
-  const toDate = endOfDay(parseISO(toDateString));     // endOfDay makes it end of that UTC day
+  const fromDate = startOfDay(parseISO(fromDateString)); 
+  const toDate = endOfDay(parseISO(toDateString));     
 
   const fromDateISO = format(fromDate, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
   const toDateISO = format(toDate, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
@@ -667,23 +666,7 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
     fromDateISO
   );
   
-  let openingStock = openingStockResult?.balance ?? 0;
-
-  if (!openingStockResult) {
-      const firstEverMovement = await db.get<{ balanceAfterMovement: number } | undefined>(
-        `SELECT balanceAfterMovement FROM stock_movements WHERE inventoryItemId = ? ORDER BY movementDate ASC, id ASC LIMIT 1`,
-        inventoryItemId
-      );
-      if (firstEverMovement && (await db.get(`SELECT COUNT(*) as count FROM stock_movements WHERE inventoryItemId = ? AND movementDate < ?`, inventoryItemId, fromDateISO))?.count === 0) {
-         // If the first movement is within or after the report period, and no movements before, opening stock is 0.
-         // This needs to be nuanced: if the first movement *is* the initial stock, it should be 0.
-         // For simplicity now, if no movements before fromDate, opening stock is 0.
-         openingStock = 0; 
-      } else {
-        openingStock = 0;
-      }
-  }
-
+  const openingStock = openingStockResult?.balance ?? 0;
 
   const movementsInPeriod = await db.all<StockMovement[]>(
     `SELECT sm.id, sm.inventoryItemId, i.name as inventoryItemName, sm.movementType, sm.quantityChanged, 
@@ -713,15 +696,15 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
   return {
     inventoryItemId: item.id,
     inventoryItemName: item.name,
-    periodFrom: fromDateString, // Return the input "yyyy-MM-dd" string
-    periodTo: toDateString,     // Return the input "yyyy-MM-dd" string
+    periodFrom: fromDateString, 
+    periodTo: toDateString,     
     openingStock,
     totalIn,
     totalOut,
     closingStock,
     movements: movementsInPeriod.map(m => ({
         ...m,
-        movementDate: format(parseISO(m.movementDate), "yyyy-MM-dd HH:mm") // Format for display (local time of server)
+        movementDate: format(parseISO(m.movementDate), "yyyy-MM-dd HH:mm") 
     })),
   };
 }
