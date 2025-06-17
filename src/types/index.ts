@@ -332,3 +332,41 @@ export interface ReceivePOFormValues {
   purchaseOrderId: string;
   items: ReceivePOItemFormValues[];
 }
+
+// Stock Movement Types
+export type StockMovementType = 
+  | 'INITIAL_STOCK'
+  | 'PO_RECEIPT'
+  | 'REQUISITION_ISSUE'
+  | 'ADJUSTMENT_IN'
+  | 'ADJUSTMENT_OUT'
+  | 'RETURN_TO_SUPPLIER' // Example for future use
+  | 'REQUISITION_RETURN'; // Stock returned from a cancelled/edited fulfilled requisition
+
+export interface StockMovement {
+  id: string;
+  inventoryItemId: string;
+  inventoryItemName?: string; // For display
+  movementType: StockMovementType;
+  quantityChanged: number; // Positive for IN, Negative for OUT
+  balanceAfterMovement: number;
+  referenceId?: string | null; // e.g., PO ID, Requisition ID
+  movementDate: string;
+  userId?: string | null;
+  userName?: string; // For display
+  notes?: string | null;
+}
+
+export interface StockMovementReport {
+  inventoryItemId: string;
+  inventoryItemName: string;
+  periodFrom: string;
+  periodTo: string;
+  openingStock: number;
+  totalIn: number;
+  totalOut: number;
+  closingStock: number;
+  movements: StockMovement[];
+}
+
+    

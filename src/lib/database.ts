@@ -170,6 +170,7 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       email TEXT NOT NULL UNIQUE,
       role TEXT,
       avatarUrl TEXT
+      -- In a real app, add password hash, salt, etc.
     );
   `);
 
@@ -178,6 +179,7 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
       description TEXT
+      -- Permissions would be linked here or in a separate table
     );
   `);
 
@@ -190,7 +192,7 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       bomNumber TEXT,
       dateCreated TEXT NOT NULL,
       dateNeeded TEXT,
-      status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL', 
+      status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL', -- PENDING_APPROVAL, APPROVED, REJECTED, FULFILLED, PARTIALLY_FULFILLED, CANCELLED
       notes TEXT,
       lastUpdated TEXT NOT NULL,
       FOREIGN KEY (requesterId) REFERENCES users(id) ON DELETE SET NULL,
@@ -206,10 +208,10 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       quantityRequested INTEGER NOT NULL,
       quantityApproved INTEGER, 
       quantityIssued INTEGER DEFAULT 0,
-      isApproved INTEGER DEFAULT 0, 
+      isApproved INTEGER DEFAULT 0, -- 0 for false, 1 for true (or based on quantityApproved > 0)
       notes TEXT,
       FOREIGN KEY (requisitionId) REFERENCES requisitions(id) ON DELETE CASCADE,
-      FOREIGN KEY (inventoryItemId) REFERENCES inventory(id) ON DELETE RESTRICT 
+      FOREIGN KEY (inventoryItemId) REFERENCES inventory(id) ON DELETE RESTRICT -- Prevent item deletion if in use
     );
   `);
 
@@ -219,12 +221,12 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       supplierId TEXT NOT NULL,
       orderDate TEXT NOT NULL,
       expectedDeliveryDate TEXT,
-      status TEXT NOT NULL DEFAULT 'DRAFT',
+      status TEXT NOT NULL DEFAULT 'DRAFT', -- DRAFT, PENDING_APPROVAL, APPROVED, ORDERED, PARTIALLY_RECEIVED, RECEIVED, CANCELLED
       notes TEXT,
       shippingAddress TEXT,
       billingAddress TEXT,
       lastUpdated TEXT NOT NULL,
-      createdById TEXT, 
+      createdById TEXT, -- Could be a user ID
       FOREIGN KEY (supplierId) REFERENCES suppliers(id) ON DELETE RESTRICT,
       FOREIGN KEY (createdById) REFERENCES users(id) ON DELETE SET NULL
     );
@@ -235,10 +237,10 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       id TEXT PRIMARY KEY,
       purchaseOrderId TEXT NOT NULL,
       inventoryItemId TEXT NOT NULL,
-      description TEXT,
+      description TEXT, -- Can be copied from inventory item at time of PO or custom
       quantityOrdered INTEGER NOT NULL,
       unitCost REAL NOT NULL,
-      quantityApproved INTEGER,
+      quantityApproved INTEGER, -- Quantity approved by manager, if different from ordered
       quantityReceived INTEGER DEFAULT 0,
       notes TEXT,
       FOREIGN KEY (purchaseOrderId) REFERENCES purchase_orders(id) ON DELETE CASCADE,
@@ -246,10 +248,27 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
     );
   `);
 
+  await dbConnection.exec(`
+    CREATE TABLE IF NOT EXISTS stock_movements (
+      id TEXT PRIMARY KEY,
+      inventoryItemId TEXT NOT NULL,
+      movementType TEXT NOT NULL, -- 'PO_RECEIPT', 'REQUISITION_ISSUE', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'INITIAL_STOCK', 'RETURN'
+      quantityChanged INTEGER NOT NULL, -- Positive for IN, Negative for OUT
+      balanceAfterMovement INTEGER NOT NULL,
+      referenceId TEXT, -- e.g., PO ID, Requisition ID, Adjustment Note ID
+      movementDate TEXT NOT NULL,
+      userId TEXT, -- User who performed/triggered the action
+      notes TEXT,
+      FOREIGN KEY (inventoryItemId) REFERENCES inventory(id) ON DELETE CASCADE, -- If item is deleted, movements are too
+      FOREIGN KEY (userId) REFERENCES users(id) ON DELETE SET NULL
+    );
+  `);
+
   console.log('Tables schema checked/created by _createTables.');
 }
 
 async function _dropTables(dbConnection: Database<sqlite3.Database, sqlite3.Statement>) {
+  await dbConnection.exec(`DROP TABLE IF EXISTS stock_movements;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS purchase_order_items;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS purchase_orders;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS requisition_items;`);
@@ -478,7 +497,7 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
         await db.exec('PRAGMA foreign_keys = ON;');
 
         let schemaNeedsReset = false;
-        const tablesToEnsureExist = ['departments', 'inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles', 'requisitions', 'requisition_items', 'purchase_orders', 'purchase_order_items'];
+        const tablesToEnsureExist = ['departments', 'inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles', 'requisitions', 'requisition_items', 'purchase_orders', 'purchase_order_items', 'stock_movements'];
         const columnsToCheck: Record<string, string[]> = {
           inventory: ['minStockLevel', 'maxStockLevel', 'description', 'imageUrl', 'lastPurchasePrice', 'averageCost'],
           units_of_measurement: ['conversion_factor', 'base_unit_id'],
@@ -489,6 +508,7 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
           requisition_items: ['requisitionId', 'inventoryItemId', 'quantityRequested', 'quantityApproved', 'quantityIssued', 'isApproved', 'notes'],
           purchase_orders: ['supplierId', 'orderDate', 'status', 'lastUpdated'],
           purchase_order_items: ['purchaseOrderId', 'inventoryItemId', 'quantityOrdered', 'unitCost', 'quantityApproved'],
+          stock_movements: ['inventoryItemId', 'movementType', 'quantityChanged', 'balanceAfterMovement', 'movementDate'],
         };
 
         for (const tableName of tablesToEnsureExist) {
@@ -617,6 +637,8 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
   return db;
 }
     
+    
+
     
 
     

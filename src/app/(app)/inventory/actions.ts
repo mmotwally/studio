@@ -4,7 +4,7 @@
 import { openDb } from "@/lib/database";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { InventoryItem, InventoryItemFormValues } from '@/types';
+import type { InventoryItem, InventoryItemFormValues, StockMovementReport, StockMovement } from '@/types';
 import { getCategoryById, getCategories } from "@/app/(app)/settings/categories/actions";
 import { getSubCategoryById, getSubCategories } from "@/app/(app)/settings/sub-categories/actions";
 import { getLocations } from "@/app/(app)/settings/locations/actions";
@@ -16,6 +16,7 @@ import path from 'path';
 import crypto from 'crypto';
 import type { Database } from 'sqlite';
 import * as XLSX from 'xlsx';
+import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 
 
 async function ensureDirExists(dirPath: string) {
@@ -226,6 +227,7 @@ export async function updateInventoryItemAction(itemId: string, currentImageUrl:
 
     // Note: Item ID (PK) cannot be changed. Category/SubCategory changes here do not regenerate ID.
     // lastPurchasePrice and averageCost are NOT updated here; they are updated via PO receiving.
+    // Quantity adjustments here should ideally also create a stock movement record (Phase 2).
     await db.run(
       `UPDATE inventory
        SET name = ?, description = ?, imageUrl = ?, quantity = ?, unitCost = ?, lastUpdated = ?,
@@ -425,34 +427,48 @@ export async function deleteInventoryItemAction(itemId: string): Promise<{ succe
   }
 
   const db = await openDb();
+  await db.run('BEGIN TRANSACTION');
   try {
-    // 1. Fetch item to get imageUrl
-    const item = await db.get('SELECT imageUrl FROM inventory WHERE id = ?', itemId);
+    // Check for related records in requisition_items or purchase_order_items
+    const requisitionItem = await db.get('SELECT id FROM requisition_items WHERE inventoryItemId = ? LIMIT 1', itemId);
+    if (requisitionItem) {
+      await db.run('ROLLBACK');
+      return { success: false, message: `Cannot delete item "${itemId}". It is referenced in requisitions.` };
+    }
+    const purchaseOrderItem = await db.get('SELECT id FROM purchase_order_items WHERE inventoryItemId = ? LIMIT 1', itemId);
+    if (purchaseOrderItem) {
+      await db.run('ROLLBACK');
+      return { success: false, message: `Cannot delete item "${itemId}". It is referenced in purchase orders.` };
+    }
+    
+    // Delete stock movements for the item
+    await db.run('DELETE FROM stock_movements WHERE inventoryItemId = ?', itemId);
 
-    // 2. Delete item from database
+    // Fetch item to get imageUrl for local file deletion
+    const item = await db.get('SELECT imageUrl FROM inventory WHERE id = ?', itemId);
     const result = await db.run('DELETE FROM inventory WHERE id = ?', itemId);
 
     if (result.changes === 0) {
+      await db.run('ROLLBACK');
       return { success: false, message: `Item with ID "${itemId}" not found.` };
     }
 
-    // 3. Delete local image file if it exists
+    // Delete local image file if it exists
     if (item && item.imageUrl && typeof item.imageUrl === 'string' && item.imageUrl.startsWith('/uploads/inventory/')) {
       const imagePath = path.join(process.cwd(), 'public', item.imageUrl);
       try {
         await fs.unlink(imagePath);
-        console.log(`Successfully deleted image file: ${imagePath}`);
       } catch (fileError: any) {
-        // Log error but don't fail the whole operation if file deletion fails (e.g., file already gone)
         if (fileError.code !== 'ENOENT') {
           console.warn(`Could not delete image file ${imagePath}: ${fileError.message}`);
         }
       }
     }
-
+    await db.run('COMMIT');
     revalidatePath("/inventory");
     return { success: true, message: `Item "${itemId}" deleted successfully.` };
   } catch (error: any) {
+    await db.run('ROLLBACK');
     console.error(`Failed to delete item ${itemId}:`, error);
     return { success: false, message: `Failed to delete item: ${error.message}` };
   }
@@ -626,5 +642,92 @@ export async function importInventoryFromExcelAction(formData: FormData): Promis
     errors
   };
 }
+
+export async function getStockMovementDetailsAction(inventoryItemId: string, fromDate: Date, toDate: Date): Promise<StockMovementReport> {
+  const db = await openDb();
+
+  const item = await db.get<InventoryItem>('SELECT id, name FROM inventory WHERE id = ?', inventoryItemId);
+  if (!item) {
+    throw new Error(`Inventory item with ID ${inventoryItemId} not found.`);
+  }
+
+  const fromDateISO = format(startOfDay(fromDate), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+  const toDateISO = format(endOfDay(toDate), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+
+  // Calculate opening stock
+  const openingStockResult = await db.get<{ balance: number } | undefined>(
+    `SELECT balanceAfterMovement as balance 
+     FROM stock_movements 
+     WHERE inventoryItemId = ? AND movementDate < ? 
+     ORDER BY movementDate DESC, id DESC LIMIT 1`,
+    inventoryItemId,
+    fromDateISO
+  );
+  // If no movements before fromDate, opening stock is the current quantity if all movements are after toDate,
+  // or if no movements at all, it implies the stock was 0 before the period unless it's an initial seed.
+  // For simplicity, if no prior movement, we assume it could be the first entry.
+  // A more robust opening stock would be needed if items could be created without an initial stock movement record.
+  // For now, if no record before fromDate, check the earliest record's balance or current quantity.
+  let openingStock = openingStockResult?.balance ?? 0;
+
+  if (!openingStockResult) {
+      const firstEverMovement = await db.get<{ balanceAfterMovement: number, quantityChanged: number } | undefined>(
+        `SELECT balanceAfterMovement, quantityChanged FROM stock_movements WHERE inventoryItemId = ? ORDER BY movementDate ASC, id ASC LIMIT 1`,
+        inventoryItemId
+      );
+      if (firstEverMovement) {
+        // If the first movement is within or after the report period, opening was its balance minus its change
+        // This logic is still a bit simplistic and might need refinement based on how INITIAL_STOCK is logged.
+        // A simpler approach for now: if no movements *before* fromDate, then opening stock is 0.
+        // This assumes stock history starts from 0 or an explicit INITIAL_STOCK entry.
+        openingStock = 0; 
+      } else {
+        // No movements at all for this item, opening stock is 0.
+        openingStock = 0;
+      }
+  }
+
+
+  const movementsInPeriod = await db.all<StockMovement[]>(
+    `SELECT sm.id, sm.inventoryItemId, i.name as inventoryItemName, sm.movementType, sm.quantityChanged, 
+            sm.balanceAfterMovement, sm.referenceId, sm.movementDate, sm.userId, u.name as userName, sm.notes
+     FROM stock_movements sm
+     JOIN inventory i ON sm.inventoryItemId = i.id
+     LEFT JOIN users u ON sm.userId = u.id
+     WHERE sm.inventoryItemId = ? AND sm.movementDate >= ? AND sm.movementDate <= ?
+     ORDER BY sm.movementDate ASC, sm.id ASC`,
+    inventoryItemId,
+    fromDateISO,
+    toDateISO
+  );
+
+  let totalIn = 0;
+  let totalOut = 0;
+  movementsInPeriod.forEach(m => {
+    if (m.quantityChanged > 0) totalIn += m.quantityChanged;
+    else totalOut += Math.abs(m.quantityChanged);
+  });
+
+  const closingStock = movementsInPeriod.length > 0 
+    ? movementsInPeriod[movementsInPeriod.length - 1].balanceAfterMovement
+    : openingStock; // If no movements in period, closing stock is same as opening.
+
+
+  return {
+    inventoryItemId: item.id,
+    inventoryItemName: item.name,
+    periodFrom: format(fromDate, "yyyy-MM-dd"),
+    periodTo: format(toDate, "yyyy-MM-dd"),
+    openingStock,
+    totalIn,
+    totalOut,
+    closingStock,
+    movements: movementsInPeriod.map(m => ({
+        ...m,
+        movementDate: format(parseISO(m.movementDate), "yyyy-MM-dd HH:mm") // Format for display
+    })),
+  };
+}
+    
 
     

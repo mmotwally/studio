@@ -21,75 +21,75 @@ import {
 } from "@/components/ui/select";
 import { DateRangePicker } from "@/components/date-range-picker";
 import { Label } from "@/components/ui/label";
-import type { SelectItem as SelectItemType, InventoryItem } from "@/types"; // Assuming SelectItemType is defined for value/label
-// import { getStockMovementDetails } from "@/app/(app)/inventory/actions"; // Placeholder for future action
+import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import type { SelectItem as SelectItemType, StockMovementReport, StockMovement } from "@/types";
+import { getStockMovementDetailsAction } from "@/app/(app)/inventory/actions"; 
+import { useToast } from "@/hooks/use-toast";
+import { Skeleton } from "@/components/ui/skeleton";
 
 interface StockMovementDialogProps {
   setOpen: (open: boolean) => void;
-  inventoryItems: SelectItemType[]; // Pass pre-fetched items to avoid re-fetching in dialog
-}
-
-interface StockMovementReport {
-  itemName: string;
-  itemId: string;
-  period: string;
-  // movements: Array<{ date: string; type: string; quantity: number; balance: number; notes?: string }>; // Example structure
-  openingStock: number;
-  totalIn: number;
-  totalOut: number;
-  closingStock: number;
-  message?: string; // For placeholder or errors
+  inventoryItems: SelectItemType[]; 
 }
 
 export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDialogProps) {
   const [selectedItemId, setSelectedItemId] = React.useState<string | undefined>();
-  const [dateRange, setDateRange] = React.useState<DateRange | undefined>();
+  const [dateRange, setDateRange] = React.useState<DateRange | undefined>({
+      from: new Date(new Date().getFullYear(), new Date().getMonth(), 1),
+      to: new Date(),
+  });
   const [reportData, setReportData] = React.useState<StockMovementReport | null>(null);
   const [isLoadingReport, setIsLoadingReport] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const { toast } = useToast();
 
   const handleGenerateReport = async () => {
     if (!selectedItemId || !dateRange?.from || !dateRange?.to) {
-      // Basic validation, can be improved with toasts or inline messages
-      setReportData({
-          itemName: "", itemId: "", period: "",
-          openingStock:0, totalIn: 0, totalOut: 0, closingStock: 0,
-          message: "Please select an item and a valid date range."
+      toast({
+          title: "Missing Information",
+          description: "Please select an item and a valid date range.",
+          variant: "default" 
       });
       return;
     }
     setIsLoadingReport(true);
-    setReportData(null); // Clear previous report
+    setError(null);
+    setReportData(null);
 
-    // --- Placeholder for actual data fetching ---
-    // In a real scenario, you would call a server action here:
-    // try {
-    //   const data = await getStockMovementDetails(selectedItemId, dateRange.from, dateRange.to);
-    //   setReportData(data); 
-    // } catch (error) {
-    //   setReportData({ message: "Error fetching report: " + (error as Error).message });
-    // } finally {
-    //   setIsLoadingReport(false);
-    // }
-
-    // For now, using placeholder data:
-    const selectedItem = inventoryItems.find(item => item.value === selectedItemId);
-    setTimeout(() => {
-      setReportData({
-        itemName: selectedItem?.label || "N/A",
-        itemId: selectedItemId,
-        period: `${dateRange.from?.toLocaleDateString()} - ${dateRange.to?.toLocaleDateString()}`,
-        openingStock: 0, // Placeholder
-        totalIn: 0,      // Placeholder
-        totalOut: 0,     // Placeholder
-        closingStock: 0, // Placeholder
-        message: "Stock movement tracking is not yet fully implemented. This is a placeholder report.",
+    try {
+      const data = await getStockMovementDetailsAction(selectedItemId, dateRange.from, dateRange.to);
+      setReportData(data); 
+      if (data.movements.length === 0) {
+        toast({
+            title: "No Movements Found",
+            description: "No stock movements recorded for the selected item in this period.",
+            variant: "default"
+        });
+      }
+    } catch (err) {
+      console.error("Error fetching stock movement report:", err);
+      const errorMessage = (err as Error).message || "Failed to load report data.";
+      setError(errorMessage);
+      toast({
+        title: "Error Fetching Report",
+        description: errorMessage,
+        variant: "destructive",
       });
+    } finally {
       setIsLoadingReport(false);
-    }, 1000); // Simulate network delay
+    }
   };
 
   return (
-    <DialogContent className="sm:max-w-2xl">
+    <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[90vh] flex flex-col">
       <DialogHeader>
         <DialogTitle>Stock Movement Report</DialogTitle>
         <DialogDescription>
@@ -97,10 +97,10 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
         </DialogDescription>
       </DialogHeader>
       
-      <div className="space-y-6 py-4">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+      <div className="space-y-4 py-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
           <div>
-            <Label htmlFor="item-select">Inventory Item</Label>
+            <Label htmlFor="item-select">Inventory Item*</Label>
             <Select onValueChange={setSelectedItemId} value={selectedItemId}>
               <SelectTrigger id="item-select">
                 <SelectValue placeholder="Select an item" />
@@ -119,38 +119,88 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
             </Select>
           </div>
           <div>
-            <Label>Period</Label>
+            <Label>Date Range*</Label>
             <DateRangePicker date={dateRange} onDateChange={setDateRange} />
           </div>
+           <Button onClick={handleGenerateReport} disabled={isLoadingReport || !selectedItemId || !dateRange?.from || !dateRange?.to} className="w-full md:w-auto self-end">
+              {isLoadingReport ? "Generating..." : "Generate Report"}
+           </Button>
         </div>
-        
-        <Button onClick={handleGenerateReport} disabled={isLoadingReport || !selectedItemId || !dateRange?.from || !dateRange?.to} className="w-full md:w-auto">
-          {isLoadingReport ? "Generating..." : "Generate Report"}
-        </Button>
-
-        {reportData && (
-          <div className="mt-6 p-4 border rounded-md bg-muted/50">
-            <h3 className="text-lg font-semibold mb-2">
-              Report for: {reportData.itemName} ({reportData.itemId})
-            </h3>
-            <p className="text-sm text-muted-foreground mb-3">Period: {reportData.period}</p>
-            
-            {reportData.message ? (
-              <p className="text-center py-4">{reportData.message}</p>
-            ) : (
-              <div className="space-y-2">
-                <p><strong>Opening Stock:</strong> {reportData.openingStock}</p>
-                <p><strong>Total In:</strong> {reportData.totalIn}</p>
-                <p><strong>Total Out:</strong> {reportData.totalOut}</p>
-                <p><strong>Closing Stock:</strong> {reportData.closingStock}</p>
-                {/* Future: Add table for detailed movements here */}
-              </div>
-            )}
-          </div>
-        )}
       </div>
 
-      <DialogFooter>
+        {isLoadingReport && (
+            <div className="space-y-2 mt-4">
+                <Skeleton className="h-8 w-1/2" />
+                <Skeleton className="h-4 w-1/3" />
+                <Skeleton className="h-6 w-full" />
+                <Skeleton className="h-6 w-full" />
+                <Skeleton className="h-6 w-full" />
+            </div>
+        )}
+        {error && <p className="text-destructive text-center py-4">{error}</p>}
+
+        {reportData && !isLoadingReport && !error && (
+          <div className="mt-2 flex-grow overflow-hidden">
+            <h3 className="text-xl font-semibold mb-1">
+              Report for: {reportData.inventoryItemName} ({reportData.inventoryItemId})
+            </h3>
+            <p className="text-sm text-muted-foreground mb-3">
+              Period: {reportData.periodFrom} to {reportData.periodTo}
+            </p>
+            
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 p-3 border rounded-md bg-muted/30">
+                <div><span className="font-medium">Opening Stock:</span> {reportData.openingStock}</div>
+                <div><span className="font-medium">Total In (+):</span> {reportData.totalIn}</div>
+                <div><span className="font-medium">Total Out (-):</span> {reportData.totalOut}</div>
+                <div><span className="font-medium">Closing Stock:</span> {reportData.closingStock}</div>
+            </div>
+            
+            <ScrollArea className="h-[calc(90vh-450px)] md:h-[calc(90vh-400px)] border rounded-md">
+              <Table>
+                <TableHeader className="sticky top-0 bg-background z-10">
+                  <TableRow>
+                    <TableHead className="w-[150px]">Date</TableHead>
+                    <TableHead>Movement Type</TableHead>
+                    <TableHead>Reference</TableHead>
+                    <TableHead className="text-right">Qty Changed</TableHead>
+                    <TableHead className="text-right">Balance</TableHead>
+                    <TableHead>Notes</TableHead>
+                    <TableHead>User</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {reportData.movements.length > 0 ? (
+                    reportData.movements.map((mov) => (
+                      <TableRow key={mov.id}>
+                        <TableCell>{mov.movementDate}</TableCell>
+                        <TableCell>{mov.movementType.replace(/_/g, ' ')}</TableCell>
+                        <TableCell>{mov.referenceId || '-'}</TableCell>
+                        <TableCell className={`text-right ${mov.quantityChanged > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          {mov.quantityChanged > 0 ? `+${mov.quantityChanged}` : mov.quantityChanged}
+                        </TableCell>
+                        <TableCell className="text-right">{mov.balanceAfterMovement}</TableCell>
+                        <TableCell className="truncate max-w-xs">{mov.notes || '-'}</TableCell>
+                        <TableCell>{mov.userName || mov.userId || '-'}</TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={7} className="text-center h-24">
+                        No stock movements recorded for this item in the selected period.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </ScrollArea>
+          </div>
+        )}
+        {!reportData && !isLoadingReport && !error && (
+            <div className="text-center py-8 text-muted-foreground">
+                Select an item and date range, then click "Generate Report".
+            </div>
+        )}
+      <DialogFooter className="mt-auto pt-4">
         <DialogClose asChild>
           <Button type="button" variant="outline">
             Close
@@ -160,3 +210,5 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
     </DialogContent>
   );
 }
+
+    
