@@ -12,12 +12,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { FormItem } from '@/components/ui/form'; // Added missing import
+import { FormItem } from '@/components/ui/form';
 import { useToast } from "@/hooks/use-toast";
-import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass } from 'lucide-react';
+import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown } from 'lucide-react';
 import { calculateCabinetDetails } from './actions';
 import type { CabinetCalculationInput, CalculatedCabinet, CabinetPart, CabinetTemplateData, PartDefinition, AccessoryItem } from './types';
 import { Separator } from '@/components/ui/separator';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 
 // Available cabinet types for selection
@@ -45,10 +47,33 @@ const initialNewTemplate: CabinetTemplateData = {
   parts: [
     { partId: 'side_panels', nameLabel: 'Side Panels', quantityFormula: '2', widthFormula: 'D', heightFormula: 'H', materialId: 'PANEL_STD_18MM', thicknessFormula: 'PT', edgeBanding: { front: true } },
     { partId: 'bottom_panel', nameLabel: 'Bottom Panel', quantityFormula: '1', widthFormula: 'W - 2*PT', heightFormula: 'D', materialId: 'PANEL_STD_18MM', thicknessFormula: 'PT', edgeBanding: { front: true } },
-    // Add more placeholder parts as needed for the conceptual editor
   ],
   accessories: [],
 };
+
+interface FormulaHelpItem {
+  id: string;
+  label: string;
+  value: string;
+  description: string;
+  example: string;
+}
+
+const formulaHelpItems: FormulaHelpItem[] = [
+  { id: 'W', label: 'W', value: 'W', description: "Overall Cabinet Width.", example: "If cabinet width is 600mm, W = 600." },
+  { id: 'H', label: 'H', value: 'H', description: "Overall Cabinet Height.", example: "If cabinet height is 720mm, H = 720." },
+  { id: 'D', label: 'D', value: 'D', description: "Overall Cabinet Depth.", example: "If cabinet depth is 560mm, D = 560." },
+  { id: 'PT', label: 'PT', value: 'PT', description: "Panel Thickness (from global parameters).", example: "If Panel Thickness is 18mm, PT = 18." },
+  { id: 'BPT', label: 'BPT', value: 'BPT', description: "Back Panel Thickness (from global parameters).", example: "If Back Panel Thickness is 3mm, BPT = 3." },
+  { id: 'BPO', label: 'BPO', value: 'BPO', description: "Back Panel Offset (from global parameters).", example: "If Back Panel Offset is 10mm, BPO = 10." },
+  { id: 'DG', label: 'DG', value: 'DG', description: "Door Gap (total side or vertical, from global parameters).", example: "If Door Gap is 2mm, DG = 2." },
+  { id: 'DCG', label: 'DCG', value: 'DCG', description: "Door Center Gap (between two doors, from global parameters).", example: "If Door Center Gap is 3mm, DCG = 3." },
+  { id: 'TRD', label: 'TRD', value: 'TRD', description: "Top Rail Depth (from global parameters).", example: "If Top Rail Depth is 80mm, TRD = 80." },
+  { id: 'W_minus_2PT', label: 'W - 2*PT', value: 'W - 2*PT', description: "Common for internal width of carcass (e.g., bottom panel width).", example: "W=600, PT=18  =>  600 - 2*18 = 564." },
+  { id: 'D_minus_BPO_BPT', label: 'D - BPO - BPT', value: 'D - BPO - BPT', description: "Common for shelf depth, considering back panel placement.", example: "D=560, BPO=10, BPT=3  =>  560 - 10 - 3 = 547." },
+  { id: 'DOOR_W', label: '(W - DG - DCG) / 2', value: '(W - DG - DCG) / 2', description: "Example for one door's width in a 2-door cabinet. Adjust DG based on total vs per-side.", example: "W=600, DG=2 (side gap), DCG=3 (center) => (600 - 2 - 3)/2 = 297.5" },
+  { id: 'DOOR_H', label: 'H - DG', value: 'H - DG', description: "Example for door height. Adjust DG based on total vs per-side.", example: "H=720, DG=2 (vertical gap) => 720 - 2 = 718" },
+];
 
 
 export default function CabinetDesignerPage() {
@@ -76,11 +101,11 @@ export default function CabinetDesignerPage() {
     if (value === 'standard_base_2_door') {
         setCalculationInput(prev => ({ ...prev, width: defaultDims.width, height: defaultDims.height, depth: defaultDims.depth }));
     } else {
-        toast({
-            title: "Cabinet Type Changed",
-            description: `Switched to ${cabinetTypes.find(ct => ct.value === value)?.label}. Calculations for this type may not be implemented yet. Default dimensions for this type not set.`,
-            variant: "default"
-        })
+        // toast({
+        //     title: "Cabinet Type Changed",
+        //     description: `Switched to ${cabinetTypes.find(ct => ct.value === value)?.label}. Calculations for this type may not be implemented yet. Default dimensions for this type not set.`,
+        //     variant: "default"
+        // })
     }
     setCalculatedData(null);
     setCalculationError(null);
@@ -162,8 +187,8 @@ export default function CabinetDesignerPage() {
 
 
     setCurrentTemplate(prev => {
-        const newTemplate = JSON.parse(JSON.stringify(prev)); // Deep clone
-        let target: any = newTemplate; // Use 'any' here for easier path traversal, ensure types are correct at assignment
+        const newTemplate = JSON.parse(JSON.stringify(prev)); 
+        let target: any = newTemplate; 
         const pathArray = path.split('.');
 
         for (let i = 0; i < pathArray.length - 1; i++) {
@@ -171,17 +196,16 @@ export default function CabinetDesignerPage() {
             if (pathArray[i] === 'parts' && partIndex !== undefined && target[partIndex]) {
                 target = target[partIndex];
             } else if (pathArray[i] === 'parts' && partIndex !== undefined && !target[partIndex]) {
-                 console.error(`Part at index ${partIndex} not found in template path ${path}`);
-                return prev; // Or handle error appropriately
+                console.error(`Part at index ${partIndex} not found in template path ${path}`);
+                return prev; 
             }
         }
         
         const finalKey = pathArray[pathArray.length -1];
         if (partIndex !== undefined && path.startsWith('parts.') && field) {
-            // Ensure target is the specific part object
-            if (pathArray[0] === 'parts' && pathArray.length > 1) { // e.g. parts.nameLabel
+            if (pathArray[0] === 'parts' && pathArray.length > 1 && finalKey !== 'edgeBanding') {
                  target[finalKey as keyof PartDefinition] = processedValue as any;
-            } else if (pathArray[0] === 'parts' && pathArray.length === 1 && finalKey === 'edgeBanding') { // e.g. parts.edgeBanding
+            } else if (pathArray[0] === 'parts' && finalKey === 'edgeBanding' && field) {
                 target.edgeBanding = { ...target.edgeBanding, [field as keyof PartDefinition['edgeBanding']]: processedValue };
             }
         } else {
@@ -189,10 +213,22 @@ export default function CabinetDesignerPage() {
         }
         return newTemplate;
     });
-};
+  };
+
+  const handleFormulaSelect = (partIndex: number, formulaField: keyof PartDefinition, selectedFormulaValue: string) => {
+    setCurrentTemplate(prev => {
+        const newTemplate = JSON.parse(JSON.stringify(prev));
+        if (newTemplate.parts && newTemplate.parts[partIndex]) {
+            (newTemplate.parts[partIndex] as any)[formulaField] = selectedFormulaValue;
+        } else {
+            console.error(`Part at index ${partIndex} not found for formula selection.`);
+        }
+        return newTemplate;
+    });
+  };
 
 
-const handleAddPartToTemplate = () => {
+  const handleAddPartToTemplate = () => {
     setCurrentTemplate(prev => ({
         ...prev,
         parts: [
@@ -200,27 +236,70 @@ const handleAddPartToTemplate = () => {
             { partId: `new_part_${Date.now()}`, nameLabel: 'New Part', quantityFormula: '1', widthFormula: 'W/2', heightFormula: 'H/2', materialId: 'PANEL_STD_18MM', thicknessFormula: 'PT', edgeBanding: {} }
         ]
     }));
-};
+  };
 
-const handleRemovePartFromTemplate = (partIndex: number) => {
+  const handleRemovePartFromTemplate = (partIndex: number) => {
     setCurrentTemplate(prev => ({
         ...prev,
         parts: prev.parts.filter((_, index) => index !== partIndex)
     }));
-};
+  };
 
-const handleSaveTemplate = () => {
-    // In a real app, this would send `currentTemplate` to a backend to save in a database.
-    // For this prototype, we'll just log it and maybe add it to the `cabinetTypes` array in memory for this session.
+  const handleSaveTemplate = () => {
     console.log("Saving Template (Conceptual):", currentTemplate);
     toast({
         title: "Template Saved (Conceptual)",
         description: `Template "${currentTemplate.name}" definition logged. This is a prototype; no actual database saving is implemented.`,
     });
-    // Optionally add to dropdown for this session (won't persist)
-    // setCabinetTypes(prev => [...prev, {value: currentTemplate.id, label: `${currentTemplate.name} (Custom)`}]);
     setViewMode('calculator');
-};
+  };
+
+  const FormulaInputWithHelper = ({ partIndex, formulaField, label, placeholder }: { partIndex: number, formulaField: keyof PartDefinition, label: string, placeholder: string }) => (
+    <div className="flex items-end gap-2">
+      <div className="flex-grow">
+        <Label>{label}</Label>
+        {(formulaField === 'widthFormula' || formulaField === 'heightFormula') ? (
+            <Textarea
+              rows={1}
+              value={(currentTemplate.parts[partIndex] as any)[formulaField] || ''}
+              onChange={(e) => handleTemplateInputChange(e, `parts.${formulaField}`, partIndex, formulaField as keyof PartDefinition)}
+              placeholder={placeholder}
+            />
+        ) : (
+             <Input
+                value={(currentTemplate.parts[partIndex] as any)[formulaField] || ''}
+                onChange={(e) => handleTemplateInputChange(e, `parts.${formulaField}`, partIndex, formulaField as keyof PartDefinition)}
+                placeholder={placeholder}
+             />
+        )}
+      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" className="whitespace-nowrap px-2">
+            <ChevronDown className="h-4 w-4" /> <span className="ml-1">Ins</span>
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-64">
+          {formulaHelpItems.map((item) => (
+            <DropdownMenuItem key={item.id} onSelect={() => handleFormulaSelect(partIndex, formulaField, item.value)} className="flex justify-between items-center">
+              <span>{item.label}</span>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 opacity-50 hover:opacity-100">
+                    <HelpCircle className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="left" className="max-w-xs text-sm p-2">
+                  <p className="font-semibold">{item.description}</p>
+                  <p className="text-xs text-muted-foreground">{item.example}</p>
+                </TooltipContent>
+              </Tooltip>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
 
 
   const renderCalculatorView = () => (
@@ -310,6 +389,7 @@ const handleSaveTemplate = () => {
   );
 
  const renderTemplateDefinitionView = () => (
+    <TooltipProvider>
     <Card className="shadow-lg">
       <CardHeader>
         <CardTitle className="flex items-center"><DraftingCompass className="mr-2 h-5 w-5 text-primary" />Define New Cabinet Template</CardTitle>
@@ -359,20 +439,21 @@ const handleSaveTemplate = () => {
                 {currentTemplate.parts.map((part, index) => (
                     <Card key={part.partId || index} className="p-4 relative">
                          <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 items-start">
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 items-start">
                             <div><Label>Part Name Label</Label><Input value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} placeholder="e.g., Side Panel"/></div>
-                            <div><Label>Quantity Formula</Label><Input value={part.quantityFormula} onChange={(e) => handleTemplateInputChange(e, 'parts.quantityFormula', index, 'quantityFormula')} placeholder="e.g., 2 or NumberOfShelves"/></div>
+                            <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula" placeholder="e.g., 2"/>
                             <div><Label>Material ID</Label><Input value={part.materialId} onChange={(e) => handleTemplateInputChange(e, 'parts.materialId', index, 'materialId')} placeholder="e.g., PANEL_STD_18MM"/></div>
-                            <div><Label>Width Formula</Label><Textarea rows={1} value={part.widthFormula} onChange={(e) => handleTemplateInputChange(e, 'parts.widthFormula', index, 'widthFormula')} placeholder="e.g., D or W - 2*PT"/></div>
-                            <div><Label>Height Formula</Label><Textarea rows={1} value={part.heightFormula} onChange={(e) => handleTemplateInputChange(e, 'parts.heightFormula', index, 'heightFormula')} placeholder="e.g., H or D - BPO"/></div>
-                            <div><Label>Thickness Formula</Label><Input value={part.thicknessFormula || ''} onChange={(e) => handleTemplateInputChange(e, 'parts.thicknessFormula', index, 'thicknessFormula')} placeholder="e.g., PT or BPT"/></div>
+                            
+                            <FormulaInputWithHelper partIndex={index} formulaField="widthFormula" label="Width Formula" placeholder="e.g., D or W - 2*PT"/>
+                            <FormulaInputWithHelper partIndex={index} formulaField="heightFormula" label="Height Formula" placeholder="e.g., H or D - BPO"/>
+                            <FormulaInputWithHelper partIndex={index} formulaField="thicknessFormula" label="Thickness Formula" placeholder="e.g., PT or BPT"/>
                         </div>
                         <div className="mt-3">
                             <Label className="font-medium">Edge Banding (Applied to this part's edges):</Label>
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 text-sm">
                                 {(['front', 'back', 'top', 'bottom'] as Array<keyof PartDefinition['edgeBanding']>).map(edge => (
                                     <FormItem key={edge} className="flex flex-row items-center space-x-2">
-                                        <Checkbox id={`edge_${index}_${edge}`} checked={!!part.edgeBanding?.[edge]} onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', checked: !!checked}} as any, `parts.edgeBanding`, index, edge)} />
+                                        <Checkbox id={`edge_${index}_${edge}`} checked={!!part.edgeBanding?.[edge]} onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', checked: !!checked}} as any, `parts.edgeBanding`, index, edge as keyof PartDefinition['edgeBanding'])} />
                                         <Label htmlFor={`edge_${index}_${edge}`} className="capitalize font-normal">{edge}</Label>
                                     </FormItem>
                                 ))}
@@ -395,6 +476,7 @@ const handleSaveTemplate = () => {
         <Button onClick={handleSaveTemplate}><Save className="mr-2 h-4 w-4" /> Save Template (Conceptual)</Button>
       </CardFooter>
     </Card>
+    </TooltipProvider>
   );
 
   return (
@@ -407,5 +489,3 @@ const handleSaveTemplate = () => {
     </>
   );
 }
-
-
