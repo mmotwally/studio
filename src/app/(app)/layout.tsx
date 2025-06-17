@@ -10,7 +10,8 @@ import {
   BarChart3,
   Settings as SettingsIcon,
   Menu,
-  Sparkles, // Added Sparkles icon
+  Sparkles, 
+  Library, // Added for Cabinet Designer
 } from 'lucide-react';
 import {
   SidebarProvider,
@@ -35,7 +36,8 @@ const navItems: NavItem[] = [
   { title: 'Requisitions', href: '/requisitions', icon: FileText },
   { title: 'Purchase Orders', href: '/purchase-orders', icon: ShoppingCart },
   { title: 'Reports', href: '/reports', icon: BarChart3 },
-  { title: 'Special Feature', href: '/special-feature', icon: Sparkles }, // New item
+  { title: 'Cabinet Designer', href: '/cabinet-designer', icon: Library }, // New Cabinet Designer Page
+  { title: 'Special Feature', href: '/special-feature', icon: Sparkles }, 
   { title: 'Settings', href: '/settings', icon: SettingsIcon },
 ];
 
