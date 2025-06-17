@@ -18,33 +18,7 @@ import type { Database } from 'sqlite';
 import * as XLSX from 'xlsx';
 import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 
-// PDFMake imports
-import PdfPrinter from 'pdfmake';
-import type { TDocumentDefinitions } from 'pdfmake/interfaces';
-
-// Pre-load fonts at module scope
-let preloadedFonts: any; 
-try {
-    const vfsFontsModule = require('pdfmake/build/vfs_fonts.js');
-    if (vfsFontsModule && vfsFontsModule.pdfMake && vfsFontsModule.pdfMake.vfs) {
-        const pdfMakeVfs = vfsFontsModule.pdfMake.vfs;
-        preloadedFonts = {
-            Roboto: {
-                normal: Buffer.from(pdfMakeVfs['Roboto-Regular.ttf'], 'base64'),
-                bold: Buffer.from(pdfMakeVfs['Roboto-Medium.ttf'], 'base64'),
-                italics: Buffer.from(pdfMakeVfs['Roboto-Italic.ttf'], 'base64'),
-                bolditalics: Buffer.from(pdfMakeVfs['Roboto-MediumItalic.ttf'], 'base64'),
-            }
-        };
-    } else {
-        console.error("Failed to load pdfmake vfs_fonts.js or VFS structure is unexpected. PDF generation may fail or use default fonts if available.");
-        // Provide a fallback structure for PdfPrinter constructor if it strictly requires it
-        preloadedFonts = { Roboto: { normal: Buffer.from(""), bold: Buffer.from(""), italics: Buffer.from(""), bolditalics: Buffer.from("") } }; 
-    }
-} catch (e) {
-    console.error("Error requiring pdfmake/build/vfs_fonts.js. PDF generation may fail or use default fonts if available.:", e);
-    preloadedFonts = { Roboto: { normal: Buffer.from(""), bold: Buffer.from(""), italics: Buffer.from(""), bolditalics: Buffer.from("") } };
-}
+import { PDFDocument, StandardFonts, rgb, PageSizes } from 'pdf-lib';
 
 
 async function ensureDirExists(dirPath: string) {
@@ -111,7 +85,6 @@ export async function addInventoryItemAction(formData: FormData) {
     locationId: rawFormData.locationId ? rawFormData.locationId as string : undefined,
     supplierId: rawFormData.supplierId ? rawFormData.supplierId as string : undefined,
     unitId: rawFormData.unitId as string,
-    // imageUrl and removeImage are handled by file logic below
   };
 
   if (!data.categoryId) {
@@ -129,7 +102,7 @@ export async function addInventoryItemAction(formData: FormData) {
       const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'inventory');
       await ensureDirExists(uploadsDir);
 
-      const fileExtension = path.extname(imageFile.name) || '.png'; // Default to .png if no extension
+      const fileExtension = path.extname(imageFile.name) || '.png'; 
       const uniqueFileName = `${crypto.randomUUID()}${fileExtension}`;
       const filePath = path.join(uploadsDir, uniqueFileName);
 
@@ -793,154 +766,112 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
 
 
 export async function generateStockMovementPdfAction(reportData: StockMovementReport): Promise<string> {
-  if (!preloadedFonts) {
-      throw new Error("PDF fonts not loaded. PDF generation cannot proceed.");
-  }
-  const printer = new PdfPrinter(preloadedFonts);
+  try {
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage(PageSizes.A4_Landscape);
+    const { width, height } = page.getSize();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
-  const movementTableBody = [
-    [
-      { text: 'Date', style: 'tableHeader' },
-      { text: 'Type', style: 'tableHeader' },
-      { text: 'Reference', style: 'tableHeader' },
-      { text: 'Qty Changed', style: 'tableHeader', alignment: 'right' },
-      { text: 'Balance', style: 'tableHeader', alignment: 'right' },
-      { text: 'Notes', style: 'tableHeader' },
-      { text: 'User', style: 'tableHeader' },
-    ],
-    ...reportData.movements.map(mov => [
-      mov.movementDate,
-      mov.movementType.replace(/_/g, ' '),
-      mov.referenceId || '-',
-      { text: mov.quantityChanged > 0 ? `+${mov.quantityChanged}` : mov.quantityChanged.toString(), alignment: 'right' },
-      { text: mov.balanceAfterMovement.toString(), alignment: 'right' },
-      mov.notes || '-',
-      mov.userName || mov.userId || '-',
-    ])
-  ];
+    const margin = 40;
+    let y = height - margin;
+    const lineHeight = 14;
+    const smallLineHeight = 12;
+    const tableTopMargin = 20;
+    const cellPadding = 5;
 
-  if (reportData.movements.length === 0) {
-    movementTableBody.push([{ text: 'No movements recorded for this period.', colSpan: 7, alignment: 'center', italics: true, margin: [0, 10, 0, 10] }]);
-  }
+    page.setFont(boldFont);
+    page.setFontSize(16);
+    page.drawText(`Stock Movement Report - ${reportData.inventoryItemName} (${reportData.inventoryItemId})`, {
+      x: margin,
+      y: y,
+      font: boldFont,
+      size: 16,
+    });
+    y -= lineHeight * 1.5;
 
-  const docDefinition: TDocumentDefinitions = {
-    pageSize: 'A4',
-    pageOrientation: 'landscape',
-    pageMargins: [40, 60, 40, 60], 
-    header: {
-      text: `Stock Movement Report - ${reportData.inventoryItemName} (${reportData.inventoryItemId})`,
-      style: 'header',
-      alignment: 'center',
-      margin: [0, 20, 0, 0], 
-    },
-    footer: function(currentPage, pageCount) {
-      return {
-        text: `Page ${currentPage.toString()} of ${pageCount}`,
-        alignment: 'center',
-        style: 'footer',
-        margin: [0,0,0,20] 
-      };
-    },
-    content: [
-      {
-        text: `Period: ${reportData.periodFrom} to ${reportData.periodTo}`,
-        style: 'subheader',
-        margin: [0, 0, 0, 10], 
-      },
-      {
-        style: 'summaryTable',
-        table: {
-          widths: ['*', '*', '*', '*'],
-          body: [
-            [
-              { text: 'Opening Stock:', bold: true }, reportData.openingStock.toString(),
-              { text: 'Total In (+):', bold: true }, reportData.totalIn.toString(),
-            ],
-            [
-              { text: 'Closing Stock:', bold: true }, reportData.closingStock.toString(),
-              { text: 'Total Out (-):', bold: true }, reportData.totalOut.toString(),
-            ],
-          ]
-        },
-        layout: 'noBorders',
-        margin: [0, 0, 0, 20],
-      },
-      {
-        text: 'Movement Details:',
-        style: 'subheader',
-        margin: [0, 0, 0, 5],
-      },
-      {
-        style: 'movementsTable',
-        table: {
-          headerRows: 1,
-          widths: ['auto', 'auto', 'auto', 'auto', 'auto', '*', 'auto'], 
-          body: movementTableBody,
-        },
-        layout: {
-          hLineWidth: function (i, node) { return (i === 0 || i === node.table.body.length) ? 1 : 1; },
-          vLineWidth: function (i, node) { return 1; },
-          hLineColor: function (i, node) { return '#AAAAAA'; },
-          vLineColor: function (i, node) { return '#AAAAAA'; },
-          paddingLeft: function(i, node) { return 4; },
-          paddingRight: function(i, node) { return 4; },
-          paddingTop: function(i, node) { return 2; },
-          paddingBottom: function(i, node) { return 2; }
-        }
-      },
-    ],
-    styles: {
-      header: {
-        fontSize: 18,
-        bold: true,
-        margin: [0, 0, 0, 10]
-      },
-      subheader: {
-        fontSize: 14,
-        bold: true,
-        margin: [0, 10, 0, 5]
-      },
-      summaryTable: {
-        fontSize: 10,
-      },
-      movementsTable: {
-        fontSize: 9,
-      },
-      tableHeader: {
-        bold: true,
-        fontSize: 10,
-        color: 'black',
-        fillColor: '#EEEEEE',
-      },
-      footer: {
-        fontSize: 8,
-        italics: true,
+    page.setFont(font);
+    page.setFontSize(10);
+    page.drawText(`Period: ${reportData.periodFrom} to ${reportData.periodTo}`, { x: margin, y: y, size: 10 });
+    y -= lineHeight * 1.5;
+
+    const summaryTexts = [
+        `Opening Stock: ${reportData.openingStock}`,
+        `Total In (+): ${reportData.totalIn}`,
+        `Total Out (-): ${reportData.totalOut}`,
+        `Closing Stock: ${reportData.closingStock}`,
+    ];
+    
+    let summaryX = margin;
+    summaryTexts.forEach(text => {
+        page.drawText(text, { x: summaryX, y: y, size: 10 });
+        summaryX += (width - 2 * margin) / 4; 
+    });
+    y -= lineHeight * 1.5 + tableTopMargin;
+
+
+    const tableHeaders = ['Date', 'Type', 'Ref', 'Qty Chg', 'Balance', 'Notes', 'User'];
+    const colWidths = [100, 100, 70, 60, 60, 200, 70]; 
+    let currentX = margin;
+
+    page.setFont(boldFont);
+    tableHeaders.forEach((header, i) => {
+      page.drawText(header, { x: currentX + cellPadding, y: y, size: 9, font: boldFont });
+      currentX += colWidths[i];
+    });
+    y -= smallLineHeight * 1.2; 
+    page.drawLine({start: {x: margin, y: y + cellPadding}, end: {x: width - margin, y: y + cellPadding}, thickness: 0.5, color: rgb(0.7, 0.7, 0.7)});
+
+
+    page.setFont(font);
+    reportData.movements.forEach(mov => {
+      if (y < margin + smallLineHeight * 2) { 
+        page.addPage(PageSizes.A4_Landscape);
+        y = height - margin - smallLineHeight; 
       }
-    },
-    defaultStyle: {
-      font: 'Roboto', 
+      currentX = margin;
+      const rowData = [
+        mov.movementDate,
+        mov.movementType.replace(/_/g, ' '),
+        mov.referenceId || '-',
+        mov.quantityChanged > 0 ? `+${mov.quantityChanged}` : mov.quantityChanged.toString(),
+        mov.balanceAfterMovement.toString(),
+        mov.notes || '-',
+        mov.userName || mov.userId || '-',
+      ];
+      rowData.forEach((cell, i) => {
+        page.drawText(cell, { x: currentX + cellPadding, y: y, size: 8 });
+        currentX += colWidths[i];
+      });
+      y -= smallLineHeight * 1.2;
+    });
+    
+    if (reportData.movements.length === 0) {
+        page.drawText('No movements recorded for this period.', {
+            x: margin + (width - 2 * margin) / 2 - font.widthOfTextAtSize('No movements recorded for this period.', 8) / 2,
+            y: y - smallLineHeight,
+            font: font,
+            size: 8,
+            color: rgb(0.5, 0.5, 0.5)
+        });
     }
-  };
+    
+    page.drawLine({start: {x: margin, y: y + cellPadding}, end: {x: width - margin, y: y + cellPadding}, thickness: 0.5, color: rgb(0.7, 0.7, 0.7)});
 
-  const pdfDoc = printer.createPdfKitDocument(docDefinition);
-  
-  return new Promise<string>((resolve, reject) => {
-    const chunks: Buffer[] = [];
-    pdfDoc.on('data', chunk => chunks.push(chunk));
-    pdfDoc.on('end', () => {
-      const result = Buffer.concat(chunks);
-      resolve(`data:application/pdf;base64,${result.toString('base64')}`);
-    });
-    pdfDoc.on('error', err => {
-      console.error("Error generating PDF stream:", err);
-      reject(err);
-    });
-    pdfDoc.end();
-  });
+
+    const pdfBytes = await pdfDoc.save();
+    const base64String = Buffer.from(pdfBytes).toString('base64');
+    return `data:application/pdf;base64,${base64String}`;
+
+  } catch (error) {
+    console.error("Error generating PDF with pdf-lib:", error);
+    throw new Error(`Failed to generate PDF: ${(error as Error).message}`);
+  }
 }
     
 
     
+
 
 
 
