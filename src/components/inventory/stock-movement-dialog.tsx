@@ -35,7 +35,7 @@ import { getStockMovementDetailsAction } from "@/app/(app)/inventory/actions";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { format } from "date-fns";
-import { Printer } from "lucide-react";
+import { Printer, Download } from "lucide-react";
 
 interface StockMovementDialogProps {
   setOpen: (open: boolean) => void;
@@ -93,8 +93,8 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
   };
 
   const handlePrint = () => {
-    // This direct call is blocked by sandbox restrictions in IDX.
-    // User should use browser's print functionality.
+    // This direct call might be blocked by sandbox restrictions in some environments (like IDX).
+    // User might need to use browser's print functionality (Ctrl/Cmd+P).
     window.print();
   };
 
@@ -104,6 +104,7 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
         <DialogTitle>Stock Movement Report</DialogTitle>
         <DialogDescription>
           Select an item and a period to view its stock movement details.
+          To save as PDF, use your browser's print dialog options.
         </DialogDescription>
       </DialogHeader>
       
@@ -211,10 +212,16 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
             </div>
         )}
       <DialogFooter className="mt-auto pt-4 print:hidden">
+        <div className="flex-grow"></div> {/* Pushes buttons to the right */}
         {reportData && !isLoadingReport && !error && (
-           <Button type="button" onClick={handlePrint} variant="outline">
-            <Printer className="mr-2 h-4 w-4" /> Print Report
-          </Button>
+          <>
+            <Button type="button" onClick={handlePrint} variant="outline">
+              <Printer className="mr-2 h-4 w-4" /> Print Report
+            </Button>
+            <Button type="button" onClick={handlePrint} variant="outline">
+              <Download className="mr-2 h-4 w-4" /> Download PDF
+            </Button>
+          </>
         )}
         <DialogClose asChild>
           <Button type="button" variant="outline">

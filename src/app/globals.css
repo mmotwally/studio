@@ -151,6 +151,14 @@ body {
     white-space: normal !important;
   }
 
+  /* Hide specific dialog elements like header, filter inputs, and footer buttons */
+  .print\:dialog-header-hidden > *:not(#stock-movement-report-content),
+  .print\:dialog-filters-hidden,
+  .print\:dialog-footer-hidden {
+    display: none !important;
+  }
+
+
   /* Ensure table content is visible and well-formatted */
   #stock-movement-report-content table, 
   #stock-movement-report-content th, 
