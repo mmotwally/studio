@@ -17,7 +17,6 @@ export interface DashboardStat {
   color?: string; 
 }
 
-// New types for Recent Activity
 export type ActivityType = 
   | 'INVENTORY_NEW' 
   | 'REQUISITION_NEW' 
@@ -31,14 +30,14 @@ export type ActivityType =
   | 'STOCK_MOVEMENT_INITIAL';
 
 export interface ActivityLogEntry {
-  id: string; // Unique ID for the log entry (e.g., movement ID, item ID, PO ID)
-  timestamp: string; // ISO date string
+  id: string; 
+  timestamp: string; 
   type: ActivityType;
   description: string;
-  referenceId?: string; // Original ID of the item, PO, Req
+  referenceId?: string; 
   linkHref?: string;
-  user?: string; // Optional user associated with the activity
-  details?: Record<string, any>; // Optional additional details
+  user?: string; 
+  details?: Record<string, any>; 
 }
 
 export interface DashboardData {
@@ -49,7 +48,7 @@ export interface DashboardData {
   monthlyExpenditure: number;
   totalInventoryValue: number;
   recentActivities?: ActivityLogEntry[];
-  error?: string; // Optional error message
+  error?: string; 
 }
 
 
@@ -69,7 +68,7 @@ export interface SubCategoryDB {
   id: string;
   name: string;
   categoryId: string;
-  categoryName?: string; // Optional: For display if joined
+  categoryName?: string; 
   code: string;
 }
 
@@ -78,7 +77,7 @@ export interface LocationDB {
   store: string;
   rack?: string | null;
   shelf?: string | null;
-  fullName?: string; // For display (e.g. Store - Rack - Shelf)
+  fullName?: string; 
 }
 
 export interface SupplierDB {
@@ -95,11 +94,10 @@ export interface UnitOfMeasurementDB {
   name: string;
   abbreviation?: string | null;
   baseUnitId?: string | null;
-  baseUnitName?: string | null; // For display
+  baseUnitName?: string | null; 
   conversionFactor: number;
 }
 
-// This type is used for the Excel export mapping
 export interface InventoryItemExport {
   id: string;
   name: string;
@@ -128,29 +126,29 @@ export interface InventoryItem {
   unitCost: number;
   lastPurchasePrice?: number;
   averageCost?: number;
-  totalValue: number; // Calculated: quantity * unitCost
+  totalValue: number; 
   lastUpdated: string;
   lowStock?: boolean;
   minStockLevel?: number;
   maxStockLevel?: number;
   categoryId?: string;
-  categoryName?: string; // For display, from join
-  categoryCode?: string; // For ID generation logic
+  categoryName?: string; 
+  categoryCode?: string; 
   subCategoryId?: string;
-  subCategoryName?: string; // For display
-  subCategoryCode?: string; // For ID generation logic
+  subCategoryName?: string; 
+  subCategoryCode?: string; 
   locationId?: string;
-  locationName?: string; // For display (e.g. Store - Rack - Shelf)
+  locationName?: string; 
   supplierId?: string;
-  supplierName?: string; // For display
+  supplierName?: string; 
   unitId?: string;
-  unitName?: string; // For display (e.g. "Pieces" or "pcs")
+  unitName?: string; 
 }
 
 export interface InventoryItemFormValues {
   name: string;
   description?: string | null;
-  imageUrl?: string | null; // This might not be directly in form values if using file input
+  imageUrl?: string | null; 
   quantity: number;
   unitCost: number;
   lowStock?: boolean;
@@ -161,7 +159,7 @@ export interface InventoryItemFormValues {
   locationId?: string | null;
   supplierId?: string | null;
   unitId: string;
-  removeImage?: boolean; // For edit form: to signal image removal
+  removeImage?: boolean; 
 }
 
 
@@ -180,9 +178,14 @@ export interface Role {
   userCount: number;
 }
 
+// Enhanced ReportFilter
 export interface ReportFilter {
   dateRange?: { from?: Date; to?: Date };
-  reportType?: string;
+  reportType?: ReportTypeKey; // Use a specific key type
+  status?: string; // For filtering by status (e.g., RequisitionStatus, PurchaseOrderStatus)
+  categoryId?: string;
+  supplierId?: string;
+  departmentId?: string;
 }
 
 export type SelectItem = {
@@ -290,35 +293,35 @@ export type PurchaseOrderStatus =
 export interface PurchaseOrder {
   id: string;
   supplierId: string;
-  supplierName?: string; // For display
+  supplierName?: string; 
   orderDate: string;
   expectedDeliveryDate?: string | null;
   status: PurchaseOrderStatus;
   notes?: string | null;
   shippingAddress?: string | null;
   billingAddress?: string | null;
-  totalAmount?: number; // Calculated from items
+  totalAmount?: number; 
   lastUpdated: string;
   createdById?: string | null;
-  createdByName?: string; // For display
+  createdByName?: string; 
   items?: PurchaseOrderItem[];
-  itemCount?: number; // For list display
+  itemCount?: number; 
 }
 
 export interface PurchaseOrderItem {
-  id: string; // This is the purchase_order_item_id
+  id: string; 
   purchaseOrderId: string;
   inventoryItemId: string;
-  inventoryItemName?: string; // For display
-  inventoryItemCurrentStock?: number; // For display/validation during receiving
-  inventoryItemLastPurchasePrice?: number | null; // Added for PO form
-  averageCost?: number | null; // Added for PO form (current average cost)
-  description?: string | null; // Can be custom or from inventory item
+  inventoryItemName?: string; 
+  inventoryItemCurrentStock?: number; 
+  inventoryItemLastPurchasePrice?: number | null; 
+  averageCost?: number | null; 
+  description?: string | null; 
   quantityOrdered: number;
   unitCost: number;
-  quantityApproved?: number | null; // Quantity approved by manager
-  totalCost?: number; // Calculated: quantityOrdered * unitCost
-  quantityReceived: number; // Total quantity received so far for this item
+  quantityApproved?: number | null; 
+  totalCost?: number; 
+  quantityReceived: number; 
   notes?: string | null;
 }
 
@@ -339,9 +342,8 @@ export interface PurchaseOrderFormValues {
   items: PurchaseOrderItemFormValues[];
 }
 
-// For Approving PO Items
 export interface ApprovePOItemFormValues {
-  poItemId: string; // Corresponds to PurchaseOrderItem.id
+  poItemId: string; 
   inventoryItemId: string;
   itemName: string;
   quantityOrdered: number;
@@ -353,7 +355,6 @@ export interface ApprovePOFormValues {
   items: ApprovePOItemFormValues[];
 }
 
-// For Receiving PO Items
 export interface ReceivePOItemFormValues {
   poItemId: string; 
   inventoryItemId: string;
@@ -379,20 +380,20 @@ export type StockMovementType =
   | 'REQUISITION_RETURN'
   | 'ADJUSTMENT_IN'
   | 'ADJUSTMENT_OUT'
-  | 'RETURN_TO_SUPPLIER'; // Example for future use
+  | 'RETURN_TO_SUPPLIER'; 
   
 
 export interface StockMovement {
   id: string;
   inventoryItemId: string;
-  inventoryItemName?: string; // For display
+  inventoryItemName?: string; 
   movementType: StockMovementType;
-  quantityChanged: number; // Positive for IN, Negative for OUT
+  quantityChanged: number; 
   balanceAfterMovement: number;
-  referenceId?: string | null; // e.g., PO ID, Requisition ID
+  referenceId?: string | null; 
   movementDate: string;
   userId?: string | null;
-  userName?: string; // For display
+  userName?: string; 
   notes?: string | null;
 }
 
@@ -407,3 +408,73 @@ export interface StockMovementReport {
   closingStock: number;
   movements: StockMovement[];
 }
+
+// Report Specific Types
+export type ReportTypeKey = 
+  | 'inventory_stock_list' 
+  | 'low_stock_items' 
+  | 'requisition_summary' 
+  | 'purchase_order_summary';
+
+export interface ReportDefinition {
+  value: ReportTypeKey;
+  label: string;
+  description: string;
+  columns: Array<{ key: string; header: string; type?: 'currency' | 'date' | 'datetime' | 'badge' | 'number' }>;
+}
+
+export interface InventoryStockListItem {
+  id: string;
+  name: string;
+  categoryName?: string;
+  subCategoryName?: string;
+  quantity: number;
+  unitName?: string;
+  unitCost: number;
+  averageCost?: number;
+  totalValue: number;
+  locationName?: string;
+  supplierName?: string;
+  minStockLevel?: number;
+  lowStock: boolean; // Calculated or directly from DB
+}
+
+export interface LowStockItem {
+  id: string;
+  name: string;
+  quantity: number;
+  minStockLevel: number;
+  unitName?: string;
+  supplierName?: string;
+  categoryName?: string;
+  diffQtyNeeded: number; // Calculated: minStockLevel - quantity
+}
+
+export interface RequisitionSummaryItem {
+  id: string;
+  dateCreated: string;
+  dateNeeded?: string | null;
+  departmentName?: string;
+  requesterName?: string; // To be added if user association exists
+  status: RequisitionStatus;
+  itemCount: number;
+  notes?: string | null;
+}
+
+export interface PurchaseOrderSummaryItem {
+  id: string;
+  orderDate: string;
+  expectedDeliveryDate?: string | null;
+  supplierName?: string;
+  status: PurchaseOrderStatus;
+  itemCount: number;
+  totalAmount: number;
+  notes?: string | null;
+}
+
+export type GeneratedReportData = 
+  | InventoryStockListItem[] 
+  | LowStockItem[] 
+  | RequisitionSummaryItem[] 
+  | PurchaseOrderSummaryItem[]
+  | null;
