@@ -93,6 +93,7 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
   };
 
   const handlePrint = () => {
+    console.log("handlePrint called in StockMovementDialog"); // Diagnostic log
     window.print();
   };
 
@@ -210,7 +211,7 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
         )}
       <DialogFooter className="mt-auto pt-4 print:hidden">
         {reportData && !isLoadingReport && !error && (
-           <Button onClick={handlePrint} variant="outline">
+           <Button type="button" onClick={handlePrint} variant="outline">
             <Printer className="mr-2 h-4 w-4" /> Print Report
           </Button>
         )}
