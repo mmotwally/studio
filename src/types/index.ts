@@ -164,10 +164,10 @@ export type RequisitionStatus =
 
 export interface Requisition {
   id: string;
-  requesterId?: string | null; // Link to User later
-  requesterName?: string; // For display from users table eventually
+  requesterId?: string | null; 
+  requesterName?: string; 
   departmentId?: string | null;
-  departmentName?: string; // For display
+  departmentName?: string; 
   orderNumber?: string | null;
   bomNumber?: string | null;
   dateCreated: string;
@@ -175,25 +175,23 @@ export interface Requisition {
   status: RequisitionStatus;
   notes?: string | null;
   lastUpdated: string;
-  items?: RequisitionItem[]; // Populated when viewing details
-  totalItems?: number; // For list view summary
+  items?: RequisitionItem[]; 
+  totalItems?: number; 
 }
 
-// Represents an item stored in the database for a requisition
 export interface RequisitionItem {
-  id: string; // UUID for the requisition_item entry itself
+  id: string; 
   requisitionId: string;
   inventoryItemId: string;
-  inventoryItemName?: string; // For display
-  inventoryItemCurrentStock?: number; // For display on detail/fulfillment view
+  inventoryItemName?: string; 
+  inventoryItemCurrentStock?: number; 
   quantityRequested: number;
-  quantityApproved?: number | null; // Manager approved quantity
+  quantityApproved?: number | null; 
   quantityIssued: number; 
-  isApproved?: boolean; // Flag if a decision (approve/reject qty) was made; derived from quantityApproved
+  isApproved?: boolean; 
   notes?: string | null;
 }
 
-// Represents the structure of values from the Requisition Form
 export interface RequisitionFormValues {
   departmentId: string;
   orderNumber?: string | null;
@@ -207,16 +205,15 @@ export interface RequisitionFormValues {
   }>;
 }
 
-// Schema for the fulfillment dialog form
 export interface FulfillRequisitionItemFormValues {
   requisitionItemId: string;
   inventoryItemId: string;
-  itemName: string; // For display in form
-  quantityRequested: number; // Original requested quantity
-  quantityApproved: number; // Quantity manager approved
-  currentQuantityIssued: number; // Already issued for this item
-  inventoryItemCurrentStock: number; // Current stock of the inventory item
-  quantityToIssueNow: number; // Quantity being issued in this attempt
+  itemName: string; 
+  quantityRequested: number; 
+  quantityApproved: number; 
+  currentQuantityIssued: number; 
+  inventoryItemCurrentStock: number; 
+  quantityToIssueNow: number; 
 }
 
 export interface FulfillRequisitionFormValues {
@@ -224,23 +221,79 @@ export interface FulfillRequisitionFormValues {
   items: FulfillRequisitionItemFormValues[];
 }
 
-// Department Management Types
 export interface DepartmentFormValues {
   name: string;
   code: string;
 }
 
-// For item approval dialog
 export interface ApproveRequisitionItemFormValues {
   requisitionItemId: string;
   inventoryItemId: string;
   itemName: string;
   quantityRequested: number;
-  quantityToApprove: number; // Quantity the manager is approving for this item
+  quantityToApprove: number; 
 }
 
 export interface ApproveRequisitionFormValues {
   requisitionId: string;
   items: ApproveRequisitionItemFormValues[];
+}
+
+// Purchase Order Module Types
+export type PurchaseOrderStatus = 
+  | 'DRAFT'
+  | 'PENDING_APPROVAL'
+  | 'APPROVED'
+  | 'ORDERED'
+  | 'PARTIALLY_RECEIVED'
+  | 'RECEIVED'
+  | 'CANCELLED';
+
+export interface PurchaseOrder {
+  id: string;
+  supplierId: string;
+  supplierName?: string; // For display
+  orderDate: string;
+  expectedDeliveryDate?: string | null;
+  status: PurchaseOrderStatus;
+  notes?: string | null;
+  shippingAddress?: string | null;
+  billingAddress?: string | null;
+  totalAmount?: number; // Calculated from items
+  lastUpdated: string;
+  createdById?: string | null;
+  createdByName?: string; // For display
+  items?: PurchaseOrderItem[];
+  itemCount?: number; // For list display
+}
+
+export interface PurchaseOrderItem {
+  id: string;
+  purchaseOrderId: string;
+  inventoryItemId: string;
+  inventoryItemName?: string; // For display
+  description?: string | null; // Can be custom or from inventory item
+  quantityOrdered: number;
+  unitCost: number;
+  totalCost?: number; // Calculated: quantityOrdered * unitCost
+  quantityReceived: number;
+  notes?: string | null;
+}
+
+export interface PurchaseOrderItemFormValues {
+  inventoryItemId: string;
+  description?: string | null;
+  quantityOrdered: number;
+  unitCost: number;
+}
+
+export interface PurchaseOrderFormValues {
+  supplierId: string;
+  orderDate: Date;
+  expectedDeliveryDate?: Date | null;
+  notes?: string | null;
+  shippingAddress?: string | null;
+  billingAddress?: string | null;
+  items: PurchaseOrderItemFormValues[];
 }
 

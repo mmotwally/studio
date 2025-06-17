@@ -4,6 +4,7 @@
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
 import path from 'path';
+import { format } from 'date-fns';
 
 const DB_FILE = path.join(process.cwd(), 'local.db');
 
@@ -210,10 +211,44 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
     );
   `);
 
+  await dbConnection.exec(`
+    CREATE TABLE IF NOT EXISTS purchase_orders (
+      id TEXT PRIMARY KEY,
+      supplierId TEXT NOT NULL,
+      orderDate TEXT NOT NULL,
+      expectedDeliveryDate TEXT,
+      status TEXT NOT NULL DEFAULT 'DRAFT',
+      notes TEXT,
+      shippingAddress TEXT,
+      billingAddress TEXT,
+      lastUpdated TEXT NOT NULL,
+      createdById TEXT, 
+      FOREIGN KEY (supplierId) REFERENCES suppliers(id) ON DELETE RESTRICT,
+      FOREIGN KEY (createdById) REFERENCES users(id) ON DELETE SET NULL
+    );
+  `);
+
+  await dbConnection.exec(`
+    CREATE TABLE IF NOT EXISTS purchase_order_items (
+      id TEXT PRIMARY KEY,
+      purchaseOrderId TEXT NOT NULL,
+      inventoryItemId TEXT NOT NULL,
+      description TEXT,
+      quantityOrdered INTEGER NOT NULL,
+      unitCost REAL NOT NULL,
+      quantityReceived INTEGER DEFAULT 0,
+      notes TEXT,
+      FOREIGN KEY (purchaseOrderId) REFERENCES purchase_orders(id) ON DELETE CASCADE,
+      FOREIGN KEY (inventoryItemId) REFERENCES inventory(id) ON DELETE RESTRICT
+    );
+  `);
+
   console.log('Tables schema checked/created by _createTables.');
 }
 
 async function _dropTables(dbConnection: Database<sqlite3.Database, sqlite3.Statement>) {
+  await dbConnection.exec(`DROP TABLE IF EXISTS purchase_order_items;`);
+  await dbConnection.exec(`DROP TABLE IF EXISTS purchase_orders;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS requisition_items;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS requisitions;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS inventory;`);
@@ -436,7 +471,7 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
         await db.exec('PRAGMA foreign_keys = ON;');
 
         let schemaNeedsReset = false;
-        const tablesToEnsureExist = ['departments', 'inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles', 'requisitions', 'requisition_items'];
+        const tablesToEnsureExist = ['departments', 'inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles', 'requisitions', 'requisition_items', 'purchase_orders', 'purchase_order_items'];
         const columnsToCheck: Record<string, string[]> = {
           inventory: ['minStockLevel', 'maxStockLevel', 'description', 'imageUrl'],
           units_of_measurement: ['conversion_factor', 'base_unit_id'],
@@ -445,6 +480,8 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
           sub_categories: ['code', 'categoryId'],
           requisitions: ['requesterId', 'departmentId', 'orderNumber', 'bomNumber', 'dateNeeded', 'status', 'notes', 'lastUpdated', 'departmentId'],
           requisition_items: ['requisitionId', 'inventoryItemId', 'quantityRequested', 'quantityApproved', 'quantityIssued', 'isApproved', 'notes'],
+          purchase_orders: ['supplierId', 'orderDate', 'status', 'lastUpdated'],
+          purchase_order_items: ['purchaseOrderId', 'inventoryItemId', 'quantityOrdered', 'unitCost'],
         };
 
         for (const tableName of tablesToEnsureExist) {
@@ -472,7 +509,9 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
         if (schemaNeedsReset) {
           needsFullSeed = true;
         } else {
-          await _createTables(db); // Ensures tables exist if not a full schema reset
+          // If schema seems okay, ensure tables exist (might be first run on a new DB file)
+          // and then check if key seed data is present.
+          await _createTables(db); 
           
           const categoryCountResult = await db.get('SELECT COUNT(*) as count FROM categories');
           if ((categoryCountResult?.count ?? 0) === 0) {
@@ -536,15 +575,24 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
     // If not explicitly dropping, check if seeding is needed based on data state
     await _createTables(db); // Ensure tables exist
     const categoryCountResult = await db.get('SELECT COUNT(*) as count FROM categories');
-    if ((categoryCountResult?.count ?? 0) === 0) needsFullSeed = true;
+    if ((categoryCountResult?.count ?? 0) === 0) {
+        console.log("Script: Categories table empty, needs seed.");
+        needsFullSeed = true;
+    }
 
     if (!needsFullSeed) {
       const deptCheck = await db.get('SELECT id FROM departments WHERE id = ?', SEED_DEPT_ENGINEERING_ID);
-      if (!deptCheck) needsFullSeed = true;
+      if (!deptCheck) {
+          console.log("Script: Key department missing, needs seed.");
+          needsFullSeed = true;
+      }
     }
     if (!needsFullSeed) {
       const invCheck = await db.get('SELECT id FROM inventory WHERE id = ?', KEY_INVENTORY_ITEM_ID);
-      if (!invCheck) needsFullSeed = true;
+      if (!invCheck) {
+          console.log("Script: Key inventory item missing, needs seed.");
+          needsFullSeed = true;
+      }
     }
   }
 
@@ -565,3 +613,4 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
     
 
     
+
