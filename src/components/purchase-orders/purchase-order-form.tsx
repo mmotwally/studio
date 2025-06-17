@@ -304,7 +304,7 @@ export function PurchaseOrderForm({
                   <FormItem className="md:col-span-3">
                     <FormLabel>Description</FormLabel>
                     <FormControl>
-                      <Input placeholder="Item description (if specific for PO)" {...field} value={f.value ?? ""} />
+                      <Input placeholder="Item description (if specific for PO)" {...f} value={f.value ?? ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
