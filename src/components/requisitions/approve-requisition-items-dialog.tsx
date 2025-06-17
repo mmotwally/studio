@@ -101,17 +101,20 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
 
     try {
       await approveRequisitionItemsAction(values.requisitionId, itemsToSubmit);
-      // This part should not be reached if approveRequisitionItemsAction successfully redirects.
-      // If it does, it means the action completed but didn't redirect (unexpected for current design).
-      // In such a case, we'd manually close and refresh.
+      // This part should not be reached if the action successfully redirects.
+      // If it is reached, it implies the action completed without throwing a redirect error.
+      toast({
+        title: "Processing Complete",
+        description: "Approval decisions submitted. A redirect might not have occurred as expected.",
+        variant: "default"
+      });
       setOpen(false);
       setIsSubmitting(false);
-      onApprovalProcessed();
+      onApprovalProcessed(); 
 
     } catch (error: any) {
       if (error.digest?.startsWith('NEXT_REDIRECT')) {
-        // Server action initiated a redirect.
-        // Explicitly set dialog to closed and reset submitting state before re-throwing.
+        onApprovalProcessed(); 
         setOpen(false); 
         setIsSubmitting(false);
         throw error; // Re-throw for Next.js to handle navigation.
@@ -131,7 +134,7 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
         onApprovalProcessed(); 
         setOpen(false); 
       }
-      setIsSubmitting(false); // Reset submitting state for non-redirect errors
+      setIsSubmitting(false); 
     }
   }
   
