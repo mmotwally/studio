@@ -22,19 +22,29 @@ import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 import PdfPrinter from 'pdfmake';
 import type { TDocumentDefinitions } from 'pdfmake/interfaces';
 
-// This populates pdfMake.vfs with the Roboto font data
-const vfsFonts = require('pdfmake/build/vfs_fonts.js');
-const pdfMakeVfs = vfsFonts.pdfMake.vfs;
-
-// Create fonts object for PdfPrinter constructor
-const preloadedFonts = {
-  Roboto: {
-    normal: Buffer.from(pdfMakeVfs['Roboto-Regular.ttf'], 'base64'),
-    bold: Buffer.from(pdfMakeVfs['Roboto-Medium.ttf'], 'base64'),
-    italics: Buffer.from(pdfMakeVfs['Roboto-Italic.ttf'], 'base64'),
-    bolditalics: Buffer.from(pdfMakeVfs['Roboto-MediumItalic.ttf'], 'base64'),
-  }
-};
+// Pre-load fonts at module scope
+let preloadedFonts: any; 
+try {
+    const vfsFontsModule = require('pdfmake/build/vfs_fonts.js');
+    if (vfsFontsModule && vfsFontsModule.pdfMake && vfsFontsModule.pdfMake.vfs) {
+        const pdfMakeVfs = vfsFontsModule.pdfMake.vfs;
+        preloadedFonts = {
+            Roboto: {
+                normal: Buffer.from(pdfMakeVfs['Roboto-Regular.ttf'], 'base64'),
+                bold: Buffer.from(pdfMakeVfs['Roboto-Medium.ttf'], 'base64'),
+                italics: Buffer.from(pdfMakeVfs['Roboto-Italic.ttf'], 'base64'),
+                bolditalics: Buffer.from(pdfMakeVfs['Roboto-MediumItalic.ttf'], 'base64'),
+            }
+        };
+    } else {
+        console.error("Failed to load pdfmake vfs_fonts.js or VFS structure is unexpected. PDF generation may fail or use default fonts if available.");
+        // Provide a fallback structure for PdfPrinter constructor if it strictly requires it
+        preloadedFonts = { Roboto: { normal: Buffer.from(""), bold: Buffer.from(""), italics: Buffer.from(""), bolditalics: Buffer.from("") } }; 
+    }
+} catch (e) {
+    console.error("Error requiring pdfmake/build/vfs_fonts.js. PDF generation may fail or use default fonts if available.:", e);
+    preloadedFonts = { Roboto: { normal: Buffer.from(""), bold: Buffer.from(""), italics: Buffer.from(""), bolditalics: Buffer.from("") } };
+}
 
 
 async function ensureDirExists(dirPath: string) {
@@ -148,8 +158,8 @@ export async function addInventoryItemAction(formData: FormData) {
       imageUrlToStore,
       data.quantity,
       data.unitCost,
-      data.unitCost, // Initialize lastPurchasePrice with unitCost
-      data.unitCost, // Initialize averageCost with unitCost
+      data.unitCost, 
+      data.unitCost, 
       lastUpdated,
       data.lowStock ? 1 : 0,
       data.minStockLevel,
@@ -178,8 +188,7 @@ export async function addInventoryItemAction(formData: FormData) {
 
   } catch (error) {
     console.error("Failed to add inventory item:", error);
-    // Attempt to rollback if db connection was established
-    const db = await openDb().catch(() => null); // Get a connection if possible, or null
+    const db = await openDb().catch(() => null); 
     if (db) await db.run('ROLLBACK').catch(rbError => console.error("Rollback failed:", rbError));
     
     if (error instanceof Error) {
@@ -202,7 +211,7 @@ export async function updateInventoryItemAction(itemId: string, currentImageUrl:
     description: rawFormData.description ? rawFormData.description as string : null,
     quantity: parseInt(rawFormData.quantity as string, 10) || 0,
     unitCost: parseFloat(rawFormData.unitCost as string) || 0,
-    lowStock: rawFormData.lowStock === 'on' || rawFormData.lowStock === 'true', // Checkbox sends 'on' or undefined
+    lowStock: rawFormData.lowStock === 'on' || rawFormData.lowStock === 'true', 
     minStockLevel: parseInt(rawFormData.minStockLevel as string, 10) || 0,
     maxStockLevel: parseInt(rawFormData.maxStockLevel as string, 10) || 0,
     categoryId: rawFormData.categoryId as string,
@@ -210,7 +219,7 @@ export async function updateInventoryItemAction(itemId: string, currentImageUrl:
     locationId: rawFormData.locationId ? rawFormData.locationId as string : undefined,
     supplierId: rawFormData.supplierId ? rawFormData.supplierId as string : undefined,
     unitId: rawFormData.unitId as string,
-    removeImage: rawFormData.removeImage === 'true', // Checkbox for remove image
+    removeImage: rawFormData.removeImage === 'true', 
   };
 
   if (!data.categoryId) {
@@ -220,7 +229,7 @@ export async function updateInventoryItemAction(itemId: string, currentImageUrl:
     throw new Error("Unit of Measurement is required.");
   }
 
-  let imageUrlToStore: string | null = currentImageUrl; // Start with current image
+  let imageUrlToStore: string | null = currentImageUrl; 
   const imageFile = formData.get('imageFile') as File | null;
   const removeImage = data.removeImage;
 
@@ -228,9 +237,7 @@ export async function updateInventoryItemAction(itemId: string, currentImageUrl:
     const db = await openDb();
     await db.run('BEGIN TRANSACTION');
 
-    // 1. Handle new image upload
     if (imageFile && imageFile.size > 0) {
-      // Delete old local image if it exists
       if (currentImageUrl && currentImageUrl.startsWith('/uploads/inventory/')) {
         const oldImagePath = path.join(process.cwd(), 'public', currentImageUrl);
         try {
@@ -240,7 +247,6 @@ export async function updateInventoryItemAction(itemId: string, currentImageUrl:
         }
       }
 
-      // Save new image
       const uploadsDir = path.join(process.cwd(), 'public', 'uploads', 'inventory');
       await ensureDirExists(uploadsDir);
       const fileExtension = path.extname(imageFile.name) || '.png';
@@ -250,7 +256,6 @@ export async function updateInventoryItemAction(itemId: string, currentImageUrl:
       await fs.writeFile(filePath, buffer);
       imageUrlToStore = `/uploads/inventory/${uniqueFileName}`;
     }
-    // 2. Handle image removal request
     else if (removeImage) {
       if (currentImageUrl && currentImageUrl.startsWith('/uploads/inventory/')) {
         const imagePath = path.join(process.cwd(), 'public', currentImageUrl);
@@ -262,7 +267,6 @@ export async function updateInventoryItemAction(itemId: string, currentImageUrl:
       }
       imageUrlToStore = null;
     }
-    // 3. If no new image and no removal, imageUrlToStore remains currentImageUrl
 
     const lastUpdated = new Date().toISOString();
     const existingItem = await db.get<InventoryItem>('SELECT quantity FROM inventory WHERE id = ?', itemId);
@@ -303,7 +307,7 @@ export async function updateInventoryItemAction(itemId: string, currentImageUrl:
             itemId,
             quantityChange > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT',
             quantityChange,
-            data.quantity, // New total quantity
+            data.quantity, 
             lastUpdated,
             'Manual stock adjustment during item edit'
         );
@@ -383,7 +387,7 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
     unitCost: item.unitCost,
     lastPurchasePrice: item.lastPurchasePrice,
     averageCost: item.averageCost,
-    totalValue: (item.quantity || 0) * (item.averageCost || item.unitCost || 0), // Use averageCost if available for totalValue
+    totalValue: (item.quantity || 0) * (item.averageCost || item.unitCost || 0), 
     lastUpdated: item.lastUpdated,
     lowStock: Boolean(item.lowStock),
     minStockLevel: item.minStockLevel,
@@ -492,7 +496,6 @@ export async function deleteInventoryItemAction(itemId: string): Promise<{ succe
   const db = await openDb();
   await db.run('BEGIN TRANSACTION');
   try {
-    // Check for related records in requisition_items or purchase_order_items
     const requisitionItem = await db.get('SELECT id FROM requisition_items WHERE inventoryItemId = ? LIMIT 1', itemId);
     if (requisitionItem) {
       await db.run('ROLLBACK');
@@ -504,10 +507,8 @@ export async function deleteInventoryItemAction(itemId: string): Promise<{ succe
       return { success: false, message: `Cannot delete item "${itemId}". It is referenced in purchase orders.` };
     }
     
-    // Delete stock movements for the item
     await db.run('DELETE FROM stock_movements WHERE inventoryItemId = ?', itemId);
 
-    // Fetch item to get imageUrl for local file deletion
     const item = await db.get('SELECT imageUrl FROM inventory WHERE id = ?', itemId);
     const result = await db.run('DELETE FROM inventory WHERE id = ?', itemId);
 
@@ -516,7 +517,6 @@ export async function deleteInventoryItemAction(itemId: string): Promise<{ succe
       return { success: false, message: `Item with ID "${itemId}" not found.` };
     }
 
-    // Delete local image file if it exists
     if (item && item.imageUrl && typeof item.imageUrl === 'string' && item.imageUrl.startsWith('/uploads/inventory/')) {
       const imagePath = path.join(process.cwd(), 'public', item.imageUrl);
       try {
@@ -557,7 +557,7 @@ export async function exportInventoryToExcelAction(): Promise<Omit<InventoryItem
     locationShelf: item.locationName && item.locationName.includes(' - ') && item.locationName.split(' - ').length > 2 ? item.locationName.split(' - ')[2] : "",
     supplierName: item.supplierName || "",
     unitName: item.unitName || "",
-    imageUrl: item.imageUrl || "", // Keep imageUrl for export context, though not for re-import of local files
+    imageUrl: item.imageUrl || "", 
   }));
 }
 
@@ -575,7 +575,7 @@ interface ExcelRow {
   LocationShelf?: string;
   SupplierName?: string;
   UnitName?: string;
-  ImageURL?: string; // For importing external URLs if needed, not for local file paths.
+  ImageURL?: string; 
 }
 
 interface ImportError {
@@ -671,11 +671,11 @@ export async function importInventoryFromExcelAction(formData: FormData): Promis
           itemId,
           row.Name,
           row.Description || null,
-          row.ImageURL || null, // Excel import will only support URLs for images
+          row.ImageURL || null, 
           quantity,
           unitCost,
-          unitCost, // Initialize lastPurchasePrice
-          unitCost, // Initialize averageCost
+          unitCost, 
+          unitCost, 
           lastUpdated,
           (quantity < minStockLevel && minStockLevel > 0) ? 1 : 0,
           minStockLevel,
@@ -692,7 +692,7 @@ export async function importInventoryFromExcelAction(formData: FormData): Promis
                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
                 crypto.randomUUID(),
                 itemId,
-                'INITIAL_STOCK', // Or 'IMPORT_ADJUSTMENT'
+                'INITIAL_STOCK', 
                 quantity,
                 quantity,
                 lastUpdated,
@@ -793,7 +793,9 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
 
 
 export async function generateStockMovementPdfAction(reportData: StockMovementReport): Promise<string> {
-  // The PdfPrinter constructor now takes the fonts object.
+  if (!preloadedFonts) {
+      throw new Error("PDF fonts not loaded. PDF generation cannot proceed.");
+  }
   const printer = new PdfPrinter(preloadedFonts);
 
   const movementTableBody = [
@@ -916,7 +918,7 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
       }
     },
     defaultStyle: {
-      font: 'Roboto', // Ensure Roboto font is used
+      font: 'Roboto', 
     }
   };
 
@@ -939,6 +941,7 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
     
 
     
+
 
 
 
