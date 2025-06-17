@@ -144,6 +144,8 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       imageUrl TEXT,
       quantity INTEGER NOT NULL DEFAULT 0,
       unitCost REAL NOT NULL DEFAULT 0,
+      lastPurchasePrice REAL DEFAULT 0,
+      averageCost REAL DEFAULT 0,
       lastUpdated TEXT NOT NULL,
       lowStock INTEGER NOT NULL DEFAULT 0,
       minStockLevel INTEGER DEFAULT 0,
@@ -236,6 +238,7 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       description TEXT,
       quantityOrdered INTEGER NOT NULL,
       unitCost REAL NOT NULL,
+      quantityApproved INTEGER,
       quantityReceived INTEGER DEFAULT 0,
       notes TEXT,
       FOREIGN KEY (purchaseOrderId) REFERENCES purchase_orders(id) ON DELETE CASCADE,
@@ -442,10 +445,14 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   for (const item of inventoryItemsData) {
     try {
       await db.run(
-        `INSERT INTO inventory (id, name, description, imageUrl, quantity, unitCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
-         name=excluded.name, description=excluded.description, imageUrl=excluded.imageUrl, quantity=excluded.quantity, unitCost=excluded.unitCost, lastUpdated=excluded.lastUpdated, lowStock=excluded.lowStock, minStockLevel=excluded.minStockLevel, maxStockLevel=excluded.maxStockLevel, categoryId=excluded.categoryId, subCategoryId=excluded.subCategoryId, locationId=excluded.locationId, supplierId=excluded.supplierId, unitId=excluded.unitId`,
-        item.id, item.name, item.description, item.imageUrl, item.quantity, item.unitCost, new Date().toISOString(), item.lowStock, item.minStockLevel, item.maxStockLevel,
+        `INSERT INTO inventory (id, name, description, imageUrl, quantity, unitCost, lastPurchasePrice, averageCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
+         name=excluded.name, description=excluded.description, imageUrl=excluded.imageUrl, quantity=excluded.quantity, unitCost=excluded.unitCost, 
+         lastPurchasePrice=excluded.lastPurchasePrice, averageCost=excluded.averageCost, 
+         lastUpdated=excluded.lastUpdated, lowStock=excluded.lowStock, minStockLevel=excluded.minStockLevel, maxStockLevel=excluded.maxStockLevel, categoryId=excluded.categoryId, subCategoryId=excluded.subCategoryId, locationId=excluded.locationId, supplierId=excluded.supplierId, unitId=excluded.unitId`,
+        item.id, item.name, item.description, item.imageUrl, item.quantity, item.unitCost, 
+        item.unitCost, item.unitCost, // Initialize lastPurchasePrice and averageCost with unitCost
+        new Date().toISOString(), item.lowStock, item.minStockLevel, item.maxStockLevel,
         item.categoryId, item.subCategoryId, item.locationId, item.supplierId, item.unitId
       );
     } catch (e) {
@@ -473,7 +480,7 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
         let schemaNeedsReset = false;
         const tablesToEnsureExist = ['departments', 'inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles', 'requisitions', 'requisition_items', 'purchase_orders', 'purchase_order_items'];
         const columnsToCheck: Record<string, string[]> = {
-          inventory: ['minStockLevel', 'maxStockLevel', 'description', 'imageUrl'],
+          inventory: ['minStockLevel', 'maxStockLevel', 'description', 'imageUrl', 'lastPurchasePrice', 'averageCost'],
           units_of_measurement: ['conversion_factor', 'base_unit_id'],
           suppliers: ['contactPhone'],
           categories: ['code'],
@@ -481,7 +488,7 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
           requisitions: ['requesterId', 'departmentId', 'orderNumber', 'bomNumber', 'dateNeeded', 'status', 'notes', 'lastUpdated', 'departmentId'],
           requisition_items: ['requisitionId', 'inventoryItemId', 'quantityRequested', 'quantityApproved', 'quantityIssued', 'isApproved', 'notes'],
           purchase_orders: ['supplierId', 'orderDate', 'status', 'lastUpdated'],
-          purchase_order_items: ['purchaseOrderId', 'inventoryItemId', 'quantityOrdered', 'unitCost'],
+          purchase_order_items: ['purchaseOrderId', 'inventoryItemId', 'quantityOrdered', 'unitCost', 'quantityApproved'],
         };
 
         for (const tableName of tablesToEnsureExist) {
@@ -614,3 +621,4 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
 
     
 
+    

@@ -90,6 +90,8 @@ export interface InventoryItem {
   imageUrl?: string | null;
   quantity: number;
   unitCost: number;
+  lastPurchasePrice?: number;
+  averageCost?: number;
   totalValue: number; // Calculated: quantity * unitCost
   lastUpdated: string;
   lowStock?: boolean;
@@ -275,6 +277,7 @@ export interface PurchaseOrderItem {
   description?: string | null; // Can be custom or from inventory item
   quantityOrdered: number;
   unitCost: number;
+  quantityApproved?: number | null;
   totalCost?: number; // Calculated: quantityOrdered * unitCost
   quantityReceived: number;
   notes?: string | null;
@@ -285,6 +288,7 @@ export interface PurchaseOrderItemFormValues {
   description?: string | null;
   quantityOrdered: number;
   unitCost: number;
+  quantityApproved?: number | null; // Added for consistency, though approval is a separate step
 }
 
 export interface PurchaseOrderFormValues {
@@ -297,3 +301,5 @@ export interface PurchaseOrderFormValues {
   items: PurchaseOrderItemFormValues[];
 }
 
+
+    

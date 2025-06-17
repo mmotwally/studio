@@ -120,14 +120,16 @@ export async function addInventoryItemAction(formData: FormData) {
     const lastUpdated = new Date().toISOString();
 
     await db.run(
-      `INSERT INTO inventory (id, name, description, imageUrl, quantity, unitCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO inventory (id, name, description, imageUrl, quantity, unitCost, lastPurchasePrice, averageCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       itemId,
       data.name,
       data.description,
       imageUrlToStore,
       data.quantity,
       data.unitCost,
+      data.unitCost, // Initialize lastPurchasePrice with unitCost
+      data.unitCost, // Initialize averageCost with unitCost
       lastUpdated,
       data.lowStock ? 1 : 0,
       data.minStockLevel,
@@ -223,6 +225,7 @@ export async function updateInventoryItemAction(itemId: string, currentImageUrl:
     const lastUpdated = new Date().toISOString();
 
     // Note: Item ID (PK) cannot be changed. Category/SubCategory changes here do not regenerate ID.
+    // lastPurchasePrice and averageCost are NOT updated here; they are updated via PO receiving.
     await db.run(
       `UPDATE inventory
        SET name = ?, description = ?, imageUrl = ?, quantity = ?, unitCost = ?, lastUpdated = ?,
@@ -268,6 +271,8 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
       imageUrl: string | null;
       quantity: number;
       unitCost: number;
+      lastPurchasePrice: number;
+      averageCost: number;
       lastUpdated: string;
       lowStock: number;
       minStockLevel: number;
@@ -286,7 +291,9 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
       unitId?: string | null;
     })[]>(`
     SELECT
-      i.id, i.name, i.description, i.imageUrl, i.quantity, i.unitCost, i.lastUpdated, i.lowStock,
+      i.id, i.name, i.description, i.imageUrl, i.quantity, i.unitCost, 
+      i.lastPurchasePrice, i.averageCost,
+      i.lastUpdated, i.lowStock,
       i.minStockLevel, i.maxStockLevel,
       c.name as categoryName, c.code as categoryCode, i.categoryId,
       sc.name as subCategoryName, sc.code as subCategoryCode, i.subCategoryId,
@@ -309,7 +316,9 @@ export async function getInventoryItems(): Promise<InventoryItem[]> {
     imageUrl: item.imageUrl,
     quantity: item.quantity,
     unitCost: item.unitCost,
-    totalValue: (item.quantity || 0) * (item.unitCost || 0),
+    lastPurchasePrice: item.lastPurchasePrice,
+    averageCost: item.averageCost,
+    totalValue: (item.quantity || 0) * (item.averageCost || item.unitCost || 0), // Use averageCost if available for totalValue
     lastUpdated: item.lastUpdated,
     lowStock: Boolean(item.lowStock),
     minStockLevel: item.minStockLevel,
@@ -338,6 +347,8 @@ export async function getInventoryItemById(itemId: string): Promise<InventoryIte
       imageUrl: string | null;
       quantity: number;
       unitCost: number;
+      lastPurchasePrice: number;
+      averageCost: number;
       lastUpdated: string;
       lowStock: number;
       minStockLevel: number;
@@ -356,7 +367,9 @@ export async function getInventoryItemById(itemId: string): Promise<InventoryIte
       unitId?: string | null;
     })>(`
     SELECT
-      i.id, i.name, i.description, i.imageUrl, i.quantity, i.unitCost, i.lastUpdated, i.lowStock,
+      i.id, i.name, i.description, i.imageUrl, i.quantity, i.unitCost,
+      i.lastPurchasePrice, i.averageCost,
+      i.lastUpdated, i.lowStock,
       i.minStockLevel, i.maxStockLevel,
       c.name as categoryName, c.code as categoryCode, i.categoryId,
       sc.name as subCategoryName, sc.code as subCategoryCode, i.subCategoryId,
@@ -383,7 +396,9 @@ export async function getInventoryItemById(itemId: string): Promise<InventoryIte
     imageUrl: item.imageUrl,
     quantity: item.quantity,
     unitCost: item.unitCost,
-    totalValue: (item.quantity || 0) * (item.unitCost || 0),
+    lastPurchasePrice: item.lastPurchasePrice,
+    averageCost: item.averageCost,
+    totalValue: (item.quantity || 0) * (item.averageCost || item.unitCost || 0),
     lastUpdated: item.lastUpdated,
     lowStock: Boolean(item.lowStock),
     minStockLevel: item.minStockLevel,
@@ -452,6 +467,8 @@ export async function exportInventoryToExcelAction(): Promise<Omit<InventoryItem
     description: item.description || "",
     quantity: item.quantity,
     unitCost: item.unitCost,
+    lastPurchasePrice: item.lastPurchasePrice,
+    averageCost: item.averageCost,
     minStockLevel: item.minStockLevel || 0,
     maxStockLevel: item.maxStockLevel || 0,
     categoryCode: item.categoryCode || "",
@@ -569,14 +586,16 @@ export async function importInventoryFromExcelAction(formData: FormData): Promis
 
       try {
         await db.run(
-          `INSERT INTO inventory (id, name, description, imageUrl, quantity, unitCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO inventory (id, name, description, imageUrl, quantity, unitCost, lastPurchasePrice, averageCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           itemId,
           row.Name,
           row.Description || null,
           row.ImageURL || null, // Excel import will only support URLs for images
           quantity,
           unitCost,
+          unitCost, // Initialize lastPurchasePrice
+          unitCost, // Initialize averageCost
           lastUpdated,
           (quantity < minStockLevel && minStockLevel > 0) ? 1 : 0,
           minStockLevel,
@@ -607,3 +626,5 @@ export async function importInventoryFromExcelAction(formData: FormData): Promis
     errors
   };
 }
+
+    
