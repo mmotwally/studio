@@ -15,11 +15,13 @@ import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus } from 'l
 import { calculateCabinetDetails } from './actions';
 import type { CabinetCalculationInput, CalculatedCabinet, CabinetPart } from './types';
 
-// Available cabinet types for selection (prototype: only one is functional)
+// Available cabinet types for selection
 const cabinetTypes = [
   { value: 'standard_base_2_door', label: 'Standard Base Cabinet - 2 Door (600x720x560mm default)' },
-  { value: 'wall_cabinet_1_door', label: 'Wall Cabinet - 1 Door (Not Implemented)' },
-  { value: 'tall_pantry_2_door', label: 'Tall Pantry - 2 Door (Not Implemented)' },
+  { value: 'wall_cabinet_1_door', label: 'Wall Cabinet - 1 Door' },
+  { value: 'tall_pantry_2_door', label: 'Tall Pantry - 2 Door' },
+  { value: 'base_cabinet_1_door_1_drawer', label: 'Base Cabinet - 1 Door, 1 Drawer (Not Implemented)' },
+  { value: 'corner_wall_cabinet', label: 'Corner Wall Cabinet (Not Implemented)' },
 ];
 
 const defaultDims = {
@@ -50,8 +52,15 @@ export default function CabinetDesignerPage() {
     if (value === 'standard_base_2_door') {
         setCalculationInput(prev => ({ ...prev, width: defaultDims.width, height: defaultDims.height, depth: defaultDims.depth }));
     } else {
-        // Reset or set other defaults if needed for other types
-        setCalculationInput(prev => ({ ...prev, width: 0, height: 0, depth: 0 }));
+        // For other types, you might want to set different default dimensions or clear them
+        // For now, let's clear them or prompt the user.
+        // For this example, we'll just keep previous or let user input.
+        // Consider setting specific defaults per type in a more advanced version.
+        toast({
+            title: "Cabinet Type Changed",
+            description: `Switched to ${cabinetTypes.find(ct => ct.value === value)?.label}. Please set appropriate dimensions.`,
+            variant: "default"
+        })
     }
     setCalculatedData(null);
     setCalculationError(null);
@@ -62,15 +71,19 @@ export default function CabinetDesignerPage() {
     setCalculatedData(null);
     setCalculationError(null);
 
+    // The server action already handles the case for unsupported types.
+    // We can keep the client-side check for immediate feedback if a type is known to be non-functional.
     if (calculationInput.cabinetType !== 'standard_base_2_door') {
       toast({
         title: "Prototype Limitation",
-        description: "Only 'Standard Base Cabinet - 2 Door' is functional in this prototype.",
+        description: `Calculations for '${cabinetTypes.find(ct => ct.value === calculationInput.cabinetType)?.label}' are not yet implemented in this prototype.`,
         variant: "default",
       });
-      setCalculationError("Selected cabinet type is not yet implemented.");
+      setCalculationError(`Calculation logic for '${calculationInput.cabinetType}' is not implemented.`);
       setIsLoading(false);
-      return;
+      // Allow proceeding to server action to demonstrate its error handling as well, or return here.
+      // For now, let's return here to avoid an unnecessary server call for types known to be unimplemented on the client.
+      // return; 
     }
      if (calculationInput.width <= 0 || calculationInput.height <= 0 || calculationInput.depth <= 0) {
       toast({
@@ -101,6 +114,36 @@ export default function CabinetDesignerPage() {
     setIsLoading(false);
   };
 
+  // Determine which image to show based on selected cabinet type
+  const getPreviewImageSrc = () => {
+    switch(calculationInput.cabinetType) {
+        case 'standard_base_2_door':
+            return "https://placehold.co/300x200/EBF4FA/5DADE2.png";
+        case 'wall_cabinet_1_door':
+            return "https://placehold.co/300x200/FADBD8/EC7063.png"; // Example: different color
+        case 'tall_pantry_2_door':
+            return "https://placehold.co/300x200/D5F5E3/58D68D.png"; // Example: different color
+        case 'base_cabinet_1_door_1_drawer':
+             return "https://placehold.co/300x200/FCF3CF/F7DC6F.png";
+        case 'corner_wall_cabinet':
+             return "https://placehold.co/300x200/E8DAEF/C39BD3.png";
+        default:
+            return "https://placehold.co/300x200/EEEEEE/BDBDBD.png"; // Generic placeholder
+    }
+  }
+  
+  const getImageAiHint = () => {
+    switch(calculationInput.cabinetType) {
+        case 'standard_base_2_door': return "base cabinet";
+        case 'wall_cabinet_1_door': return "wall cabinet";
+        case 'tall_pantry_2_door': return "pantry cabinet";
+        case 'base_cabinet_1_door_1_drawer': return "kitchen drawer";
+        case 'corner_wall_cabinet': return "corner cabinet";
+        default: return "cabinet furniture";
+    }
+  }
+
+
   return (
     <>
       <PageHeader
@@ -126,7 +169,7 @@ export default function CabinetDesignerPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {cabinetTypes.map(type => (
-                    <SelectItem key={type.value} value={type.value} disabled={type.value !== 'standard_base_2_door'}>
+                    <SelectItem key={type.value} value={type.value}>
                       {type.label}
                     </SelectItem>
                   ))}
@@ -134,12 +177,9 @@ export default function CabinetDesignerPage() {
               </Select>
             </div>
 
-            {calculationInput.cabinetType === 'standard_base_2_door' && (
-                <div className="aspect-video bg-muted rounded-md flex items-center justify-center">
-                     <Image src="https://placehold.co/300x200/EBF4FA/5DADE2.png" alt="Base Cabinet Preview" width={300} height={200} className="object-contain" data-ai-hint="cabinet furniture"/>
-                </div>
-            )}
-
+            <div className="aspect-video bg-muted rounded-md flex items-center justify-center">
+                 <Image src={getPreviewImageSrc()} alt={`${calculationInput.cabinetType} Preview`} width={300} height={200} className="object-contain" data-ai-hint={getImageAiHint()}/>
+            </div>
 
             <div>
               <Label htmlFor="width">Width (mm)</Label>
