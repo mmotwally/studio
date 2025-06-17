@@ -1,37 +1,38 @@
 
-"use client"; // Will be client for form interaction
+"use client"; 
 
 import * as React from 'react';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-// import { PurchaseOrderForm } from '@/components/purchase-orders/purchase-order-form'; // Will be created next
-// import { createPurchaseOrderAction } from '../actions';
-// import type { PurchaseOrderFormValues } from '../schema';
+import { PurchaseOrderForm } from '@/components/purchase-orders/purchase-order-form';
+import { createPurchaseOrderAction } from '../actions';
+import type { PurchaseOrderFormValues } from '../schema';
 import { useToast } from "@/hooks/use-toast";
 
 export default function CreatePurchaseOrderPage() {
   const { toast } = useToast();
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [isPending, startTransition] = React.useTransition();
 
-  // const handleSubmit = async (values: PurchaseOrderFormValues) => {
-  //   setIsSubmitting(true);
-  //   try {
-  //     // await createPurchaseOrderAction(values);
-  //     // Redirect and toast handled by server action
-  //   } catch (error: any) {
-  //     console.error("Client-side error during PO creation:", error);
-  //      if (error.digest?.startsWith('NEXT_REDIRECT')) {
-  //         throw error; 
-  //      }
-  //     toast({
-  //       title: "Error Creating Purchase Order",
-  //       description: (error instanceof Error ? error.message : String(error)) || "Could not create PO.",
-  //       variant: "destructive",
-  //     });
-  //   } finally {
-  //     setIsSubmitting(false);
-  //   }
-  // };
+  const handleSubmit = async (values: PurchaseOrderFormValues) => {
+    startTransition(async () => {
+      try {
+        await createPurchaseOrderAction(values);
+        // Redirect and success toast should be handled by the server action or pattern
+      } catch (error: any) {
+        console.error("Client-side error during PO creation:", error);
+        if (error.digest?.startsWith('NEXT_REDIRECT')) {
+            // This is the specific error thrown by redirect().
+            // Re-throw it so Next.js can handle the client-side navigation.
+            throw error; 
+        }
+        toast({
+          title: "Error Creating Purchase Order",
+          description: (error instanceof Error ? error.message : String(error)) || "Could not create PO.",
+          variant: "destructive",
+        });
+      }
+    });
+  };
 
   return (
     <>
@@ -43,12 +44,11 @@ export default function CreatePurchaseOrderPage() {
         <CardHeader>
           <CardTitle>Purchase Order Details</CardTitle>
           <CardDescription>
-            Select a supplier, items, quantities, and costs. PO ID will be auto-generated.
+            Select a supplier, items, quantities, and costs. PO ID will be auto-generated upon creation.
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {/* <PurchaseOrderForm onSubmit={handleSubmit} isLoading={isSubmitting} /> */}
-          <p className="text-muted-foreground p-8 text-center">Purchase Order Form will be implemented here.</p>
+          <PurchaseOrderForm onSubmit={handleSubmit} isLoading={isPending} />
         </CardContent>
       </Card>
     </>

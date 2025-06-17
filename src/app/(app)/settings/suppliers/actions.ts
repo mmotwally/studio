@@ -4,7 +4,7 @@
 import { openDb } from "@/lib/database";
 import { revalidatePath } from "next/cache";
 import type { SupplierFormValues } from "./schema";
-import type { SupplierDB } from "@/types";
+import type { SupplierDB, SelectItem } from "@/types";
 
 export async function addSupplierAction(data: SupplierFormValues) {
   try {
@@ -38,6 +38,7 @@ export async function addSupplierAction(data: SupplierFormValues) {
 
   revalidatePath("/inventory"); // For dropdowns in add item
   revalidatePath("/inventory/new"); // For dropdowns
+  revalidatePath("/purchase-orders/new"); // For supplier dropdown in PO form
   // Potentially revalidate a settings page for suppliers if it exists
 }
 
@@ -45,5 +46,13 @@ export async function getSuppliers(): Promise<SupplierDB[]> {
   const db = await openDb();
   const suppliers = await db.all<SupplierDB[]>('SELECT id, name, contactPerson, contactMail, contactPhone, address FROM suppliers ORDER BY name ASC');
   return suppliers;
+}
+
+export async function getSuppliersForSelect(): Promise<SelectItem[]> {
+  const suppliers = await getSuppliers();
+  return suppliers.map(sup => ({
+    value: sup.id,
+    label: sup.name
+  }));
 }
 
