@@ -34,7 +34,8 @@ import type { SelectItem as SelectItemType, StockMovementReport, StockMovement }
 import { getStockMovementDetailsAction } from "@/app/(app)/inventory/actions"; 
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
-import { format } from "date-fns"; // Import format
+import { format } from "date-fns";
+import { Printer } from "lucide-react";
 
 interface StockMovementDialogProps {
   setOpen: (open: boolean) => void;
@@ -70,10 +71,10 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
       const toDateString = format(dateRange.to, "yyyy-MM-dd");
       const data = await getStockMovementDetailsAction(selectedItemId, fromDateString, toDateString);
       setReportData(data); 
-      if (data.movements.length === 0) {
+      if (data.movements.length === 0 && data.openingStock === 0 && data.closingStock === 0 && data.totalIn === 0 && data.totalOut === 0) {
         toast({
-            title: "No Movements Found",
-            description: "No stock movements recorded for the selected item in this period.",
+            title: "No Activity Found",
+            description: "No stock movements or activity recorded for the selected item in this period.",
             variant: "default"
         });
       }
@@ -91,16 +92,20 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
     }
   };
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   return (
-    <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[90vh] flex flex-col">
-      <DialogHeader>
+    <DialogContent className="sm:max-w-3xl md:max-w-4xl lg:max-w-5xl max-h-[90vh] flex flex-col print:max-h-none print:shadow-none print:border-none">
+      <DialogHeader className="print:hidden">
         <DialogTitle>Stock Movement Report</DialogTitle>
         <DialogDescription>
           Select an item and a period to view its stock movement details.
         </DialogDescription>
       </DialogHeader>
       
-      <div className="space-y-4 py-4">
+      <div className="space-y-4 py-4 print:hidden">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
           <div>
             <Label htmlFor="item-select">Inventory Item*</Label>
@@ -132,7 +137,7 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
       </div>
 
         {isLoadingReport && (
-            <div className="space-y-2 mt-4">
+            <div className="space-y-2 mt-4 print:hidden">
                 <Skeleton className="h-8 w-1/2" />
                 <Skeleton className="h-4 w-1/3" />
                 <Skeleton className="h-6 w-full" />
@@ -140,10 +145,10 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
                 <Skeleton className="h-6 w-full" />
             </div>
         )}
-        {error && <p className="text-destructive text-center py-4">{error}</p>}
+        {error && <p className="text-destructive text-center py-4 print:hidden">{error}</p>}
 
         {reportData && !isLoadingReport && !error && (
-          <div className="mt-2 flex-grow overflow-hidden">
+          <div className="mt-2 flex-grow overflow-hidden" id="stock-movement-report-content">
             <h3 className="text-xl font-semibold mb-1">
               Report for: {reportData.inventoryItemName} ({reportData.inventoryItemId})
             </h3>
@@ -151,16 +156,16 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
               Period: {reportData.periodFrom} to {reportData.periodTo}
             </p>
             
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 p-3 border rounded-md bg-muted/30">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4 p-3 border rounded-md bg-muted/30 print:grid-cols-4 print:border-black print:bg-white">
                 <div><span className="font-medium">Opening Stock:</span> {reportData.openingStock}</div>
                 <div><span className="font-medium">Total In (+):</span> {reportData.totalIn}</div>
                 <div><span className="font-medium">Total Out (-):</span> {reportData.totalOut}</div>
                 <div><span className="font-medium">Closing Stock:</span> {reportData.closingStock}</div>
             </div>
             
-            <ScrollArea className="h-[calc(90vh-450px)] md:h-[calc(90vh-400px)] border rounded-md">
+            <ScrollArea className="h-[calc(90vh-450px)] md:h-[calc(90vh-400px)] border rounded-md print:h-auto print:overflow-visible print:border-none">
               <Table>
-                <TableHeader className="sticky top-0 bg-background z-10">
+                <TableHeader className="sticky top-0 bg-background z-10 print:static print:bg-transparent">
                   <TableRow>
                     <TableHead className="w-[150px]">Date</TableHead>
                     <TableHead>Movement Type</TableHead>
@@ -178,11 +183,11 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
                         <TableCell>{mov.movementDate}</TableCell>
                         <TableCell>{mov.movementType.replace(/_/g, ' ')}</TableCell>
                         <TableCell>{mov.referenceId || '-'}</TableCell>
-                        <TableCell className={`text-right ${mov.quantityChanged > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        <TableCell className={`text-right ${mov.quantityChanged > 0 ? 'text-green-600 print:text-black' : 'text-red-600 print:text-black'}`}>
                           {mov.quantityChanged > 0 ? `+${mov.quantityChanged}` : mov.quantityChanged}
                         </TableCell>
                         <TableCell className="text-right">{mov.balanceAfterMovement}</TableCell>
-                        <TableCell className="truncate max-w-xs">{mov.notes || '-'}</TableCell>
+                        <TableCell className="truncate max-w-xs print:max-w-none print:whitespace-normal">{mov.notes || '-'}</TableCell>
                         <TableCell>{mov.userName || mov.userId || '-'}</TableCell>
                       </TableRow>
                     ))
@@ -199,11 +204,16 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
           </div>
         )}
         {!reportData && !isLoadingReport && !error && (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-8 text-muted-foreground print:hidden">
                 Select an item and date range, then click "Generate Report".
             </div>
         )}
-      <DialogFooter className="mt-auto pt-4">
+      <DialogFooter className="mt-auto pt-4 print:hidden">
+        {reportData && !isLoadingReport && !error && (
+           <Button onClick={handlePrint} variant="outline">
+            <Printer className="mr-2 h-4 w-4" /> Print Report
+          </Button>
+        )}
         <DialogClose asChild>
           <Button type="button" variant="outline">
             Close
@@ -213,5 +223,3 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
     </DialogContent>
   );
 }
-
-    

@@ -91,3 +91,87 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  body {
+    font-family: sans-serif;
+    -webkit-print-color-adjust: exact; /* Chrome, Safari */
+    color-adjust: exact; /* Firefox */
+  }
+  .print\:hidden {
+    display: none !important;
+  }
+  .print\:block {
+    display: block !important;
+  }
+  .print\:inline-block {
+    display: inline-block !important;
+  }
+  .print\:p-0 {
+    padding: 0 !important;
+  }
+  .print\:m-0 {
+    margin: 0 !important;
+  }
+  .print\:border-none {
+    border: none !important;
+  }
+  .print\:shadow-none {
+    box-shadow: none !important;
+  }
+  .print\:max-h-none {
+    max-height: none !important;
+  }
+  .print\:overflow-visible {
+    overflow: visible !important;
+  }
+   .print\:bg-white {
+    background-color: white !important;
+  }
+  .print\:text-black {
+    color: black !important;
+  }
+  .print\:border-black {
+    border-color: black !important;
+    border-width: 1px !important; /* Ensure borders are visible */
+  }
+  .print\:static {
+    position: static !important;
+  }
+  .print\:bg-transparent {
+    background-color: transparent !important;
+  }
+  .print\:grid-cols-4 { /* For the summary boxes */
+    grid-template-columns: repeat(4, minmax(0, 1fr)) !important;
+  }
+  .print\:max-w-none {
+    max-width: none !important;
+  }
+  .print\:whitespace-normal {
+    white-space: normal !important;
+  }
+
+  /* Ensure table content is visible and well-formatted */
+  #stock-movement-report-content table, 
+  #stock-movement-report-content th, 
+  #stock-movement-report-content td {
+    border: 1px solid #ccc !important; /* Light gray border for table cells */
+    padding: 4px !important;
+    font-size: 10pt !important; /* Adjust font size for print */
+    color: black !important; /* Ensure text is black */
+  }
+  #stock-movement-report-content th {
+    background-color: #f0f0f0 !important; /* Light gray background for table headers */
+  }
+  
+  /* Specific dialog content adjustments for printing */
+  @page {
+    size: A4 landscape; /* Or 'letter landscape' etc. */
+    margin: 0.5in;
+  }
+
+  /* Ensure dialog content takes up the page */
+  .print\:max-h-none {
+    max-height: none !important;
+  }
+}
