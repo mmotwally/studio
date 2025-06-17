@@ -18,7 +18,7 @@ import type { Database } from 'sqlite';
 import * as XLSX from 'xlsx';
 import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 
-// PDF-lib imports
+// pdf-lib imports
 import { PDFDocument, StandardFonts, rgb, PageSizes } from 'pdf-lib';
 
 
@@ -769,48 +769,81 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
 export async function generateStockMovementPdfAction(reportData: StockMovementReport): Promise<string> {
   try {
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage(PageSizes.A4_LANDSCAPE); // Changed to A4_LANDSCAPE
+    const page = pdfDoc.addPage(PageSizes.A4_LANDSCAPE);
     const { width, height } = page.getSize();
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
     const margin = 40;
     let y = height - margin;
-    const titleLineHeight = 18;
-    const headerLineHeight = 14;
-    const bodyLineHeight = 12;
+    
+    const mainTitleSize = 18;
+    const itemTitleSize = 14;
+    const periodTextSize = 10;
+    const summaryLabelSize = 10;
+    const summaryValueSize = 10;
+    const tableHeaderSize = 9;
+    const tableBodySize = 8;
+
+    const lineHeightMultiplier = 1.2;
+    const sectionGap = 15;
     const tableTopMargin = 20;
     const cellPadding = 5;
 
     // Main Title
     page.setFont(boldFont);
-    page.setFontSize(16);
-    const titleText = `Stock Movement Report - ${reportData.inventoryItemName} (${reportData.inventoryItemId})`;
-    page.drawText(titleText, {
+    page.setFontSize(mainTitleSize);
+    const mainTitleText = "Stock Movement Report";
+    page.drawText(mainTitleText, {
       x: margin,
       y: y,
       font: boldFont,
-      size: 16,
+      size: mainTitleSize,
     });
-    y -= titleLineHeight * 1.5;
+    y -= mainTitleSize * lineHeightMultiplier;
+
+    // Item Name and ID
+    page.setFont(font);
+    page.setFontSize(itemTitleSize);
+    const itemTitleText = `Item: ${reportData.inventoryItemName} (${reportData.inventoryItemId})`;
+    page.drawText(itemTitleText, { x: margin, y: y, font: font, size: itemTitleSize });
+    y -= itemTitleSize * lineHeightMultiplier * 1.5; // Extra gap after item title
 
     // Period
     page.setFont(font);
-    page.setFontSize(10);
-    page.drawText(`Period: ${reportData.periodFrom} to ${reportData.periodTo}`, { x: margin, y: y, size: 10 });
-    y -= headerLineHeight * 1.5;
+    page.setFontSize(periodTextSize);
+    page.drawText(`Period: ${reportData.periodFrom} to ${reportData.periodTo}`, { x: margin, y: y, size: periodTextSize });
+    y -= periodTextSize * lineHeightMultiplier + sectionGap;
 
-    // Summary Section (2x2 grid like)
-    const summaryItemWidth = (width - 2 * margin) / 2 - cellPadding * 2;
-    const summaryLineHeight = 12;
+    // Summary Section
+    const summaryItemWidth = (width - 2 * margin - cellPadding *2) / 2; // For two columns
+    const summaryStartY = y;
 
-    page.drawText(`Opening Stock: ${reportData.openingStock}`, { x: margin, y: y, size: 10 });
-    page.drawText(`Total In (+): ${reportData.totalIn}`, { x: margin + summaryItemWidth + cellPadding, y: y, size: 10 });
-    y -= summaryLineHeight * 1.2;
-    page.drawText(`Closing Stock: ${reportData.closingStock}`, { x: margin, y: y, size: 10 });
-    page.drawText(`Total Out (-): ${reportData.totalOut}`, { x: margin + summaryItemWidth + cellPadding, y: y, size: 10 });
+    page.setFont(boldFont);
+    page.setFontSize(summaryLabelSize);
+    page.drawText(`Opening Stock:`, { x: margin, y: y, font: boldFont, size: summaryLabelSize });
+    page.setFont(font);
+    page.setFontSize(summaryValueSize);
+    page.drawText(`${reportData.openingStock}`, { x: margin + 100, y: y, size: summaryValueSize });
+
+    page.setFont(boldFont);
+    page.drawText(`Total In (+):`, { x: margin + summaryItemWidth + cellPadding, y: y, font: boldFont, size: summaryLabelSize });
+    page.setFont(font);
+    page.drawText(`${reportData.totalIn}`, { x: margin + summaryItemWidth + cellPadding + 80, y: y, size: summaryValueSize });
     
-    y -= headerLineHeight * 1.5 + tableTopMargin;
+    y -= summaryLabelSize * lineHeightMultiplier;
+
+    page.setFont(boldFont);
+    page.drawText(`Closing Stock:`, { x: margin, y: y, font: boldFont, size: summaryLabelSize });
+    page.setFont(font);
+    page.drawText(`${reportData.closingStock}`, { x: margin + 100, y: y, size: summaryValueSize });
+
+    page.setFont(boldFont);
+    page.drawText(`Total Out (-):`, { x: margin + summaryItemWidth + cellPadding, y: y, font: boldFont, size: summaryLabelSize });
+    page.setFont(font);
+    page.drawText(`${reportData.totalOut}`, { x: margin + summaryItemWidth + cellPadding + 80, y: y, size: summaryValueSize });
+    
+    y = summaryStartY - (summaryLabelSize * lineHeightMultiplier * 2) - sectionGap;
 
 
     // Table Headers
@@ -819,30 +852,30 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
     let currentX = margin;
 
     page.setFont(boldFont);
-    page.setFontSize(9); 
+    page.setFontSize(tableHeaderSize); 
     tableHeaders.forEach((header, i) => {
-      page.drawText(header, { x: currentX + cellPadding, y: y, font: boldFont, size: 9 });
+      page.drawText(header, { x: currentX + cellPadding, y: y, font: boldFont, size: tableHeaderSize });
       currentX += colWidths[i];
     });
-    y -= bodyLineHeight * 0.8; // Line height for header text
+    y -= tableHeaderSize * 0.8; // Line height for header text
     
     // Line below header
     page.drawLine({
-        start: { x: margin, y: y + cellPadding * 0.5 }, // Adjust line position slightly
+        start: { x: margin, y: y + cellPadding * 0.5 },
         end: { x: width - margin, y: y + cellPadding * 0.5 },
-        thickness: 0.8, // Slightly thicker line for header separation
-        color: rgb(0.3, 0.3, 0.3), // Darker line
+        thickness: 0.8,
+        color: rgb(0.3, 0.3, 0.3),
     });
-    y -= bodyLineHeight * 0.8; // Space after line
+    y -= tableHeaderSize * 0.8 + cellPadding * 0.5; // Space after line
 
     // Table Body
     page.setFont(font);
-    page.setFontSize(8);
+    page.setFontSize(tableBodySize);
     reportData.movements.forEach(mov => {
-      if (y < margin + bodyLineHeight * 2) { 
+      if (y < margin + tableBodySize * 2) { 
         page.addPage(PageSizes.A4_LANDSCAPE);
-        y = height - margin - bodyLineHeight; 
-        // Redraw headers on new page might be needed for very long tables, skipping for now for simplicity
+        y = height - margin - tableBodySize; 
+        // Redraw headers on new page might be needed for very long tables, skipping for now
       }
       currentX = margin;
       const rowData = [
@@ -855,24 +888,29 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
         mov.userName || mov.userId || '-',
       ];
       rowData.forEach((cell, i) => {
-        page.drawText(cell, { x: currentX + cellPadding, y: y, size: 8 });
+        // Basic right alignment for numeric columns Qty Chg and Balance
+        let xPos = currentX + cellPadding;
+        if (i === 3 || i === 4) { // Qty Chg and Balance columns
+            const textWidth = font.widthOfTextAtSize(cell, tableBodySize);
+            xPos = currentX + colWidths[i] - textWidth - cellPadding;
+        }
+        page.drawText(cell, { x: xPos, y: y, size: tableBodySize });
         currentX += colWidths[i];
       });
-      y -= bodyLineHeight * 1.2;
+      y -= tableBodySize * lineHeightMultiplier;
     });
     
     if (reportData.movements.length === 0) {
+        page.setFont(font);
+        page.setFontSize(tableBodySize);
         page.drawText('No movements recorded for this period.', {
-            x: margin + (width - 2 * margin) / 2 - font.widthOfTextAtSize('No movements recorded for this period.', 8) / 2,
-            y: y - bodyLineHeight, // Place it below where the first row would have been
+            x: margin + (width - 2 * margin) / 2 - font.widthOfTextAtSize('No movements recorded for this period.', tableBodySize) / 2,
+            y: y - tableBodySize,
             font: font,
-            size: 8,
+            size: tableBodySize,
             color: rgb(0.5, 0.5, 0.5)
         });
     }
-    
-    // Optional: Line at the end of the table
-    // page.drawLine({start: {x: margin, y: y + cellPadding}, end: {x: width - margin, y: y + cellPadding}, thickness: 0.5, color: rgb(0.7, 0.7, 0.7)});
 
     const pdfBytes = await pdfDoc.save();
     const base64String = Buffer.from(pdfBytes).toString('base64');
@@ -895,3 +933,6 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
 
 
 
+
+
+    
