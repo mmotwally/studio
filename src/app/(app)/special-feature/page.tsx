@@ -1,11 +1,13 @@
 
+"use client"; // Add this directive
+
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Sparkles } from 'lucide-react';
-import * as React from 'react'; // Added for potential useState/useEffect
-import { useToast } from "@/hooks/use-toast"; // Added for feedback
-import { performSpecialServerAction } from './actions'; // Import placeholder action
+import * as React from 'react'; 
+import { useToast } from "@/hooks/use-toast"; 
+import { performSpecialServerAction } from './actions'; 
 
 export default function SpecialFeaturePage() {
   const { toast } = useToast();
