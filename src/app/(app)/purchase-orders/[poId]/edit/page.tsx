@@ -16,8 +16,7 @@ import { ArrowLeft } from 'lucide-react';
 
 export default function EditPurchaseOrderPage() {
   const router = useRouter();
-  const paramsPromise = useParams();
-  const params = React.use(paramsPromise);
+  const params = useParams(); // Directly get params object
   const poId = params.poId as string;
   const { toast } = useToast();
 
