@@ -67,7 +67,6 @@ export function ReceiveStockForm({ purchaseOrder }: ReceiveStockFormProps) {
     items: itemsEligibleForReceiving.map(item => {
         const qtyApprovedOrOrdered = item.quantityApproved ?? item.quantityOrdered;
         const alreadyReceived = item.quantityReceived || 0;
-        const maxReceivableNow = qtyApprovedOrOrdered - alreadyReceived;
         
         return {
             poItemId: item.id,
@@ -77,8 +76,8 @@ export function ReceiveStockForm({ purchaseOrder }: ReceiveStockFormProps) {
             quantityApproved: item.quantityApproved,
             quantityAlreadyReceived: alreadyReceived,
             inventoryItemCurrentStock: item.inventoryItemCurrentStock,
-            unitCostAtReceipt: item.unitCost, // Cost from the PO item
-            quantityToReceiveNow: 0, // Default to 0, user enters what they are receiving
+            unitCostAtReceipt: item.unitCost, 
+            quantityToReceiveNow: 0, 
         };
     }),
   };
@@ -94,31 +93,30 @@ export function ReceiveStockForm({ purchaseOrder }: ReceiveStockFormProps) {
     name: "items",
   });
 
-  const handleActualSubmit = (values: ReceivePOFormValues) => {
+  const handleActualSubmit = (formValues: ReceivePOFormValues) => {
+    setServerError(null);
+
+    const itemsToSubmit = formValues.items
+        .filter(item => item.quantityToReceiveNow > 0)
+        .map(item => ({
+            poItemId: item.poItemId,
+            inventoryItemId: item.inventoryItemId,
+            quantityReceivedNow: item.quantityToReceiveNow,
+            unitCostAtReceipt: item.unitCostAtReceipt,
+    }));
+
+    if (itemsToSubmit.length === 0) {
+        toast({
+            title: "No Quantities Entered",
+            description: "Please enter quantities to receive for at least one item, or cancel.",
+            variant: "default"
+        });
+        return; 
+    }
+    
     startTransition(async () => {
-        setServerError(null);
-
-        const itemsToSubmit = values.items
-            .filter(item => item.quantityToReceiveNow > 0)
-            .map(item => ({
-                poItemId: item.poItemId,
-                inventoryItemId: item.inventoryItemId,
-                quantityReceivedNow: item.quantityToReceiveNow,
-                unitCostAtReceipt: item.unitCostAtReceipt,
-        }));
-
-        if (itemsToSubmit.length === 0) {
-            toast({
-                title: "No Quantities Entered",
-                description: "Please enter quantities to receive for at least one item, or cancel.",
-                variant: "default"
-            });
-            return; 
-        }
-
         try {
-          await receivePurchaseOrderItemsAction(values.purchaseOrderId, itemsToSubmit);
-          // Redirect and success toast are handled by the server action
+          await receivePurchaseOrderItemsAction(formValues.purchaseOrderId, itemsToSubmit);
         } catch (error: any) {
             if (error.digest?.startsWith('NEXT_REDIRECT')) {
                 throw error; 
