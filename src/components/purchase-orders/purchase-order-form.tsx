@@ -25,14 +25,14 @@ import {
 } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, PlusCircle, Trash2, Users, Package } from "lucide-react";
+import { CalendarIcon, PlusCircle, Trash2, Users, Package, DollarSign } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { useToast } from "@/hooks/use-toast";
 import { type PurchaseOrderFormValues, purchaseOrderFormSchema } from "@/app/(app)/purchase-orders/schema";
-import { getInventoryItemsForSelect } from "@/app/(app)/requisitions/actions"; // Re-use from requisitions for now
+import { getInventoryItemsForSelect } from "@/app/(app)/requisitions/actions"; 
 import { getSuppliersForSelect } from "@/app/(app)/settings/suppliers/actions";
-import type { SelectItem as SelectItemType } from "@/types";
+import type { SelectItem as GenericSelectItem } from "@/types";
 import { useRouter } from "next/navigation";
 
 interface PurchaseOrderFormProps {
@@ -42,6 +42,16 @@ interface PurchaseOrderFormProps {
   isEditMode?: boolean;
 }
 
+interface DetailedInventoryItemForSelect {
+  value: string;
+  label: string;
+  lastPurchasePrice?: number | null;
+  unitCost?: number | null; // This is the item's current/default cost from inventory
+  quantity?: number;
+  unitName?: string | null;
+}
+
+
 export function PurchaseOrderForm({
   onSubmit,
   isLoading = false,
@@ -50,8 +60,8 @@ export function PurchaseOrderForm({
 }: PurchaseOrderFormProps) {
   const { toast } = useToast();
   const router = useRouter();
-  const [inventoryItems, setInventoryItems] = React.useState<SelectItemType[]>([]);
-  const [suppliers, setSuppliers] = React.useState<SelectItemType[]>([]);
+  const [inventoryItems, setInventoryItems] = React.useState<DetailedInventoryItemForSelect[]>([]);
+  const [suppliers, setSuppliers] = React.useState<GenericSelectItem[]>([]);
   const [isLoadingDropdowns, setIsLoadingDropdowns] = React.useState(true);
 
   const form = useForm<PurchaseOrderFormValues>({
@@ -67,7 +77,7 @@ export function PurchaseOrderForm({
     },
   });
 
-  const { fields, append, remove } = useFieldArray({
+  const { fields, append, remove, update } = useFieldArray({
     control: form.control,
     name: "items",
   });
@@ -88,10 +98,10 @@ export function PurchaseOrderForm({
       setIsLoadingDropdowns(true);
       try {
         const [fetchedItems, fetchedSuppliers] = await Promise.all([
-          getInventoryItemsForSelect(),
+          getInventoryItemsForSelect(), // This now returns richer objects
           getSuppliersForSelect(),
         ]);
-        setInventoryItems(fetchedItems);
+        setInventoryItems(fetchedItems as DetailedInventoryItemForSelect[]);
         setSuppliers(fetchedSuppliers);
       } catch (error) {
         console.error("Failed to load dropdown data for PO form:", error);
@@ -110,6 +120,18 @@ export function PurchaseOrderForm({
   const handleFormSubmit = async (values: PurchaseOrderFormValues) => {
     await onSubmit(values);
   };
+
+  const handleItemSelectionChange = (itemValue: string, itemIndex: number) => {
+    const selectedItem = inventoryItems.find(invItem => invItem.value === itemValue);
+    if (selectedItem) {
+      // Update the unitCost for the current PO line item to the selected inventory item's last purchase price (or current unit cost if LPP is null)
+      // Also, store the lastPurchasePrice for display if needed elsewhere, though it's mainly for the new read-only field
+      form.setValue(`items.${itemIndex}.unitCost`, selectedItem.lastPurchasePrice ?? selectedItem.unitCost ?? 0, { shouldValidate: true });
+      // No need to explicitly set a 'lastPurchasePrice' field in the form item data itself for submission,
+      // as it's for display. We'll grab it from `selectedItem` for the read-only field.
+    }
+  };
+
 
   return (
     <Form {...form}>
@@ -266,16 +288,25 @@ export function PurchaseOrderForm({
 
         <div className="space-y-4 pt-4">
           <FormLabel className="text-lg font-semibold">Order Items</FormLabel>
-          {fields.map((field, index) => (
-            <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-4 p-4 border rounded-md shadow-sm relative items-start">
+          {fields.map((field, index) => {
+            const currentInventoryItemId = form.watch(`items.${index}.inventoryItemId`);
+            const selectedInventoryItemDetails = inventoryItems.find(item => item.value === currentInventoryItemId);
+            const lastPurchasePriceDisplay = selectedInventoryItemDetails?.lastPurchasePrice !== null && selectedInventoryItemDetails?.lastPurchasePrice !== undefined 
+                                          ? selectedInventoryItemDetails.lastPurchasePrice.toFixed(2) 
+                                          : "N/A";
+            return (
+            <div key={field.id} className="grid grid-cols-1 md:grid-cols-12 gap-x-4 gap-y-2 p-4 border rounded-md shadow-sm relative items-start">
               <FormField
                 control={form.control}
                 name={`items.${index}.inventoryItemId`}
                 render={({ field: f }) => (
-                  <FormItem className="md:col-span-4">
+                  <FormItem className="md:col-span-3">
                     <FormLabel>Item*</FormLabel>
                     <Select
-                      onValueChange={f.onChange}
+                      onValueChange={(value) => {
+                        f.onChange(value);
+                        handleItemSelectionChange(value, index);
+                      }}
                       value={f.value}
                       disabled={isLoadingDropdowns}
                     >
@@ -301,15 +332,24 @@ export function PurchaseOrderForm({
                 control={form.control}
                 name={`items.${index}.description`}
                 render={({ field: f }) => (
-                  <FormItem className="md:col-span-3">
+                  <FormItem className="md:col-span-2">
                     <FormLabel>Description</FormLabel>
                     <FormControl>
-                      <Input placeholder="Item description (if specific for PO)" {...f} value={f.value ?? ""} />
+                      <Input placeholder="Item description" {...f} value={f.value ?? ""} />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+               <FormItem className="md:col-span-2">
+                <FormLabel>Last Purchase Price ($)</FormLabel>
+                <FormControl>
+                  <div className="flex items-center h-10 rounded-md border border-input bg-muted px-3 py-2 text-sm">
+                     <DollarSign className="mr-1 h-4 w-4 text-muted-foreground opacity-70" />
+                    {lastPurchasePriceDisplay}
+                  </div>
+                </FormControl>
+              </FormItem>
               <FormField
                 control={form.control}
                 name={`items.${index}.quantityOrdered`}
@@ -344,6 +384,7 @@ export function PurchaseOrderForm({
                     size="icon"
                     onClick={() => remove(index)}
                     className="mt-auto"
+                    title="Remove Item"
                   >
                     <Trash2 className="h-4 w-4" />
                     <span className="sr-only">Remove Item</span>
@@ -351,7 +392,8 @@ export function PurchaseOrderForm({
                 )}
               </div>
             </div>
-          ))}
+          );
+        })}
           <Button
             type="button"
             variant="outline"
@@ -378,3 +420,4 @@ export function PurchaseOrderForm({
     </Form>
   );
 }
+
