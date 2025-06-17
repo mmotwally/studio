@@ -704,15 +704,21 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
     throw new Error(`Inventory item with ID ${inventoryItemId} not found.`);
   }
 
+  // Parse date strings (YYYY-MM-DD) into Date objects.
+  // parseISO correctly handles "YYYY-MM-DD" by interpreting it as local time 00:00:00.
   const fromDateLocal = parseISO(fromDateString); 
   const toDateLocal = parseISO(toDateString);     
 
-  const fromDateStart = startOfDay(fromDateLocal);
-  const toDateEnd = endOfDay(toDateLocal);     
+  // Get the start of the "from" day and end of the "to" day in local time.
+  const fromDateStartLocal = startOfDay(fromDateLocal);
+  const toDateEndLocal = endOfDay(toDateLocal);     
 
-  const fromDateISOQuery = format(fromDateStart, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-  const toDateISOQuery = format(toDateEnd, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+  // Format these local Date objects into UTC ISO strings for database querying.
+  // 'Z' in the format string ensures it's converted to UTC.
+  const fromDateISOQuery = format(fromDateStartLocal, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+  const toDateISOQuery = format(toDateEndLocal, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 
+  // Query for the last movement *before* the start of the fromDate.
   const openingStockResult = await db.get<{ balance: number } | undefined>(
     `SELECT balanceAfterMovement as balance 
      FROM stock_movements 
@@ -724,6 +730,7 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
   
   const openingStock = openingStockResult?.balance ?? 0;
 
+  // Query for movements *within* the period (inclusive of start and end dates, considering full days).
   const movementsInPeriod = await db.all<StockMovement[]>(
     `SELECT sm.id, sm.inventoryItemId, i.name as inventoryItemName, sm.movementType, sm.quantityChanged, 
             sm.balanceAfterMovement, sm.referenceId, sm.movementDate, sm.userId, u.name as userName, sm.notes
@@ -744,6 +751,8 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
     else totalOut += Math.abs(m.quantityChanged);
   });
 
+  // Closing stock is the balance after the last movement in the period,
+  // or opening stock if no movements occurred in the period.
   const closingStock = movementsInPeriod.length > 0 
     ? movementsInPeriod[movementsInPeriod.length - 1].balanceAfterMovement
     : openingStock;
@@ -752,14 +761,15 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
   return {
     inventoryItemId: item.id,
     inventoryItemName: item.name,
-    periodFrom: fromDateString, 
-    periodTo: toDateString,     
+    periodFrom: fromDateString, // Return original YYYY-MM-DD for display
+    periodTo: toDateString,     // Return original YYYY-MM-DD for display
     openingStock,
     totalIn,
     totalOut,
     closingStock,
     movements: movementsInPeriod.map(m => ({
         ...m,
+        // Format movementDate back to a more readable local time format for display
         movementDate: format(parseISO(m.movementDate), "yyyy-MM-dd HH:mm") 
     })),
   };
@@ -787,7 +797,7 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
 
     const lineHeightMultiplier = 1.2;
     const sectionGap = 15;
-    const tableTopMargin = 20;
+    // const tableTopMargin = 20; // Not explicitly used, direct y calculation
     const cellPadding = 5;
 
     // Main Title
@@ -818,37 +828,40 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
     // Summary Section
     const summaryItemWidth = (width - 2 * margin - cellPadding *2) / 2; // For two columns
     const summaryStartY = y;
+    const summaryLabelXOffset = 100; // How far from label to draw the value
+    const summaryColumn2XOffset = summaryItemWidth + cellPadding;
 
     page.setFont(boldFont);
     page.setFontSize(summaryLabelSize);
     page.drawText(`Opening Stock:`, { x: margin, y: y, font: boldFont, size: summaryLabelSize });
     page.setFont(font);
     page.setFontSize(summaryValueSize);
-    page.drawText(`${reportData.openingStock}`, { x: margin + 100, y: y, size: summaryValueSize });
+    page.drawText(`${reportData.openingStock}`, { x: margin + summaryLabelXOffset, y: y, size: summaryValueSize });
 
     page.setFont(boldFont);
-    page.drawText(`Total In (+):`, { x: margin + summaryItemWidth + cellPadding, y: y, font: boldFont, size: summaryLabelSize });
+    page.drawText(`Total In (+):`, { x: margin + summaryColumn2XOffset, y: y, font: boldFont, size: summaryLabelSize });
     page.setFont(font);
-    page.drawText(`${reportData.totalIn}`, { x: margin + summaryItemWidth + cellPadding + 80, y: y, size: summaryValueSize });
+    page.drawText(`${reportData.totalIn}`, { x: margin + summaryColumn2XOffset + summaryLabelXOffset, y: y, size: summaryValueSize });
     
-    y -= summaryLabelSize * lineHeightMultiplier;
+    y -= summaryLabelSize * lineHeightMultiplier * 1.5; // Slightly more space between summary rows
 
     page.setFont(boldFont);
     page.drawText(`Closing Stock:`, { x: margin, y: y, font: boldFont, size: summaryLabelSize });
     page.setFont(font);
-    page.drawText(`${reportData.closingStock}`, { x: margin + 100, y: y, size: summaryValueSize });
+    page.drawText(`${reportData.closingStock}`, { x: margin + summaryLabelXOffset, y: y, size: summaryValueSize });
 
     page.setFont(boldFont);
-    page.drawText(`Total Out (-):`, { x: margin + summaryItemWidth + cellPadding, y: y, font: boldFont, size: summaryLabelSize });
+    page.drawText(`Total Out (-):`, { x: margin + summaryColumn2XOffset, y: y, font: boldFont, size: summaryLabelSize });
     page.setFont(font);
-    page.drawText(`${reportData.totalOut}`, { x: margin + summaryItemWidth + cellPadding + 80, y: y, size: summaryValueSize });
+    page.drawText(`${reportData.totalOut}`, { x: margin + summaryColumn2XOffset + summaryLabelXOffset, y: y, size: summaryValueSize });
     
-    y = summaryStartY - (summaryLabelSize * lineHeightMultiplier * 2) - sectionGap;
+    y = summaryStartY - (summaryLabelSize * lineHeightMultiplier * 1.5 * 2) - sectionGap; // Adjusted y based on two rows of summary
 
 
     // Table Headers
     const tableHeaders = ['Date', 'Type', 'Ref', 'Qty Chg', 'Balance', 'Notes', 'User'];
-    const colWidths = [90, 100, 80, 60, 60, 220, 70]; // Adjusted for A4 Landscape and content
+    // Adjusted colWidths: Date, Type, Ref, QtyChg, Balance, Notes (larger), User
+    const colWidths = [90, 100, 80, 60, 60, 220, 70]; 
     let currentX = margin;
 
     page.setFont(boldFont);
@@ -857,16 +870,16 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
       page.drawText(header, { x: currentX + cellPadding, y: y, font: boldFont, size: tableHeaderSize });
       currentX += colWidths[i];
     });
-    y -= tableHeaderSize * 0.8; // Line height for header text
+    y -= tableHeaderSize * 0.8; 
     
     // Line below header
     page.drawLine({
         start: { x: margin, y: y + cellPadding * 0.5 },
         end: { x: width - margin, y: y + cellPadding * 0.5 },
         thickness: 0.8,
-        color: rgb(0.3, 0.3, 0.3),
+        color: rgb(0.3, 0.3, 0.3), // Darker gray for line
     });
-    y -= tableHeaderSize * 0.8 + cellPadding * 0.5; // Space after line
+    y -= tableHeaderSize * 0.8 + cellPadding * 0.5; 
 
     // Table Body
     page.setFont(font);
@@ -875,12 +888,12 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
       if (y < margin + tableBodySize * 2) { 
         page.addPage(PageSizes.A4_LANDSCAPE);
         y = height - margin - tableBodySize; 
-        // Redraw headers on new page might be needed for very long tables, skipping for now
+        // TODO: Consider redrawing headers on new page for very long tables if needed
       }
       currentX = margin;
       const rowData = [
         mov.movementDate,
-        mov.movementType.replace(/_/g, ' '),
+        mov.movementType.replace(/_/g, ' '), // Replace underscores for display
         mov.referenceId || '-',
         mov.quantityChanged > 0 ? `+${mov.quantityChanged}` : mov.quantityChanged.toString(),
         mov.balanceAfterMovement.toString(),
@@ -888,13 +901,13 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
         mov.userName || mov.userId || '-',
       ];
       rowData.forEach((cell, i) => {
-        // Basic right alignment for numeric columns Qty Chg and Balance
         let xPos = currentX + cellPadding;
-        if (i === 3 || i === 4) { // Qty Chg and Balance columns
+        // Right-align numeric columns (Qty Chg and Balance)
+        if (i === 3 || i === 4) { 
             const textWidth = font.widthOfTextAtSize(cell, tableBodySize);
             xPos = currentX + colWidths[i] - textWidth - cellPadding;
         }
-        page.drawText(cell, { x: xPos, y: y, size: tableBodySize });
+        page.drawText(cell, { x: xPos, y: y, size: tableBodySize, font: font, color: rgb(0,0,0) });
         currentX += colWidths[i];
       });
       y -= tableBodySize * lineHeightMultiplier;
@@ -903,12 +916,14 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
     if (reportData.movements.length === 0) {
         page.setFont(font);
         page.setFontSize(tableBodySize);
-        page.drawText('No movements recorded for this period.', {
-            x: margin + (width - 2 * margin) / 2 - font.widthOfTextAtSize('No movements recorded for this period.', tableBodySize) / 2,
+        const noMovementsText = "No movements recorded for this period.";
+        const textWidth = font.widthOfTextAtSize(noMovementsText, tableBodySize);
+        page.drawText(noMovementsText, {
+            x: margin + (width - 2 * margin - textWidth) / 2, // Centered
             y: y - tableBodySize,
             font: font,
             size: tableBodySize,
-            color: rgb(0.5, 0.5, 0.5)
+            color: rgb(0.5, 0.5, 0.5) // Muted color
         });
     }
 
