@@ -2,7 +2,7 @@
 "use client";
 
 import * as React from 'react';
-import Image from 'next/image'; // Added this import
+import Image from 'next/image'; // Ensure Image is imported
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -134,10 +134,9 @@ export default function CabinetDesignerPage() {
               </Select>
             </div>
 
-            {/* Placeholder for Visual Catalog Image - would go here */}
             {calculationInput.cabinetType === 'standard_base_2_door' && (
                 <div className="aspect-video bg-muted rounded-md flex items-center justify-center">
-                     <Image src="https://placehold.co/300x200/EBF4FA/5DADE2?text=Base+Cabinet" alt="Base Cabinet Preview" width={300} height={200} className="object-contain" data-ai-hint="cabinet furniture"/>
+                     <Image src="https://placehold.co/300x200/EBF4FA/5DADE2.png" alt="Base Cabinet Preview" width={300} height={200} className="object-contain" data-ai-hint="cabinet furniture"/>
                 </div>
             )}
 
