@@ -289,7 +289,6 @@ export interface PurchaseOrderItemFormValues {
   description?: string | null;
   quantityOrdered: number;
   unitCost: number;
-  // quantityApproved is not part of the main PO form values, it's handled in a separate approval step
 }
 
 export interface PurchaseOrderFormValues {
@@ -318,20 +317,18 @@ export interface ApprovePOFormValues {
 
 // For Receiving PO Items
 export interface ReceivePOItemFormValues {
-  poItemId: string; // Corresponds to PurchaseOrderItem.id
+  poItemId: string; 
   inventoryItemId: string;
   itemName: string;
   quantityOrdered: number;
-  quantityApproved: number | null; // What was approved
-  quantityAlreadyReceived: number; // What's been received so far
-  quantityToReceiveNow: number; // What's being received in this transaction
-  inventoryItemCurrentStock?: number; // For display/context
-  unitCostAtReceipt: number; // The cost at which these items are being received (usually from POItem.unitCost)
+  quantityApproved: number | null; 
+  quantityAlreadyReceived: number; 
+  quantityToReceiveNow: number; 
+  inventoryItemCurrentStock?: number; 
+  unitCostAtReceipt: number;
 }
 
 export interface ReceivePOFormValues {
   purchaseOrderId: string;
   items: ReceivePOItemFormValues[];
 }
-
-    

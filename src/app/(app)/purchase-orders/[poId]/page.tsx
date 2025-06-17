@@ -84,23 +84,31 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
 
    React.useEffect(() => {
     let toastShown = false;
+    let toastTitle = "Success";
+    let toastDescription = "";
+
     if (searchParams.get('updated') === 'true') {
-      toast({ title: "Success", description: "Purchase Order updated successfully." });
+      toastDescription = "Purchase Order updated successfully.";
       toastShown = true;
     } else if (searchParams.get('created') === 'true') {
-      toast({ title: "Success", description: "Purchase Order created successfully." });
+      toastDescription = "Purchase Order created successfully.";
       toastShown = true;
     } else if (searchParams.get('approval_success') === 'true') {
-      toast({ title: "Success", description: "Item approval decisions processed." });
+      toastDescription = "Item approval decisions processed.";
+      toastShown = true;
+    } else if (searchParams.get('receive_success') === 'true') {
+      toastDescription = "Stock receiving processed successfully.";
       toastShown = true;
     }
 
 
     if (toastShown) {
+      toast({ title: toastTitle, description: toastDescription });
       const newSearchParams = new URLSearchParams(searchParams.toString());
       newSearchParams.delete('updated');
       newSearchParams.delete('created');
       newSearchParams.delete('approval_success');
+      newSearchParams.delete('receive_success');
       router.replace(`/purchase-orders/${poId}?${newSearchParams.toString()}`, { scroll: false });
     }
   }, [searchParams, poId, router, toast]);
@@ -150,7 +158,7 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
   const handleApprovalDialogClose = (processed: boolean) => {
     setIsApproveItemsDialogOpen(false);
     if (processed) {
-        fetchPurchaseOrder(); // Re-fetch if items were approved
+        fetchPurchaseOrder(); 
     }
   };
 
@@ -207,9 +215,12 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
   
   const canEdit = purchaseOrder.status === 'DRAFT' || purchaseOrder.status === 'PENDING_APPROVAL';
   const canCancel = !['RECEIVED', 'CANCELLED'].includes(purchaseOrder.status);
+  const canSubmitForApproval = purchaseOrder.status === 'DRAFT';
   const canApproveItems = purchaseOrder.status === 'PENDING_APPROVAL';
   const canMarkAsOrdered = purchaseOrder.status === 'APPROVED';
-  const canReceiveStock = purchaseOrder.status === 'ORDERED' || purchaseOrder.status === 'PARTIALLY_RECEIVED';
+  const canReceiveStock = (purchaseOrder.status === 'ORDERED' || purchaseOrder.status === 'PARTIALLY_RECEIVED') && 
+                          purchaseOrder.items && purchaseOrder.items.some(item => (item.quantityApproved ?? item.quantityOrdered) > (item.quantityReceived || 0));
+
 
   return (
     <>
@@ -277,7 +288,7 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
                         <TableCell className="text-sm text-muted-foreground max-w-xs truncate">{item.description || '-'}</TableCell>
                         <TableCell className="text-right">{item.quantityOrdered}</TableCell>
                         <TableCell className="text-right">${item.unitCost.toFixed(2)}</TableCell>
-                        <TableCell className="text-right">${(item.quantityOrdered * item.unitCost).toFixed(2)}</TableCell>
+                        <TableCell className="text-right">${((item.quantityApproved ?? item.quantityOrdered) * item.unitCost).toFixed(2)}</TableCell>
                         <TableCell className="text-right">{item.quantityApproved ?? '-'}</TableCell>
                         <TableCell className="text-right">{item.quantityReceived || 0}</TableCell>
                       </TableRow>
@@ -290,7 +301,7 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
             </CardContent>
              {purchaseOrder.items && purchaseOrder.items.length > 0 && (
                 <CardFooter className="justify-end font-semibold text-lg">
-                    Total Order Value: ${(purchaseOrder.totalAmount || 0).toFixed(2)}
+                    Total Order Value (based on approved/ordered qty): ${(purchaseOrder.totalAmount || 0).toFixed(2)}
                 </CardFooter>
             )}
           </Card>
@@ -301,7 +312,7 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
                 <CardDescription>Manage the status and progression of this PO.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-wrap gap-2">
-                 {purchaseOrder.status === 'DRAFT' && (
+                 {canSubmitForApproval && (
                     <Button onClick={() => handleStatusUpdate('PENDING_APPROVAL')} disabled={isPending}>
                         <Send className="mr-2 h-4 w-4" /> Submit for Approval
                     </Button>
@@ -442,4 +453,3 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
     </>
   );
 }
-
