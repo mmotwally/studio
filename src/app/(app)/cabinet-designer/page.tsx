@@ -2,6 +2,7 @@
 "use client";
 
 import * as React from 'react';
+import Image from 'next/image'; // Added this import
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
