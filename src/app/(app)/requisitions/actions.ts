@@ -496,17 +496,25 @@ export async function processRequisitionFulfillmentAction(
     );
 
     let newStatus: RequisitionStatus;
-    const currentReq = await db.get('SELECT status FROM requisitions WHERE id = ?', requisitionId);
+    // const currentReq = await db.get('SELECT status FROM requisitions WHERE id = ?', requisitionId); // Not strictly needed if logic below is comprehensive
     
     if (allApprovedItems.length === 0) { 
+        // This case means there were no items approved in the first place (or all approved items had quantity 0)
+        // If the original state was PENDING_APPROVAL and all items were rejected (qtyApproved = 0), it would have become REJECTED.
+        // If it was APPROVED but then items were edited to have 0 approved qty (unlikely scenario based on current flow),
+        // then it means there's nothing to fulfill.
+        // This effectively means it's 'FULFILLED' in the sense that no further action is needed for approved items.
+        // However, if it came from 'APPROVED' and items were removed/qty reduced to 0 approved, the status should reflect no pending work.
+        
+        // Re-check if ANY item was ever eligible for fulfillment.
         const anyItemEligibleForFulfillment = await db.get(
             'SELECT 1 FROM requisition_items WHERE requisitionId = ? AND isApproved = 1 AND quantityApproved > 0 LIMIT 1',
             requisitionId
         );
-        if (!anyItemEligibleForFulfillment) {
-            newStatus = 'FULFILLED';
-        } else {
-            newStatus = 'APPROVED'; 
+        if (!anyItemEligibleForFulfillment) { // No items were ever approved with qty > 0
+            newStatus = 'FULFILLED'; // or 'APPROVED' if we consider no items to fulfill as a state after approval
+        } else { // There were eligible items, but now all of them are fulfilled (e.g. if this was the last batch)
+             newStatus = 'FULFILLED';
         }
 
     } else {
@@ -523,7 +531,7 @@ export async function processRequisitionFulfillmentAction(
         newStatus = 'FULFILLED';
         } else if (isPartiallyFulfilled || anyIssuedAtAll) { 
         newStatus = 'PARTIALLY_FULFILLED';
-        } else { 
+        } else { // No items issued yet from the approved set
         newStatus = 'APPROVED';
         }
     }
@@ -549,7 +557,7 @@ export async function processRequisitionFulfillmentAction(
   revalidatePath(`/requisitions/${requisitionId}`);
   revalidatePath('/requisitions');
   revalidatePath('/inventory'); 
-  redirect(`/requisitions/${requisitionId}`);
+  redirect(`/requisitions/${requisitionId}?fulfillment_success=true`);
 }
 
 export async function deleteRequisitionAction(requisitionId: string): Promise<{ success: boolean; message: string }> {
@@ -607,4 +615,5 @@ export async function deleteRequisitionAction(requisitionId: string): Promise<{ 
     return { success: false, message: `Failed to delete requisition: ${error.message}` };
   }
 }
+    
     

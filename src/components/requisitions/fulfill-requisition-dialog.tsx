@@ -119,16 +119,19 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
 
     try {
       await processRequisitionFulfillmentAction(values.requisitionId, itemsToFulfill);
-      toast({
-        title: "Success",
-        description: "Requisition fulfillment processed.",
-      });
-      onFulfillmentProcessed(); 
-      setOpen(false);
+      // If action redirects, this part won't be reached.
+      // If it does not redirect (e.g. error in action before redirect), then handle normally.
+      // The redirect itself will trigger the success toast on the next page.
     } catch (error: any) {
       if (error.digest?.startsWith('NEXT_REDIRECT')) {
-        throw error; 
+        // Server action initiated a redirect.
+        // Ensure dialog is closed and submitting state is reset before re-throwing.
+        setOpen(false); 
+        setIsSubmitting(false);
+        throw error; // Re-throw for Next.js to handle navigation.
       }
+      
+      // Handle actual application errors (not redirects)
       console.error("Failed to process fulfillment:", error);
       const errorMessage = error instanceof Error ? error.message : "Could not process fulfillment. Please try again.";
       setServerError(errorMessage); 
@@ -137,10 +140,7 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
         description: errorMessage,
         variant: "destructive",
       });
-    } finally {
-      if (!(isSubmitting && (serverError === null && !((Error as any).digest?.startsWith('NEXT_REDIRECT'))))) {
-         setIsSubmitting(false);
-      }
+      setIsSubmitting(false); // Reset submitting state for non-redirect errors
     }
   }
   

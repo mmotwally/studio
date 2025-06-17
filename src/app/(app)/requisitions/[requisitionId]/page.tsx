@@ -64,13 +64,28 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
   const [isApproveItemsDialogOpen, setIsApproveItemsDialogOpen] = React.useState(false);
 
   React.useEffect(() => {
+    let toastShown = false;
     if (searchParams.get('approval_success') === 'true') {
       toast({
         title: "Success",
         description: "Approval decisions processed successfully.",
       });
+      toastShown = true;
+    } else if (searchParams.get('fulfillment_success') === 'true') {
+      toast({
+        title: "Success",
+        description: "Requisition fulfillment processed successfully.",
+      });
+      toastShown = true;
+    }
+
+    if (toastShown) {
       // Remove the query parameter to prevent toast on refresh
-      router.replace(`/requisitions/${requisitionId}`, { scroll: false });
+      // Keep other query params if they exist
+      const newSearchParams = new URLSearchParams(searchParams.toString());
+      newSearchParams.delete('approval_success');
+      newSearchParams.delete('fulfillment_success');
+      router.replace(`/requisitions/${requisitionId}?${newSearchParams.toString()}`, { scroll: false });
     }
   }, [searchParams, requisitionId, router, toast]);
 
@@ -146,7 +161,7 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
                     requisition.status === 'FULFILLED';
 
   const canFulfill = (requisition.status === 'APPROVED' || requisition.status === 'PARTIALLY_FULFILLED') && 
-                     requisition.items && requisition.items.some(item => item.isApproved && (item.quantityIssued || 0) < (item.quantityApproved ?? 0));
+                     requisition.items && requisition.items.some(item => item.isApproved && (item.quantityApproved ?? 0) > 0 && (item.quantityIssued || 0) < (item.quantityApproved ?? 0));
   
   const canManageApprovals = requisition.status === 'PENDING_APPROVAL';
 
