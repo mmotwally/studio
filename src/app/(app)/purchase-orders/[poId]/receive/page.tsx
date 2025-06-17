@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { ReceiveStockForm } from '@/components/purchase-orders/receive-stock-form';
-import { getPurchaseOrderById } from '../actions';
+import { getPurchaseOrderById } from '../../actions'; // Corrected path
 import type { PurchaseOrder } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
