@@ -84,11 +84,12 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
     if (requisition.status !== 'PENDING_APPROVAL') {
       toast({
         title: "Action Not Allowed",
-        description: `This requisition is currently in "${requisition.status.replace(/_/g, ' ').toLowerCase()}" status and items cannot be approved. The view might be outdated. Please refresh or close this dialog.`,
+        description: `This requisition is currently in "${requisition.status.replace(/_/g, ' ').toLowerCase()}" status and items cannot be approved. Please refresh the page or close this dialog.`,
         variant: "destructive",
       });
       setIsSubmitting(false); // Ensure button is re-enabled
-      // setOpen(false); // Optionally close the dialog immediately
+      onApprovalProcessed(); // Refresh parent page data as it's stale
+      setOpen(false); // Close the dialog
       return;
     }
 
@@ -104,8 +105,6 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
     try {
       await approveRequisitionItemsAction(values.requisitionId, itemsToSubmit);
       // If action redirects, this part is usually not reached.
-      // The `onApprovalProcessed` and `setOpen(false)` calls are typically handled
-      // by the parent page re-rendering after the redirect.
     } catch (error: any) {
       caughtError = error;
       if (error.digest?.startsWith('NEXT_REDIRECT')) {
@@ -121,10 +120,18 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
         description: errorMessage,
         variant: "destructive",
       });
+
+      // If the specific error about status not being PENDING_APPROVAL occurs,
+      // refresh parent data and close the dialog.
+      if (errorMessage.includes("Cannot approve items for a requisition that is not in 'PENDING_APPROVAL' status")) {
+        onApprovalProcessed(); // Refresh parent page data
+        setOpen(false); // Close the dialog
+      }
+
     } finally {
       // Only set isSubmitting to false if no redirect was thrown and caught.
       // If a redirect is thrown, the component will unmount, so no need to update state.
-      if (!(caughtError && (caughtError as any).digest?.startsWith('NEXT_REDIRECT'))) {
+      if (!(caughtError && caughtError.digest?.startsWith('NEXT_REDIRECT'))) {
         setIsSubmitting(false);
       }
     }
@@ -205,7 +212,8 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
             </div>
           </ScrollArea>
 
-          {serverError && (
+          {serverError && !serverError.includes("Cannot approve items for a requisition that is not in 'PENDING_APPROVAL' status") && (
+            // Only show generic server error if it's not the specific status one handled by toast + auto-close
             <div className="p-3 rounded-md bg-destructive/10 text-destructive text-sm flex items-center gap-2">
               <AlertCircle className="h-4 w-4" />
               <p>{serverError}</p>
