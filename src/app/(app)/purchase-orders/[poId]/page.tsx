@@ -7,8 +7,8 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation'; 
 import { Dialog, DialogTrigger } from '@/components/ui/dialog';
-import { ArrowLeft, Edit, MoreVertical, Printer, FileX2, ShoppingCart, Truck, UserCircle, CalendarDays, FileTextIcon, Sigma, Banknote, Tag, CheckCircle, Send, ShieldCheck, PackageSearch } from 'lucide-react';
-import { getPurchaseOrderById, updatePurchaseOrderStatusAction } from '../actions'; 
+import { ArrowLeft, Edit, MoreVertical, FileDown, FileX2, ShoppingCart, Truck, UserCircle, CalendarDays, FileTextIcon, Sigma, Banknote, Tag, CheckCircle, Send, ShieldCheck, PackageSearch, Loader2 } from 'lucide-react';
+import { getPurchaseOrderById, updatePurchaseOrderStatusAction, generatePurchaseOrderPdfAction } from '../actions'; 
 import type { PurchaseOrder, PurchaseOrderStatus, PurchaseOrderItem } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
@@ -81,6 +81,7 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
   const [isPending, startTransition] = React.useTransition();
   const [isCancelAlertOpen, setIsCancelAlertOpen] = React.useState(false);
   const [isApproveItemsDialogOpen, setIsApproveItemsDialogOpen] = React.useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = React.useState(false);
 
    React.useEffect(() => {
     let toastShown = false;
@@ -159,6 +160,29 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
     setIsApproveItemsDialogOpen(false);
     if (processed) {
         fetchPurchaseOrder(); 
+    }
+  };
+
+  const handleDownloadPdf = async () => {
+    if (!purchaseOrder) {
+      toast({ title: "Error", description: "Purchase order data not loaded.", variant: "destructive" });
+      return;
+    }
+    setIsDownloadingPdf(true);
+    try {
+      const pdfDataUri = await generatePurchaseOrderPdfAction(purchaseOrder);
+      const link = document.createElement('a');
+      link.href = pdfDataUri;
+      link.download = `PurchaseOrder_${purchaseOrder.id}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast({ title: "PDF Downloaded", description: `Purchase Order ${purchaseOrder.id}.pdf has been downloaded.` });
+    } catch (err) {
+      console.error("Failed to download PO PDF:", err);
+      toast({ title: "PDF Generation Failed", description: (err as Error).message || "Could not generate PDF.", variant: "destructive" });
+    } finally {
+      setIsDownloadingPdf(false);
     }
   };
 
@@ -244,8 +268,9 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem disabled>
-                  <Printer className="mr-2 h-4 w-4" /> Print PO
+                <DropdownMenuItem onClick={handleDownloadPdf} disabled={isDownloadingPdf} className="cursor-pointer">
+                  {isDownloadingPdf ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <FileDown className="mr-2 h-4 w-4" />}
+                  {isDownloadingPdf ? "Downloading..." : "Download PDF"}
                 </DropdownMenuItem>
                  {canCancel && (
                    <DropdownMenuItem onClick={() => setIsCancelAlertOpen(true)} className="text-orange-600 focus:text-orange-700 cursor-pointer">
@@ -453,3 +478,4 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
     </>
   );
 }
+

@@ -5,8 +5,9 @@ import { openDb } from '@/lib/database';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import type { PurchaseOrder, PurchaseOrderStatus, PurchaseOrderFormValues, PurchaseOrderItem, ApprovePOFormValues, ReceivePOFormValues, InventoryItem } from '@/types';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import type { Database as SqliteDatabaseType } from 'sqlite';
+import { PDFDocument, StandardFonts, rgb, PageSizes } from 'pdf-lib';
 
 export async function generatePurchaseOrderId(db: SqliteDatabaseType): Promise<string> {
   const today = format(new Date(), 'yyyyMMdd');
@@ -242,7 +243,7 @@ export async function getPurchaseOrderById(poId: string): Promise<PurchaseOrder 
       poi.quantityReceived,
       poi.notes
     FROM purchase_order_items poi
-    JOIN inventory i ON poi.inventoryItemId = i.id
+    LEFT JOIN inventory i ON poi.inventoryItemId = i.id
     WHERE poi.purchaseOrderId = ?
     ORDER BY i.name ASC
   `, poId);
@@ -546,3 +547,169 @@ export async function receivePurchaseOrderItemsAction(
   revalidatePath(`/inventory/${itemsReceived.map(i => i.inventoryItemId).join(',')}`); // Revalidate specific items
   redirect(`/purchase-orders/${purchaseOrderId}?receive_success=true`);
 }
+
+
+export async function generatePurchaseOrderPdfAction(poData: PurchaseOrder): Promise<string> {
+  try {
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage(PageSizes.A4); // Portrait for PO
+    const { width, height } = page.getSize();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+    const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+    const margin = 50;
+    let y = height - margin;
+    const lineSpacing = 14;
+    const smallLineSpacing = 12;
+    const sectionGap = 20;
+
+    // Title
+    page.setFont(boldFont);
+    page.setFontSize(20);
+    page.drawText("Purchase Order", { x: margin, y, font: boldFont });
+    y -= lineSpacing * 1.5;
+
+    // PO Details
+    page.setFont(font);
+    page.setFontSize(10);
+    page.drawText(`PO ID: ${poData.id}`, { x: margin, y });
+    page.drawText(`Order Date: ${format(parseISO(poData.orderDate), "PP")}`, { x: width / 2, y });
+    y -= lineSpacing;
+    page.drawText(`Supplier: ${poData.supplierName || 'N/A'}`, { x: margin, y });
+    if (poData.expectedDeliveryDate) {
+      page.drawText(`Expected Delivery: ${format(parseISO(poData.expectedDeliveryDate), "PP")}`, { x: width / 2, y });
+    }
+    y -= sectionGap;
+
+    // Addresses
+    if (poData.shippingAddress || poData.billingAddress) {
+        page.setFont(boldFont);
+        page.setFontSize(11);
+        const addressYStart = y;
+        if (poData.shippingAddress) {
+            page.drawText("Shipping Address:", { x: margin, y: addressYStart, font: boldFont });
+            y -= lineSpacing;
+            page.setFont(font);
+            page.setFontSize(10);
+            poData.shippingAddress.split('\n').forEach(line => {
+                page.drawText(line, { x: margin, y });
+                y -= smallLineSpacing;
+            });
+             y = addressYStart; // Reset Y for billing address if it exists in parallel
+        }
+
+        if (poData.billingAddress) {
+            const billingX = poData.shippingAddress ? width / 2 : margin;
+            page.setFont(boldFont);
+            page.setFontSize(11);
+            page.drawText("Billing Address:", { x: billingX, y: addressYStart, font: boldFont });
+            y = addressYStart - lineSpacing; // Align with shipping's first line of text
+            page.setFont(font);
+            page.setFontSize(10);
+            poData.billingAddress.split('\n').forEach(line => {
+                page.drawText(line, { x: billingX, y });
+                y -= smallLineSpacing;
+            });
+        }
+        // Determine the lowest y point after drawing addresses
+        const shippingLines = poData.shippingAddress?.split('\n').length || 0;
+        const billingLines = poData.billingAddress?.split('\n').length || 0;
+        const maxLines = Math.max(shippingLines, billingLines);
+        y = addressYStart - lineSpacing - (maxLines * smallLineSpacing) - sectionGap / 2;
+    }
+
+
+    // Items Table
+    page.setFont(boldFont);
+    page.setFontSize(11);
+    page.drawText("Ordered Items", { x: margin, y, font: boldFont });
+    y -= lineSpacing * 1.5;
+
+    const tableTopY = y;
+    const colWidths = [200, 60, 70, 80, 80]; // Item, Qty, Unit Cost, Approved Qty, Total
+    const headers = ["Item (ID)", "Qty Ord.", "Unit Cost", "Qty Appr.", "Line Total"];
+    let currentX = margin;
+
+    page.setFont(boldFont);
+    page.setFontSize(10);
+    headers.forEach((header, i) => {
+      page.drawText(header, { x: currentX + 2, y, font: boldFont });
+      currentX += colWidths[i];
+    });
+    y -= 5;
+    page.drawLine({ start: { x: margin, y }, end: { x: width - margin, y }, thickness: 0.5, color: rgb(0.5, 0.5, 0.5) });
+    y -= lineSpacing;
+
+    page.setFont(font);
+    page.setFontSize(9);
+    let grandTotal = 0;
+
+    (poData.items || []).forEach(item => {
+      if (y < margin + lineSpacing) { // Check for page break
+        page.addPage(PageSizes.A4);
+        y = height - margin;
+        // Redraw headers if needed, or add continuation note
+      }
+      currentX = margin;
+      const qtyToCalc = item.quantityApproved ?? item.quantityOrdered;
+      const lineTotal = qtyToCalc * item.unitCost;
+      grandTotal += lineTotal;
+
+      const itemText = `${item.inventoryItemName || 'N/A'} (${item.inventoryItemId})${item.description ? `\n  ${item.description}` : ''}`;
+      const itemTextLines = itemText.split('\n');
+      
+      // Draw item name and description (multi-line capable)
+      let tempY = y;
+      itemTextLines.forEach((line, lineIdx) => {
+        page.drawText(line, { x: currentX + 2, y: tempY - (lineIdx * smallLineSpacing * 0.9), size: 8.5 });
+      });
+      
+      const maxItemTextHeight = itemTextLines.length * smallLineSpacing * 0.9;
+
+      currentX += colWidths[0];
+      page.drawText(item.quantityOrdered.toString(), { x: currentX + 2, y });
+      currentX += colWidths[1];
+      page.drawText(`$${item.unitCost.toFixed(2)}`, { x: currentX + 2, y });
+      currentX += colWidths[2];
+      page.drawText((item.quantityApproved ?? '-').toString(), { x: currentX + 2, y });
+      currentX += colWidths[3];
+      page.drawText(`$${lineTotal.toFixed(2)}`, { x: currentX + 2, y });
+      
+      y -= Math.max(lineSpacing, maxItemTextHeight) + 2; // Add some padding
+    });
+
+    // Grand Total
+    y -= lineSpacing;
+    page.setFont(boldFont);
+    page.setFontSize(12);
+    const totalText = `Grand Total: $${grandTotal.toFixed(2)}`;
+    const totalTextWidth = boldFont.widthOfTextAtSize(totalText, 12);
+    page.drawText(totalText, { x: width - margin - totalTextWidth, y, font: boldFont });
+    y -= sectionGap;
+
+    // Notes
+    if (poData.notes) {
+      page.setFont(boldFont);
+      page.setFontSize(11);
+      page.drawText("Notes:", { x: margin, y, font: boldFont });
+      y -= lineSpacing;
+      page.setFont(font);
+      page.setFontSize(10);
+       poData.notes.split('\n').forEach(line => {
+            if (y < margin) { page.addPage(PageSizes.A4); y = height - margin; }
+            page.drawText(line, { x: margin, y });
+            y -= smallLineSpacing;
+        });
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    const base64String = Buffer.from(pdfBytes).toString('base64');
+    return `data:application/pdf;base64,${base64String}`;
+
+  } catch (error) {
+    console.error("Error generating PO PDF with pdf-lib:", error);
+    throw new Error(`Failed to generate PO PDF: ${(error as Error).message}`);
+  }
+}
+
+
