@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import type { PurchaseOrder, ReceivePOFormValues, ReceivePOItemFormValues } from "@/types";
+import type { PurchaseOrder, ReceivePOFormValues } from "@/types"; // ReceivePOItemFormValues is implicitly used by ReceivePOFormValues
 import { receivePurchaseOrderItemsAction } from "@/app/(app)/purchase-orders/actions";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AlertCircle, Info, PackageSearch } from "lucide-react";
@@ -53,7 +53,6 @@ interface ReceiveStockFormProps {
 export function ReceiveStockForm({ purchaseOrder }: ReceiveStockFormProps) {
   const { toast } = useToast();
   const router = useRouter();
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [serverError, setServerError] = React.useState<string | null>(null);
   const [isPending, startTransition] = React.useTransition();
 
@@ -95,9 +94,8 @@ export function ReceiveStockForm({ purchaseOrder }: ReceiveStockFormProps) {
     name: "items",
   });
 
-  async function onSubmit(values: ReceivePOFormValues) {
+  const handleActualSubmit = (values: ReceivePOFormValues) => {
     startTransition(async () => {
-        setIsSubmitting(true);
         setServerError(null);
 
         const itemsToSubmit = values.items
@@ -115,16 +113,14 @@ export function ReceiveStockForm({ purchaseOrder }: ReceiveStockFormProps) {
                 description: "Please enter quantities to receive for at least one item, or cancel.",
                 variant: "default"
             });
-            setIsSubmitting(false);
-            return;
+            return; 
         }
 
         try {
-        await receivePurchaseOrderItemsAction(values.purchaseOrderId, itemsToSubmit);
-        // Redirect and success toast are handled by the server action
+          await receivePurchaseOrderItemsAction(values.purchaseOrderId, itemsToSubmit);
+          // Redirect and success toast are handled by the server action
         } catch (error: any) {
             if (error.digest?.startsWith('NEXT_REDIRECT')) {
-                setIsSubmitting(false);
                 throw error; 
             }
             console.error("Failed to process stock receipt:", error);
@@ -135,7 +131,6 @@ export function ReceiveStockForm({ purchaseOrder }: ReceiveStockFormProps) {
                 description: errorMessage,
                 variant: "destructive",
             });
-            setIsSubmitting(false);
         }
     });
   }
@@ -156,7 +151,7 @@ export function ReceiveStockForm({ purchaseOrder }: ReceiveStockFormProps) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(handleActualSubmit)} className="space-y-6">
         <ScrollArea className="max-h-[60vh] pr-4"> 
           <div className="space-y-4">
             {fields.map((field, index) => {
@@ -225,14 +220,15 @@ export function ReceiveStockForm({ purchaseOrder }: ReceiveStockFormProps) {
           </div>
 
         <div className="flex justify-end space-x-3 pt-4">
-          <Button type="button" variant="outline" onClick={() => router.push(`/purchase-orders/${purchaseOrder.id}`)} disabled={isSubmitting || isPending}>
+          <Button type="button" variant="outline" onClick={() => router.push(`/purchase-orders/${purchaseOrder.id}`)} disabled={isPending}>
             Cancel
           </Button>
-          <Button type="submit" disabled={isSubmitting || isPending || itemsEligibleForReceiving.length === 0}>
-            {isSubmitting || isPending ? "Processing..." : "Submit Received Stock"}
+          <Button type="submit" disabled={isPending}>
+            {isPending ? "Processing..." : "Submit Received Stock"}
           </Button>
         </div>
       </form>
     </Form>
   );
 }
+
