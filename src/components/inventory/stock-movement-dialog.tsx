@@ -34,6 +34,7 @@ import type { SelectItem as SelectItemType, StockMovementReport, StockMovement }
 import { getStockMovementDetailsAction } from "@/app/(app)/inventory/actions"; 
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
+import { format } from "date-fns"; // Import format
 
 interface StockMovementDialogProps {
   setOpen: (open: boolean) => void;
@@ -65,7 +66,9 @@ export function StockMovementDialog({ setOpen, inventoryItems }: StockMovementDi
     setReportData(null);
 
     try {
-      const data = await getStockMovementDetailsAction(selectedItemId, dateRange.from, dateRange.to);
+      const fromDateString = format(dateRange.from, "yyyy-MM-dd");
+      const toDateString = format(dateRange.to, "yyyy-MM-dd");
+      const data = await getStockMovementDetailsAction(selectedItemId, fromDateString, toDateString);
       setReportData(data); 
       if (data.movements.length === 0) {
         toast({

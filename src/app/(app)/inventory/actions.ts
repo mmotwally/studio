@@ -643,7 +643,7 @@ export async function importInventoryFromExcelAction(formData: FormData): Promis
   };
 }
 
-export async function getStockMovementDetailsAction(inventoryItemId: string, fromDate: Date, toDate: Date): Promise<StockMovementReport> {
+export async function getStockMovementDetailsAction(inventoryItemId: string, fromDateString: string, toDateString: string): Promise<StockMovementReport> {
   const db = await openDb();
 
   const item = await db.get<InventoryItem>('SELECT id, name FROM inventory WHERE id = ?', inventoryItemId);
@@ -651,10 +651,13 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
     throw new Error(`Inventory item with ID ${inventoryItemId} not found.`);
   }
 
-  const fromDateISO = format(startOfDay(fromDate), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-  const toDateISO = format(endOfDay(toDate), "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+  // Parse date strings and set to UTC boundaries
+  const fromDate = startOfDay(parseISO(fromDateString)); // parseISO assumes "yyyy-MM-dd" is UTC midnight
+  const toDate = endOfDay(parseISO(toDateString));     // endOfDay makes it end of that UTC day
 
-  // Calculate opening stock
+  const fromDateISO = format(fromDate, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+  const toDateISO = format(toDate, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+
   const openingStockResult = await db.get<{ balance: number } | undefined>(
     `SELECT balanceAfterMovement as balance 
      FROM stock_movements 
@@ -663,26 +666,20 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
     inventoryItemId,
     fromDateISO
   );
-  // If no movements before fromDate, opening stock is the current quantity if all movements are after toDate,
-  // or if no movements at all, it implies the stock was 0 before the period unless it's an initial seed.
-  // For simplicity, if no prior movement, we assume it could be the first entry.
-  // A more robust opening stock would be needed if items could be created without an initial stock movement record.
-  // For now, if no record before fromDate, check the earliest record's balance or current quantity.
+  
   let openingStock = openingStockResult?.balance ?? 0;
 
   if (!openingStockResult) {
-      const firstEverMovement = await db.get<{ balanceAfterMovement: number, quantityChanged: number } | undefined>(
-        `SELECT balanceAfterMovement, quantityChanged FROM stock_movements WHERE inventoryItemId = ? ORDER BY movementDate ASC, id ASC LIMIT 1`,
+      const firstEverMovement = await db.get<{ balanceAfterMovement: number } | undefined>(
+        `SELECT balanceAfterMovement FROM stock_movements WHERE inventoryItemId = ? ORDER BY movementDate ASC, id ASC LIMIT 1`,
         inventoryItemId
       );
-      if (firstEverMovement) {
-        // If the first movement is within or after the report period, opening was its balance minus its change
-        // This logic is still a bit simplistic and might need refinement based on how INITIAL_STOCK is logged.
-        // A simpler approach for now: if no movements *before* fromDate, then opening stock is 0.
-        // This assumes stock history starts from 0 or an explicit INITIAL_STOCK entry.
-        openingStock = 0; 
+      if (firstEverMovement && (await db.get(`SELECT COUNT(*) as count FROM stock_movements WHERE inventoryItemId = ? AND movementDate < ?`, inventoryItemId, fromDateISO))?.count === 0) {
+         // If the first movement is within or after the report period, and no movements before, opening stock is 0.
+         // This needs to be nuanced: if the first movement *is* the initial stock, it should be 0.
+         // For simplicity now, if no movements before fromDate, opening stock is 0.
+         openingStock = 0; 
       } else {
-        // No movements at all for this item, opening stock is 0.
         openingStock = 0;
       }
   }
@@ -710,21 +707,21 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
 
   const closingStock = movementsInPeriod.length > 0 
     ? movementsInPeriod[movementsInPeriod.length - 1].balanceAfterMovement
-    : openingStock; // If no movements in period, closing stock is same as opening.
+    : openingStock;
 
 
   return {
     inventoryItemId: item.id,
     inventoryItemName: item.name,
-    periodFrom: format(fromDate, "yyyy-MM-dd"),
-    periodTo: format(toDate, "yyyy-MM-dd"),
+    periodFrom: fromDateString, // Return the input "yyyy-MM-dd" string
+    periodTo: toDateString,     // Return the input "yyyy-MM-dd" string
     openingStock,
     totalIn,
     totalOut,
     closingStock,
     movements: movementsInPeriod.map(m => ({
         ...m,
-        movementDate: format(parseISO(m.movementDate), "yyyy-MM-dd HH:mm") // Format for display
+        movementDate: format(parseISO(m.movementDate), "yyyy-MM-dd HH:mm") // Format for display (local time of server)
     })),
   };
 }
