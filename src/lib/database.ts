@@ -252,7 +252,7 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
     CREATE TABLE IF NOT EXISTS stock_movements (
       id TEXT PRIMARY KEY,
       inventoryItemId TEXT NOT NULL,
-      movementType TEXT NOT NULL, -- 'PO_RECEIPT', 'REQUISITION_ISSUE', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'INITIAL_STOCK', 'RETURN'
+      movementType TEXT NOT NULL, -- 'PO_RECEIPT', 'REQUISITION_ISSUE', 'REQUISITION_RETURN', 'ADJUSTMENT_IN', 'ADJUSTMENT_OUT', 'INITIAL_STOCK'
       quantityChanged INTEGER NOT NULL, -- Positive for IN, Negative for OUT
       balanceAfterMovement INTEGER NOT NULL,
       referenceId TEXT, -- e.g., PO ID, Requisition ID, Adjustment Note ID
@@ -479,18 +479,20 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
         item.categoryId, item.subCategoryId, item.locationId, item.supplierId, item.unitId
       );
 
-      // Seed INITIAL_STOCK movement
-      await db.run(
-        `INSERT INTO stock_movements (id, inventoryItemId, movementType, quantityChanged, balanceAfterMovement, movementDate, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-        crypto.randomUUID(),
-        item.id,
-        'INITIAL_STOCK',
-        item.quantity,
-        item.quantity, // Balance after initial stock is just the quantity
-        seedDate,
-        'Initial stock seeding'
-      );
+      // Seed INITIAL_STOCK movement only if quantity > 0
+      if (item.quantity > 0) {
+        await db.run(
+          `INSERT INTO stock_movements (id, inventoryItemId, movementType, quantityChanged, balanceAfterMovement, movementDate, notes)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          crypto.randomUUID(),
+          item.id,
+          'INITIAL_STOCK',
+          item.quantity,
+          item.quantity, // Balance after initial stock is just the quantity
+          seedDate,
+          'Initial stock seeding'
+        );
+      }
 
     } catch (e) {
       console.warn(`Could not insert/update inventory item ${item.name} with ID ${item.id}: ${(e as Error).message}`);
@@ -524,7 +526,7 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
           sub_categories: ['code', 'categoryId'],
           requisitions: ['requesterId', 'departmentId', 'orderNumber', 'bomNumber', 'dateNeeded', 'status', 'notes', 'lastUpdated', 'departmentId'],
           requisition_items: ['requisitionId', 'inventoryItemId', 'quantityRequested', 'quantityApproved', 'quantityIssued', 'isApproved', 'notes'],
-          purchase_orders: ['supplierId', 'orderDate', 'status', 'lastUpdated'],
+          purchase_orders: ['supplierId', 'orderDate', 'status', 'lastUpdated', 'shippingAddress', 'billingAddress'],
           purchase_order_items: ['purchaseOrderId', 'inventoryItemId', 'quantityOrdered', 'unitCost', 'quantityApproved'],
           stock_movements: ['inventoryItemId', 'movementType', 'quantityChanged', 'balanceAfterMovement', 'movementDate'],
         };
@@ -662,3 +664,4 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
     
 
     
+

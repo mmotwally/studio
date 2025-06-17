@@ -338,10 +338,11 @@ export type StockMovementType =
   | 'INITIAL_STOCK'
   | 'PO_RECEIPT'
   | 'REQUISITION_ISSUE'
+  | 'REQUISITION_RETURN'
   | 'ADJUSTMENT_IN'
   | 'ADJUSTMENT_OUT'
-  | 'RETURN_TO_SUPPLIER' // Example for future use
-  | 'REQUISITION_RETURN'; // Stock returned from a cancelled/edited fulfilled requisition
+  | 'RETURN_TO_SUPPLIER'; // Example for future use
+  
 
 export interface StockMovement {
   id: string;

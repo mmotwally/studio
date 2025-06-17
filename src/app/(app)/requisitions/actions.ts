@@ -114,11 +114,27 @@ export async function updateRequisitionAction(requisitionId: string, values: Req
       );
       for (const item of existingItems) {
         if (item.quantityIssued > 0) {
+          const currentInv = await db.get<InventoryItem>('SELECT quantity FROM inventory WHERE id = ?', item.inventoryItemId);
+          const newInvQty = (currentInv?.quantity ?? 0) + item.quantityIssued;
+          
           await db.run(
-            'UPDATE inventory SET quantity = quantity + ?, lastUpdated = ? WHERE id = ?',
-            item.quantityIssued,
+            'UPDATE inventory SET quantity = ?, lastUpdated = ? WHERE id = ?',
+            newInvQty,
             lastUpdated,
             item.inventoryItemId
+          );
+          // Log stock movement for returned items
+          await db.run(
+            `INSERT INTO stock_movements (id, inventoryItemId, movementType, quantityChanged, balanceAfterMovement, referenceId, movementDate, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            crypto.randomUUID(),
+            item.inventoryItemId,
+            'REQUISITION_RETURN', // New movement type
+            item.quantityIssued,    // Positive quantity for return
+            newInvQty,
+            requisitionId,
+            lastUpdated,
+            `Stock returned from edited Requisition ${requisitionId}`
           );
         }
       }
@@ -294,11 +310,26 @@ export async function updateRequisitionStatusAction(requisitionId: string, newSt
         requisitionId
       );
       for (const item of itemsToReturn) {
+        const currentInv = await db.get<InventoryItem>('SELECT quantity FROM inventory WHERE id = ?', item.inventoryItemId);
+        const newInvQty = (currentInv?.quantity ?? 0) + item.quantityIssued;
         await db.run(
-          'UPDATE inventory SET quantity = quantity + ?, lastUpdated = ? WHERE id = ?',
-          item.quantityIssued,
+          'UPDATE inventory SET quantity = ?, lastUpdated = ? WHERE id = ?',
+          newInvQty,
           lastUpdated,
           item.inventoryItemId
+        );
+        // Log stock movement for returned items
+        await db.run(
+          `INSERT INTO stock_movements (id, inventoryItemId, movementType, quantityChanged, balanceAfterMovement, referenceId, movementDate, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          crypto.randomUUID(),
+          item.inventoryItemId,
+          'REQUISITION_RETURN',
+          item.quantityIssued, // Positive for return
+          newInvQty,
+          requisitionId,
+          lastUpdated,
+          `Stock returned from cancelled Requisition ${requisitionId}`
         );
       }
       await db.run(
@@ -478,10 +509,12 @@ export async function processRequisitionFulfillmentAction(
       if (inventoryItem.quantity < item.quantityToIssueNow) {
         throw new Error(`Insufficient stock for item ID ${item.inventoryItemId}. Available: ${inventoryItem.quantity}, Tried to issue: ${item.quantityToIssueNow}.`);
       }
+      
+      const newInventoryQuantity = inventoryItem.quantity - item.quantityToIssueNow;
 
       await db.run(
-        'UPDATE inventory SET quantity = quantity - ?, lastUpdated = ? WHERE id = ?',
-        item.quantityToIssueNow,
+        'UPDATE inventory SET quantity = ?, lastUpdated = ? WHERE id = ?',
+        newInventoryQuantity,
         lastUpdated,
         item.inventoryItemId
       );
@@ -491,6 +524,20 @@ export async function processRequisitionFulfillmentAction(
         item.quantityToIssueNow,
         item.requisitionItemId,
         requisitionId
+      );
+
+      // Log stock movement
+      await db.run(
+        `INSERT INTO stock_movements (id, inventoryItemId, movementType, quantityChanged, balanceAfterMovement, referenceId, movementDate, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        crypto.randomUUID(),
+        item.inventoryItemId,
+        'REQUISITION_ISSUE',
+        -item.quantityToIssueNow, // Negative quantity
+        newInventoryQuantity,
+        requisitionId,
+        lastUpdated,
+        `Issued for Requisition ${requisitionId}`
       );
     }
 
@@ -578,11 +625,26 @@ export async function deleteRequisitionAction(requisitionId: string): Promise<{ 
     );
 
     for (const item of itemsToReturn) {
+        const currentInv = await db.get<InventoryItem>('SELECT quantity FROM inventory WHERE id = ?', item.inventoryItemId);
+        const newInvQty = (currentInv?.quantity ?? 0) + item.quantityIssued;
         await db.run(
-            'UPDATE inventory SET quantity = quantity + ?, lastUpdated = ? WHERE id = ?',
-            item.quantityIssued,
+            'UPDATE inventory SET quantity = ?, lastUpdated = ? WHERE id = ?',
+            newInvQty,
             lastUpdated,
             item.inventoryItemId
+        );
+        // Log stock movement for returned items during deletion
+        await db.run(
+          `INSERT INTO stock_movements (id, inventoryItemId, movementType, quantityChanged, balanceAfterMovement, referenceId, movementDate, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          crypto.randomUUID(),
+          item.inventoryItemId,
+          'REQUISITION_RETURN',
+          item.quantityIssued, // Positive for return
+          newInvQty,
+          requisitionId,
+          lastUpdated,
+          `Stock returned from deleted Requisition ${requisitionId}`
         );
     }
 
@@ -612,3 +674,4 @@ export async function deleteRequisitionAction(requisitionId: string): Promise<{ 
 }
     
     
+

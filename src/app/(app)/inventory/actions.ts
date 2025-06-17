@@ -117,6 +117,7 @@ export async function addInventoryItemAction(formData: FormData) {
 
   try {
     const db = await openDb();
+    await db.run('BEGIN TRANSACTION');
     const itemId = await generateItemId(db, data.categoryId, data.subCategoryId);
     const lastUpdated = new Date().toISOString();
 
@@ -141,8 +142,28 @@ export async function addInventoryItemAction(formData: FormData) {
       data.supplierId,
       data.unitId
     );
+
+    if (data.quantity > 0) {
+        await db.run(
+            `INSERT INTO stock_movements (id, inventoryItemId, movementType, quantityChanged, balanceAfterMovement, movementDate, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            crypto.randomUUID(),
+            itemId,
+            'INITIAL_STOCK',
+            data.quantity,
+            data.quantity,
+            lastUpdated,
+            'New item added'
+        );
+    }
+    await db.run('COMMIT');
+
   } catch (error) {
     console.error("Failed to add inventory item:", error);
+    // Attempt to rollback if db connection was established
+    const db = await openDb().catch(() => null); // Get a connection if possible, or null
+    if (db) await db.run('ROLLBACK').catch(rbError => console.error("Rollback failed:", rbError));
+    
     if (error instanceof Error) {
       throw new Error(`Database operation failed: ${error.message}`);
     }
@@ -186,6 +207,9 @@ export async function updateInventoryItemAction(itemId: string, currentImageUrl:
   const removeImage = data.removeImage;
 
   try {
+    const db = await openDb();
+    await db.run('BEGIN TRANSACTION');
+
     // 1. Handle new image upload
     if (imageFile && imageFile.size > 0) {
       // Delete old local image if it exists
@@ -222,12 +246,14 @@ export async function updateInventoryItemAction(itemId: string, currentImageUrl:
     }
     // 3. If no new image and no removal, imageUrlToStore remains currentImageUrl
 
-    const db = await openDb();
     const lastUpdated = new Date().toISOString();
+    const existingItem = await db.get<InventoryItem>('SELECT quantity FROM inventory WHERE id = ?', itemId);
+    if (!existingItem) {
+        throw new Error(`Item with ID ${itemId} not found.`);
+    }
+    const quantityChange = data.quantity - (existingItem.quantity || 0);
 
-    // Note: Item ID (PK) cannot be changed. Category/SubCategory changes here do not regenerate ID.
-    // lastPurchasePrice and averageCost are NOT updated here; they are updated via PO receiving.
-    // Quantity adjustments here should ideally also create a stock movement record (Phase 2).
+
     await db.run(
       `UPDATE inventory
        SET name = ?, description = ?, imageUrl = ?, quantity = ?, unitCost = ?, lastUpdated = ?,
@@ -250,8 +276,27 @@ export async function updateInventoryItemAction(itemId: string, currentImageUrl:
       data.unitId,
       itemId
     );
+    
+    if (quantityChange !== 0) {
+        await db.run(
+            `INSERT INTO stock_movements (id, inventoryItemId, movementType, quantityChanged, balanceAfterMovement, movementDate, notes)
+             VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            crypto.randomUUID(),
+            itemId,
+            quantityChange > 0 ? 'ADJUSTMENT_IN' : 'ADJUSTMENT_OUT',
+            quantityChange,
+            data.quantity, // New total quantity
+            lastUpdated,
+            'Manual stock adjustment during item edit'
+        );
+    }
+    await db.run('COMMIT');
+
   } catch (error) {
     console.error(`Failed to update inventory item ${itemId}:`, error);
+    const db = await openDb().catch(() => null);
+    if (db) await db.run('ROLLBACK').catch(rbError => console.error("Rollback failed on update:", rbError));
+    
     if (error instanceof Error) {
       throw new Error(`Database operation failed: ${error.message}`);
     }
@@ -601,6 +646,7 @@ export async function importInventoryFromExcelAction(formData: FormData): Promis
       }
 
       try {
+        await db.run('BEGIN TRANSACTION');
         await db.run(
           `INSERT INTO inventory (id, name, description, imageUrl, quantity, unitCost, lastPurchasePrice, averageCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -622,15 +668,30 @@ export async function importInventoryFromExcelAction(formData: FormData): Promis
           supplier?.id || null,
           unit.id
         );
+        if (quantity > 0) {
+            await db.run(
+                `INSERT INTO stock_movements (id, inventoryItemId, movementType, quantityChanged, balanceAfterMovement, movementDate, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                crypto.randomUUID(),
+                itemId,
+                'INITIAL_STOCK', // Or 'IMPORT_ADJUSTMENT'
+                quantity,
+                quantity,
+                lastUpdated,
+                'Imported from Excel'
+            );
+        }
+        await db.run('COMMIT');
         importedCount++;
       } catch (dbError: any) {
+        await db.run('ROLLBACK').catch(rbErr => console.error("Rollback failed in import:", rbErr));
         errors.push({ row: rowNum, message: `Database error: ${dbError.message}` });
       }
     }
 
   } catch (error: any) {
     console.error("Import failed:", error);
-    return { success: false, message: `Import process failed: ${error.message}`, importedCount, failedCount: 0, errors };
+    return { success: false, message: `Import process failed: ${error.message}`, importedCount, failedCount: errors.length, errors };
   }
 
   revalidatePath("/inventory");
@@ -651,11 +712,18 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
     throw new Error(`Inventory item with ID ${inventoryItemId} not found.`);
   }
 
-  const fromDate = startOfDay(parseISO(fromDateString)); 
-  const toDate = endOfDay(parseISO(toDateString));     
+  // Parse the input "yyyy-MM-dd" strings. These are treated as local dates.
+  const fromDateLocal = parseISO(fromDateString); 
+  const toDateLocal = parseISO(toDateString);     
 
-  const fromDateISO = format(fromDate, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-  const toDateISO = format(toDate, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+  // Get the start of the "from" day and end of the "to" day.
+  // These operations respect the local timezone of the server.
+  const fromDateStart = startOfDay(fromDateLocal);
+  const toDateEnd = endOfDay(toDateLocal);     
+
+  // Format them to ISO strings with Z (UTC) for SQLite comparison, as DB stores dates in UTC.
+  const fromDateISOQuery = format(fromDateStart, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
+  const toDateISOQuery = format(toDateEnd, "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
 
   const openingStockResult = await db.get<{ balance: number } | undefined>(
     `SELECT balanceAfterMovement as balance 
@@ -663,7 +731,7 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
      WHERE inventoryItemId = ? AND movementDate < ? 
      ORDER BY movementDate DESC, id DESC LIMIT 1`,
     inventoryItemId,
-    fromDateISO
+    fromDateISOQuery // Use the UTC start of day for opening stock check
   );
   
   const openingStock = openingStockResult?.balance ?? 0;
@@ -677,8 +745,8 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
      WHERE sm.inventoryItemId = ? AND sm.movementDate >= ? AND sm.movementDate <= ?
      ORDER BY sm.movementDate ASC, sm.id ASC`,
     inventoryItemId,
-    fromDateISO,
-    toDateISO
+    fromDateISOQuery, // Query from start of 'from' day (UTC)
+    toDateISOQuery    // Query until end of 'to' day (UTC)
   );
 
   let totalIn = 0;
@@ -696,15 +764,15 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
   return {
     inventoryItemId: item.id,
     inventoryItemName: item.name,
-    periodFrom: fromDateString, 
-    periodTo: toDateString,     
+    periodFrom: fromDateString, // Return the original input strings for display
+    periodTo: toDateString,     // Return the original input strings for display
     openingStock,
     totalIn,
     totalOut,
     closingStock,
     movements: movementsInPeriod.map(m => ({
         ...m,
-        movementDate: format(parseISO(m.movementDate), "yyyy-MM-dd HH:mm") 
+        movementDate: format(parseISO(m.movementDate), "yyyy-MM-dd HH:mm") // Format for display
     })),
   };
 }
