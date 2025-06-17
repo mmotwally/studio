@@ -187,8 +187,9 @@ export interface RequisitionItem {
   inventoryItemName?: string; // For display
   inventoryItemCurrentStock?: number; // For display on detail/fulfillment view
   quantityRequested: number;
+  quantityApproved?: number | null; // Manager approved quantity
   quantityIssued: number; 
-  isApproved?: boolean; // 0 for false/pending, 1 for true/approved
+  isApproved?: boolean; // Flag if a decision (approve/reject qty) was made; derived from quantityApproved
   notes?: string | null;
 }
 
@@ -211,7 +212,8 @@ export interface FulfillRequisitionItemFormValues {
   requisitionItemId: string;
   inventoryItemId: string;
   itemName: string; // For display in form
-  quantityRequested: number;
+  quantityRequested: number; // Original requested quantity
+  quantityApproved: number; // Quantity manager approved
   currentQuantityIssued: number; // Already issued for this item
   inventoryItemCurrentStock: number; // Current stock of the inventory item
   quantityToIssueNow: number; // Quantity being issued in this attempt
@@ -231,12 +233,14 @@ export interface DepartmentFormValues {
 // For item approval dialog
 export interface ApproveRequisitionItemFormValues {
   requisitionItemId: string;
+  inventoryItemId: string;
   itemName: string;
   quantityRequested: number;
-  isApproved: boolean;
+  quantityToApprove: number; // Quantity the manager is approving for this item
 }
 
 export interface ApproveRequisitionFormValues {
   requisitionId: string;
   items: ApproveRequisitionItemFormValues[];
 }
+

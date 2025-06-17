@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Dialog, DialogTrigger } from '@/components/ui/dialog';
-import { ArrowLeft, Edit, CheckCircle, XCircle, Settings2, PackageSearch, CalendarDays, FileTextIcon, UserCircle, Info, MoreVertical, Printer, FileX2, PackageCheck, PackageMinus, Briefcase, FileArchive, FileDigit } from 'lucide-react';
+import { ArrowLeft, Edit, CheckCircle, XCircle, Settings2, PackageSearch, CalendarDays, FileTextIcon, UserCircle, Info, MoreVertical, Printer, FileX2, PackageCheck, PackageMinus, Briefcase, FileArchive, FileDigit, ShieldCheck } from 'lucide-react';
 import { getRequisitionById, updateRequisitionStatusAction } from '../actions';
 import type { Requisition, RequisitionStatus } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -17,6 +17,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import { FulfillRequisitionDialog } from '@/components/requisitions/fulfill-requisition-dialog';
+import { ApproveRequisitionItemsDialog } from '@/components/requisitions/approve-requisition-items-dialog';
 
 
 interface RequisitionDetailPageProps {
@@ -57,6 +58,7 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
   const [error, setError] = React.useState<string | null>(null);
   const { toast } = useToast();
   const [isFulfillmentDialogOpen, setIsFulfillmentDialogOpen] = React.useState(false);
+  const [isApproveItemsDialogOpen, setIsApproveItemsDialogOpen] = React.useState(false);
 
   const fetchRequisition = React.useCallback(async () => {
     setIsLoading(true);
@@ -130,7 +132,9 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
                     requisition.status === 'FULFILLED';
 
   const canFulfill = (requisition.status === 'APPROVED' || requisition.status === 'PARTIALLY_FULFILLED') && 
-                     requisition.items && requisition.items.some(item => (item.quantityIssued || 0) < item.quantityRequested);
+                     requisition.items && requisition.items.some(item => item.isApproved && (item.quantityIssued || 0) < (item.quantityApproved ?? 0));
+  
+  const canManageApprovals = requisition.status === 'PENDING_APPROVAL';
 
 
   return (
@@ -176,7 +180,7 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
           <Card className="shadow-lg">
             <CardHeader>
               <CardTitle>Requisition Items</CardTitle>
-              <CardDescription>List of items requested in this requisition.</CardDescription>
+              <CardDescription>List of items requested in this requisition. Check approval status and quantities.</CardDescription>
             </CardHeader>
             <CardContent>
               {requisition.items && requisition.items.length > 0 ? (
@@ -185,7 +189,9 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
                     <TableRow>
                       <TableHead>Item Name</TableHead>
                       <TableHead className="text-right">Qty Requested</TableHead>
+                      <TableHead className="text-right">Qty Approved</TableHead>
                       <TableHead className="text-right">Qty Issued</TableHead>
+                      <TableHead>Approval</TableHead>
                       <TableHead>Notes</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -194,7 +200,12 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
                       <TableRow key={item.id}>
                         <TableCell className="font-medium">{item.inventoryItemName || 'N/A'}</TableCell>
                         <TableCell className="text-right">{item.quantityRequested}</TableCell>
+                        <TableCell className="text-right">{item.quantityApproved ?? '-'}</TableCell>
                         <TableCell className="text-right">{item.quantityIssued || 0}</TableCell>
+                        <TableCell>
+                          {item.quantityApproved === null || item.quantityApproved === undefined ? <Badge variant="outline">Pending</Badge> :
+                           (item.quantityApproved > 0 ? <Badge className="bg-green-100 text-green-700">Approved</Badge> : <Badge variant="destructive">Rejected</Badge>)}
+                        </TableCell>
                         <TableCell>{item.notes || '-'}</TableCell>
                       </TableRow>
                     ))}
@@ -214,11 +225,11 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
             <CardContent className="flex flex-wrap gap-2">
               {requisition.status === 'PENDING_APPROVAL' && (
                 <>
-                  <Button onClick={() => handleStatusUpdate('APPROVED')} variant="default">
-                    <CheckCircle className="mr-2 h-4 w-4" /> Approve
+                  <Button onClick={() => setIsApproveItemsDialogOpen(true)} variant="default">
+                    <ShieldCheck className="mr-2 h-4 w-4" /> Manage Item Approvals
                   </Button>
                   <Button onClick={() => handleStatusUpdate('REJECTED')} variant="destructive">
-                    <XCircle className="mr-2 h-4 w-4" /> Reject
+                    <XCircle className="mr-2 h-4 w-4" /> Reject Entire Requisition
                   </Button>
                 </>
               )}
@@ -227,7 +238,7 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
                     <Info className="h-4 w-4" />
                     <AlertTitle>Approved</AlertTitle>
                     <AlertDescription className="flex items-center justify-between">
-                        <span>This requisition is approved and ready for fulfillment.</span>
+                        <span>This requisition is approved and ready for fulfillment based on approved quantities.</span>
                         {canFulfill && (
                           <Button variant="default" size="sm" onClick={() => setIsFulfillmentDialogOpen(true)}>
                               <PackageSearch className="mr-2 h-4 w-4" /> Process Fulfillment
@@ -350,6 +361,16 @@ export default function RequisitionDetailClientPage({ params: paramsPromise }: R
             />
          </Dialog>
       )}
+      {isApproveItemsDialogOpen && requisition && (
+          <Dialog open={isApproveItemsDialogOpen} onOpenChange={setIsApproveItemsDialogOpen}>
+              <ApproveRequisitionItemsDialog
+                  requisition={requisition}
+                  setOpen={setIsApproveItemsDialogOpen}
+                  onApprovalProcessed={fetchRequisition}
+              />
+          </Dialog>
+      )}
     </>
   );
 }
+

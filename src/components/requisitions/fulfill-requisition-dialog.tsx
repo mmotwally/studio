@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import type { Requisition, FulfillRequisitionFormValues } from "@/types"; // Removed FulfillRequisitionItemFormValues as it's part of the schema
+import type { Requisition, FulfillRequisitionFormValues, FulfillRequisitionItemFormValues } from "@/types";
 import { processRequisitionFulfillmentAction } from "@/app/(app)/requisitions/actions";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { AlertCircle, Info } from "lucide-react";
@@ -34,12 +34,13 @@ const fulfillRequisitionItemClientSchema = z.object({
   requisitionItemId: z.string(),
   inventoryItemId: z.string(),
   itemName: z.string(),
-  quantityRequested: z.coerce.number(),
+  quantityRequested: z.coerce.number(), // Original requested
+  quantityApproved: z.coerce.number(), // Quantity manager approved
   currentQuantityIssued: z.coerce.number(),
   inventoryItemCurrentStock: z.coerce.number(),
   quantityToIssueNow: z.coerce.number().int().min(0, "Cannot be negative."),
-}).refine(data => data.quantityToIssueNow <= (data.quantityRequested - data.currentQuantityIssued), {
-  message: "Cannot issue more than remaining requested quantity.",
+}).refine(data => data.quantityToIssueNow <= (data.quantityApproved - data.currentQuantityIssued), {
+  message: "Cannot issue more than remaining approved quantity.",
   path: ["quantityToIssueNow"],
 }).refine(data => data.quantityToIssueNow <= data.inventoryItemCurrentStock, {
   message: "Insufficient stock.",
@@ -48,7 +49,7 @@ const fulfillRequisitionItemClientSchema = z.object({
 
 const fulfillRequisitionClientSchema = z.object({
   requisitionId: z.string(),
-  items: z.array(fulfillRequisitionItemClientSchema).min(1, "At least one item must be processed."),
+  items: z.array(fulfillRequisitionItemClientSchema).min(0), // Can be 0 if no items are eligible/entered
 });
 
 
@@ -65,18 +66,23 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
 
   const defaultFormValues: FulfillRequisitionFormValues = {
     requisitionId: requisition.id,
-    items: requisition.items?.map(item => {
-        const remainingNeeded = item.quantityRequested - (item.quantityIssued || 0);
-        return {
-            requisitionItemId: item.id,
-            inventoryItemId: item.inventoryItemId,
-            itemName: item.inventoryItemName || "Unknown Item",
-            quantityRequested: item.quantityRequested,
-            currentQuantityIssued: item.quantityIssued || 0,
-            inventoryItemCurrentStock: item.inventoryItemCurrentStock || 0,
-            quantityToIssueNow: Math.max(0, Math.min(remainingNeeded, item.inventoryItemCurrentStock || 0)),
-        };
-    }).filter(item => (item.quantityRequested - item.currentQuantityIssued) > 0) || [], // Only include items that still need fulfillment
+    items: requisition.items
+        ?.filter(item => item.isApproved && (item.quantityApproved ?? 0) > 0 && (item.quantityIssued || 0) < (item.quantityApproved ?? 0)) // Only items approved with qty > 0 and not fully issued
+        .map(item => {
+            const qtyApproved = item.quantityApproved ?? 0;
+            const qtyIssued = item.quantityIssued || 0;
+            const remainingNeededBasedOnApproval = qtyApproved - qtyIssued;
+            return {
+                requisitionItemId: item.id,
+                inventoryItemId: item.inventoryItemId,
+                itemName: item.inventoryItemName || "Unknown Item",
+                quantityRequested: item.quantityRequested, // Keep for display if needed
+                quantityApproved: qtyApproved,
+                currentQuantityIssued: qtyIssued,
+                inventoryItemCurrentStock: item.inventoryItemCurrentStock || 0,
+                quantityToIssueNow: Math.max(0, Math.min(remainingNeededBasedOnApproval, item.inventoryItemCurrentStock || 0)),
+            };
+    }) || [],
   };
 
   const form = useForm<FulfillRequisitionFormValues>({
@@ -113,8 +119,6 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
 
     try {
       await processRequisitionFulfillmentAction(values.requisitionId, itemsToFulfill);
-      // On successful redirect, this part won't be reached.
-      // If it is reached, it means the action completed without redirecting (which is not expected here).
       toast({
         title: "Success",
         description: "Requisition fulfillment processed.",
@@ -122,12 +126,9 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
       onFulfillmentProcessed(); 
       setOpen(false);
     } catch (error: any) {
-      // Check if it's a Next.js redirect error
       if (error.digest?.startsWith('NEXT_REDIRECT')) {
-        console.info("FulfillRequisitionDialog: Caught NEXT_REDIRECT, re-throwing.");
-        throw error; // Re-throw for Next.js to handle client-side navigation
+        throw error; 
       }
-      // Handle actual application errors
       console.error("Failed to process fulfillment:", error);
       const errorMessage = error instanceof Error ? error.message : "Could not process fulfillment. Please try again.";
       setServerError(errorMessage); 
@@ -137,8 +138,7 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
         variant: "destructive",
       });
     } finally {
-      // Only set if not a redirect error that would unmount the component
-      if (!((isSubmitting && (serverError === null && !((Error as any).digest?.startsWith('NEXT_REDIRECT')))))) {
+      if (!(isSubmitting && (serverError === null && !((Error as any).digest?.startsWith('NEXT_REDIRECT'))))) {
          setIsSubmitting(false);
       }
     }
@@ -150,7 +150,7 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
         <DialogHeader>
           <DialogTitle>Process Fulfillment for Requisition: {requisition.id}</DialogTitle>
           <DialogDescription>
-            All items in this requisition have already been fully issued.
+            All approved items in this requisition have already been fully issued or no items are currently approved for fulfillment.
           </DialogDescription>
         </DialogHeader>
         <DialogFooter>
@@ -166,11 +166,11 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
 
 
   return (
-    <DialogContent className="sm:max-w-3xl"> 
+    <DialogContent className="sm:max-w-4xl"> 
       <DialogHeader>
         <DialogTitle>Process Fulfillment for Requisition: {requisition.id}</DialogTitle>
         <DialogDescription>
-          Specify the quantities issued for each item. Ensure stock levels are accurate.
+          Specify the quantities issued for each approved item. Ensure stock levels are accurate.
         </DialogDescription>
       </DialogHeader>
       <Form {...form}>
@@ -179,21 +179,25 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
             <div className="space-y-4">
               {fields.map((field, index) => {
                 const itemData = form.getValues(`items.${index}`);
-                const remainingNeeded = itemData.quantityRequested - itemData.currentQuantityIssued;
+                const remainingToIssueBasedOnApproval = itemData.quantityApproved - itemData.currentQuantityIssued;
                 return (
-                  <div key={field.id} className="grid grid-cols-1 md:grid-cols-5 gap-3 p-3 border rounded-md items-center">
+                  <div key={field.id} className="grid grid-cols-1 md:grid-cols-6 gap-3 p-3 border rounded-md items-center">
                     <div className="md:col-span-2">
                       <FormLabel className="text-sm font-medium">{itemData.itemName}</FormLabel>
                       <p className="text-xs text-muted-foreground">ID: {itemData.inventoryItemId}</p>
                     </div>
                     
                     <div className="text-sm">
-                        <FormLabel>Requested</FormLabel>
-                        <p>{itemData.quantityRequested}</p>
+                        <FormLabel>Qty Approved</FormLabel>
+                        <p>{itemData.quantityApproved}</p>
                     </div>
-                    <div className="text-sm">
+                     <div className="text-sm">
                         <FormLabel>Issued (Prev.)</FormLabel>
                         <p>{itemData.currentQuantityIssued}</p>
+                    </div>
+                    <div className="text-sm">
+                        <FormLabel>Remaining</FormLabel>
+                        <p>{remainingToIssueBasedOnApproval}</p>
                     </div>
                     
                     <FormField
@@ -208,7 +212,7 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
                               {...formField} 
                               placeholder="Qty" 
                               min="0"
-                              max={Math.min(remainingNeeded, itemData.inventoryItemCurrentStock)}
+                              max={Math.min(remainingToIssueBasedOnApproval, itemData.inventoryItemCurrentStock)}
                               onChange={(e) => {
                                 const val = parseInt(e.target.value, 10);
                                 formField.onChange(isNaN(val) ? 0 : val);
@@ -234,8 +238,8 @@ export function FulfillRequisitionDialog({ requisition, setOpen, onFulfillmentPr
            <div className="p-3 rounded-md bg-blue-50 border border-blue-200 text-blue-700 text-sm flex items-start gap-2">
               <Info className="h-4 w-4 mt-0.5 shrink-0" />
               <p>
-                Enter the quantity you are issuing for each item in this batch.
-                The system will validate against available stock. Items with 0 "Issue Now" will be ignored.
+                Enter the quantity you are issuing for each item.
+                This cannot exceed the remaining approved quantity or available stock. Items with 0 "Issue Now" will be ignored.
               </p>
             </div>
 

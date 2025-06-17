@@ -5,7 +5,7 @@ import { openDb } from '@/lib/database';
 import type { RequisitionFormValues } from './schema';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
-import type { InventoryItem, Requisition, RequisitionItem, RequisitionStatus, SelectItem } from '@/types';
+import type { InventoryItem, Requisition, RequisitionItem, RequisitionStatus, SelectItem, ApproveRequisitionFormValues } from '@/types';
 import { format } from 'date-fns';
 import type { Database as SqliteDatabaseType } from 'sqlite';
 
@@ -57,12 +57,13 @@ export async function createRequisitionAction(values: RequisitionFormValues) {
     for (const item of values.items) {
       const requisitionItemId = crypto.randomUUID();
       await db.run(
-        `INSERT INTO requisition_items (id, requisitionId, inventoryItemId, quantityRequested, quantityIssued, isApproved, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO requisition_items (id, requisitionId, inventoryItemId, quantityRequested, quantityApproved, quantityIssued, isApproved, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         requisitionItemId,
         requisitionId,
         item.inventoryItemId,
         item.quantityRequested,
+        null, // quantityApproved is null initially
         0, 
         0, // isApproved defaults to 0 (false)
         item.notes
@@ -104,6 +105,7 @@ export async function updateRequisitionAction(requisitionId: string, values: Req
     }
 
     const originalStatus = currentRequisition.status;
+    let newStatus = originalStatus;
 
     if (originalStatus === 'FULFILLED' || originalStatus === 'PARTIALLY_FULFILLED') {
       const existingItems = await db.all<RequisitionItem>(
@@ -120,32 +122,30 @@ export async function updateRequisitionAction(requisitionId: string, values: Req
           );
         }
       }
+       newStatus = 'APPROVED'; // Reset status, requires re-approval/re-fulfillment decisions
+    } else if (originalStatus === 'REJECTED' || originalStatus === 'CANCELLED') {
+        newStatus = 'PENDING_APPROVAL';
     }
+
 
     await db.run('DELETE FROM requisition_items WHERE requisitionId = ?', requisitionId);
 
     for (const item of values.items) {
       const requisitionItemId = crypto.randomUUID(); 
       await db.run(
-        `INSERT INTO requisition_items (id, requisitionId, inventoryItemId, quantityRequested, quantityIssued, isApproved, notes)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO requisition_items (id, requisitionId, inventoryItemId, quantityRequested, quantityApproved, quantityIssued, isApproved, notes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         requisitionItemId,
         requisitionId,
         item.inventoryItemId,
         item.quantityRequested,
+        (newStatus !== 'PENDING_APPROVAL' && originalStatus !== 'REJECTED' && originalStatus !== 'CANCELLED') ? null : null, // Reset approved qty if status changes significantly
         0, 
-        0, // New items in an edit are not approved by default
+        0, 
         item.notes
       );
     }
-
-    let newStatus = originalStatus;
-    if ((originalStatus === 'FULFILLED' || originalStatus === 'PARTIALLY_FULFILLED')) {
-      newStatus = 'APPROVED'; 
-    } else if (originalStatus === 'REJECTED' || originalStatus === 'CANCELLED') {
-        newStatus = 'PENDING_APPROVAL';
-    }
-
+    
     await db.run(
       `UPDATE requisitions
        SET departmentId = ?, orderNumber = ?, bomNumber = ?, dateNeeded = ?, notes = ?, lastUpdated = ?, status = ?
@@ -246,7 +246,7 @@ export async function getRequisitionById(requisitionId: string): Promise<Requisi
     `SELECT 
       ri.id, ri.requisitionId, ri.inventoryItemId, i.name as inventoryItemName, 
       i.quantity as inventoryItemCurrentStock,
-      ri.quantityRequested, ri.quantityIssued, ri.isApproved, ri.notes
+      ri.quantityRequested, ri.quantityApproved, ri.quantityIssued, ri.isApproved, ri.notes
      FROM requisition_items ri
      JOIN inventory i ON ri.inventoryItemId = i.id
      WHERE ri.requisitionId = ?
@@ -258,7 +258,12 @@ export async function getRequisitionById(requisitionId: string): Promise<Requisi
     ...requisitionData,
     status: requisitionData.status as RequisitionStatus,
     departmentName: requisitionData.departmentName || undefined,
-    items: itemsData.map(item => ({...item, quantityIssued: item.quantityIssued || 0, isApproved: Boolean(item.isApproved)})),
+    items: itemsData.map(item => ({
+        ...item, 
+        quantityApproved: item.quantityApproved === null ? undefined : item.quantityApproved, // Ensure null becomes undefined if necessary
+        quantityIssued: item.quantityIssued || 0, 
+        isApproved: Boolean(item.isApproved)
+    })),
     totalItems: itemsData.length,
   };
 }
@@ -278,6 +283,7 @@ export async function updateRequisitionStatusAction(requisitionId: string, newSt
     const currentStatus = currentRequisition.status;
     const lastUpdated = new Date().toISOString();
 
+    // If cancelling a fulfilled/partially fulfilled req, return stock
     if (newStatus === 'CANCELLED' && (currentStatus === 'FULFILLED' || currentStatus === 'PARTIALLY_FULFILLED')) {
       const itemsToReturn = await db.all<RequisitionItem>(
         'SELECT inventoryItemId, quantityIssued FROM requisition_items WHERE requisitionId = ? AND quantityIssued > 0',
@@ -291,39 +297,29 @@ export async function updateRequisitionStatusAction(requisitionId: string, newSt
           item.inventoryItemId
         );
       }
+      // Also reset issued and approved quantities on cancellation
       await db.run(
-        'UPDATE requisition_items SET quantityIssued = 0 WHERE requisitionId = ?', // isApproved status remains as is
+        'UPDATE requisition_items SET quantityIssued = 0, quantityApproved = 0, isApproved = 0 WHERE requisitionId = ?',
         requisitionId
       );
-    } else if (newStatus === 'CANCELLED' && !(currentStatus === 'PENDING_APPROVAL' || currentStatus === 'APPROVED')) {
-      // If cancelling an already fulfilled/partially fulfilled, allow, handled above.
-      // This condition now mainly prevents cancelling 'REJECTED' or already 'CANCELLED' requisitions.
-      if (currentStatus === 'REJECTED' || currentStatus === 'CANCELLED') {
-         throw new Error(`Requisition cannot be cancelled. Current status: ${currentStatus}.`);
-      }
+    } else if (newStatus === 'CANCELLED') {
+      // If cancelling from other states like PENDING_APPROVAL or APPROVED
+       await db.run(
+        'UPDATE requisition_items SET quantityApproved = 0, isApproved = 0 WHERE requisitionId = ?', // Set quantityApproved to 0
+        requisitionId
+      );
     }
     
     // When REJECTING the whole requisition
     if (newStatus === 'REJECTED') {
-        if (currentStatus !== 'PENDING_APPROVAL') {
+        if (currentStatus !== 'PENDING_APPROVAL' && currentStatus !== 'APPROVED') { // Can reject an approved one before fulfillment
             throw new Error(`Requisition cannot be rejected. Current status: ${currentStatus}.`);
         }
-        // Set all items to not approved
-        await db.run('UPDATE requisition_items SET isApproved = 0 WHERE requisitionId = ?', requisitionId);
+        // Set all items to not approved and quantityApproved to 0
+        await db.run('UPDATE requisition_items SET isApproved = 0, quantityApproved = 0 WHERE requisitionId = ?', requisitionId);
     }
     
-    // The main "Approve" for the whole requisition is now handled by approveRequisitionItemsAction
-    // This action is now mainly for Reject, Cancel, or other direct status changes not involving item-level decisions.
-    if ((newStatus === 'APPROVED') && currentStatus !== 'PENDING_APPROVAL') {
-       // This specific transition should ideally be handled by approveRequisitionItemsAction
-       // to ensure items are actually approved.
-       // For now, if this action is directly called to set to 'APPROVED', we assume items are handled elsewhere or it's a general approval.
-       // Consider if this direct 'APPROVED' status update is still needed or should be deprecated.
-       console.warn(`Requisition ${requisitionId} directly set to APPROVED. Ensure item approval is handled.`);
-    }
-
-
-    const result = await db.run(
+    await db.run(
       `UPDATE requisitions
        SET status = ?, lastUpdated = ?
        WHERE id = ?`,
@@ -344,9 +340,93 @@ export async function updateRequisitionStatusAction(requisitionId: string, newSt
 
   revalidatePath(`/requisitions/${requisitionId}`);
   revalidatePath('/requisitions');
-  if (newStatus === 'CANCELLED') {
+  if (newStatus === 'CANCELLED' && (currentRequisition?.status === 'FULFILLED' || currentRequisition?.status === 'PARTIALLY_FULFILLED')) {
     revalidatePath('/inventory');
   }
+}
+
+export async function approveRequisitionItemsAction(requisitionId: string, itemsToApprove: Array<{ requisitionItemId: string; quantityToApprove: number }>) {
+  if (!requisitionId || !itemsToApprove) {
+    throw new Error("Requisition ID and items for approval are required.");
+  }
+
+  const db = await openDb();
+  await db.run('BEGIN TRANSACTION');
+  try {
+    const lastUpdated = new Date().toISOString();
+    const currentRequisition = await db.get<Requisition>('SELECT id, status FROM requisitions WHERE id = ?', requisitionId);
+    if (!currentRequisition) {
+      throw new Error(`Requisition with ID "${requisitionId}" not found.`);
+    }
+    if (currentRequisition.status !== 'PENDING_APPROVAL') {
+      throw new Error(`Cannot approve items for a requisition that is not in 'PENDING_APPROVAL' status. Current status: ${currentRequisition.status}`);
+    }
+
+    for (const itemDecision of itemsToApprove) {
+      const { requisitionItemId, quantityToApprove } = itemDecision;
+      
+      const reqItem = await db.get<RequisitionItem>('SELECT quantityRequested FROM requisition_items WHERE id = ? AND requisitionId = ?', requisitionItemId, requisitionId);
+      if (!reqItem) {
+        throw new Error(`Requisition item with ID ${requisitionItemId} not found for this requisition.`);
+      }
+      if (quantityToApprove < 0 || quantityToApprove > reqItem.quantityRequested) {
+        throw new Error(`Invalid quantity to approve (${quantityToApprove}) for item ${requisitionItemId}. Must be between 0 and ${reqItem.quantityRequested}.`);
+      }
+
+      await db.run(
+        'UPDATE requisition_items SET quantityApproved = ?, isApproved = ? WHERE id = ?',
+        quantityToApprove,
+        quantityToApprove > 0 ? 1 : 0,
+        requisitionItemId
+      );
+    }
+    
+    // Update overall requisition status
+    const allItemsInRequisition = await db.all<RequisitionItem>('SELECT quantityApproved FROM requisition_items WHERE requisitionId = ?', requisitionId);
+    
+    const allDecisionsMade = allItemsInRequisition.every(item => item.quantityApproved !== null && item.quantityApproved !== undefined);
+    let newRequisitionStatus: RequisitionStatus = 'PENDING_APPROVAL';
+
+    if (allDecisionsMade) {
+      const anyItemApproved = allItemsInRequisition.some(item => (item.quantityApproved ?? 0) > 0);
+      if (anyItemApproved) {
+        newRequisitionStatus = 'APPROVED';
+      } else {
+        // All items decided, and none have quantityApproved > 0, so effectively rejected
+        newRequisitionStatus = 'REJECTED';
+      }
+    }
+    // If not all decisions made, it remains PENDING_APPROVAL
+
+    if (newRequisitionStatus !== currentRequisition.status) {
+         await db.run(
+            'UPDATE requisitions SET status = ?, lastUpdated = ? WHERE id = ?',
+            newRequisitionStatus,
+            lastUpdated,
+            requisitionId
+        );
+    } else {
+        // Still update lastUpdated even if status doesn't change, as item decisions were made
+         await db.run(
+            'UPDATE requisitions SET lastUpdated = ? WHERE id = ?',
+            lastUpdated,
+            requisitionId
+        );
+    }
+
+
+    await db.run('COMMIT');
+  } catch (error) {
+    await db.run('ROLLBACK');
+    console.error(`Failed to approve items for requisition ${requisitionId}:`, error);
+    if (error instanceof Error) {
+      throw new Error(`Approval processing failed: ${error.message}`);
+    }
+    throw new Error('Approval processing failed due to an unexpected error.');
+  }
+  revalidatePath(`/requisitions/${requisitionId}`);
+  revalidatePath('/requisitions');
+  redirect(`/requisitions/${requisitionId}`);
 }
 
 
@@ -372,10 +452,24 @@ export async function processRequisitionFulfillmentAction(
         continue; 
       }
 
-      // Check if item is approved before fulfilling
-      const reqItemDetails = await db.get<RequisitionItem>('SELECT isApproved FROM requisition_items WHERE id = ? AND requisitionId = ?', item.requisitionItemId, requisitionId);
-      if (!reqItemDetails || !reqItemDetails.isApproved) {
-        throw new Error(`Item ${item.inventoryItemId} (${item.requisitionItemId}) is not approved for fulfillment.`);
+      const reqItemDetails = await db.get<RequisitionItem>(
+          'SELECT isApproved, quantityApproved, quantityIssued FROM requisition_items WHERE id = ? AND requisitionId = ?', 
+          item.requisitionItemId, requisitionId
+      );
+
+      if (!reqItemDetails) {
+        throw new Error(`Requisition item ${item.requisitionItemId} not found for requisition ${requisitionId}.`);
+      }
+      if (!reqItemDetails.isApproved || (reqItemDetails.quantityApproved ?? 0) === 0) { // Check isApproved and quantityApproved
+        throw new Error(`Item ${item.inventoryItemId} (${item.requisitionItemId}) is not approved or has an approved quantity of 0.`);
+      }
+      
+      const qtyActuallyApproved = reqItemDetails.quantityApproved ?? 0;
+      const alreadyIssued = reqItemDetails.quantityIssued ?? 0;
+      const remainingToIssueBasedOnApproval = qtyActuallyApproved - alreadyIssued;
+
+      if (item.quantityToIssueNow > remainingToIssueBasedOnApproval) {
+        throw new Error(`Cannot issue ${item.quantityToIssueNow} for item ${item.inventoryItemId}. Max remaining based on approval: ${remainingToIssueBasedOnApproval}.`);
       }
 
 
@@ -405,46 +499,47 @@ export async function processRequisitionFulfillmentAction(
       );
     }
 
-    const allRequisitionItems = await db.all<RequisitionItem>(
-      'SELECT quantityRequested, quantityIssued, isApproved FROM requisition_items WHERE requisitionId = ?',
+    // Recalculate overall requisition status based on quantityApproved vs quantityIssued
+    const allApprovedItems = await db.all<RequisitionItem>(
+      'SELECT quantityApproved, quantityIssued FROM requisition_items WHERE requisitionId = ? AND isApproved = 1 AND quantityApproved > 0',
       requisitionId
     );
 
-    let isFullyFulfilled = true;
-    let isPartiallyFulfilled = false;
-    const approvedItems = allRequisitionItems.filter(i => i.isApproved);
-
-    if (approvedItems.length === 0 && allRequisitionItems.length > 0) { // If there are items but none approved
-      isFullyFulfilled = false; // Cannot be fully fulfilled if no items are approved
-    } else if (approvedItems.length === 0 && allRequisitionItems.length === 0) { // No items in requisition
-        isFullyFulfilled = false; // Or handle as an edge case, perhaps shouldn't reach here.
-    }
-
-
-    for (const reqItem of approvedItems) { // Only check approved items for fulfillment status
-      if ((reqItem.quantityIssued || 0) < reqItem.quantityRequested) {
-        isFullyFulfilled = false;
-      }
-      if ((reqItem.quantityIssued || 0) > 0) {
-        isPartiallyFulfilled = true;
-      }
-    }
-    
-    // If there are unapproved items, it can't be 'FULFILLED' in the sense of all *requested* items.
-    // But it can be 'FULFILLED' in the sense of all *approved* items.
-    // Let's refine: if all *approved* items are fully issued, AND no other items are pending approval, then it's FULFILLED.
-    // If some approved items are issued, it's PARTIALLY_FULFILLED.
-
-    const unapprovedPendingItemsExist = allRequisitionItems.some(item => !item.isApproved);
-
     let newStatus: RequisitionStatus;
-    if (isFullyFulfilled && !unapprovedPendingItemsExist && approvedItems.length > 0) { // All approved items are fully issued and no pending items
-      newStatus = 'FULFILLED';
-    } else if (isPartiallyFulfilled || (isFullyFulfilled && unapprovedPendingItemsExist)) { // Some items issued, or all approved items issued but other items still pending approval
-      newStatus = 'PARTIALLY_FULFILLED';
-    } else { // No items issued, or no approved items to issue
-      const currentReq = await db.get('SELECT status FROM requisitions WHERE id = ?', requisitionId);
-      newStatus = currentReq?.status as RequisitionStatus || 'APPROVED'; 
+    const currentReq = await db.get('SELECT status FROM requisitions WHERE id = ?', requisitionId);
+    
+    if (allApprovedItems.length === 0) { // No items were approved, or approved items had 0 quantity.
+        newStatus = currentReq?.status as RequisitionStatus || 'APPROVED'; // Or REJECTED if all were decided as 0. This needs care.
+                                                                          // If it reached fulfillment, it must have been 'APPROVED'.
+                                                                          // If all approved items have qty 0, then it's effectively 'FULFILLED' (nothing to issue).
+        // Let's refine: if no items are *eligible* for fulfillment (approved with qty > 0), it's FULFILLED.
+        const anyItemEligibleForFulfillment = await db.get(
+            'SELECT 1 FROM requisition_items WHERE requisitionId = ? AND isApproved = 1 AND quantityApproved > 0 LIMIT 1',
+            requisitionId
+        );
+        if (!anyItemEligibleForFulfillment) {
+            newStatus = 'FULFILLED';
+        } else {
+            newStatus = 'APPROVED'; // Still items approved but none issued in this batch
+        }
+
+    } else {
+        const isFullyFulfilled = allApprovedItems.every(
+        (reqItem) => (reqItem.quantityIssued ?? 0) >= (reqItem.quantityApproved ?? 0)
+        );
+        const isPartiallyFulfilled = allApprovedItems.some(
+        (reqItem) => (reqItem.quantityIssued ?? 0) > 0 && (reqItem.quantityIssued ?? 0) < (reqItem.quantityApproved ?? 0)
+        );
+        const anyIssuedAtAll = allApprovedItems.some(item => (item.quantityIssued ?? 0) > 0);
+
+
+        if (isFullyFulfilled) {
+        newStatus = 'FULFILLED';
+        } else if (isPartiallyFulfilled || anyIssuedAtAll) { // if any amount issued across any approved item but not all fully done
+        newStatus = 'PARTIALLY_FULFILLED';
+        } else { // No items issued in this batch, but some are approved and pending issuance
+        newStatus = 'APPROVED';
+        }
     }
 
 
