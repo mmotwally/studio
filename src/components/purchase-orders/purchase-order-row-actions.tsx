@@ -15,10 +15,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Eye, Edit, FileX2, MoreHorizontal, Trash2, CheckCircle, Send, Truck } from "lucide-react";
+import { Eye, Edit, FileX2, Trash2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { PurchaseOrder, PurchaseOrderStatus } from "@/types";
+import type { PurchaseOrder } from "@/types";
 import { deletePurchaseOrderAction, updatePurchaseOrderStatusAction } from "@/app/(app)/purchase-orders/actions";
 
 interface PurchaseOrderRowActionsProps {
@@ -30,14 +29,14 @@ export function PurchaseOrderRowActions({ po }: PurchaseOrderRowActionsProps) {
   const router = useRouter();
   const [isAlertOpen, setIsAlertOpen] = React.useState(false);
   const [alertAction, setAlertAction] = React.useState<"cancel" | "delete" | null>(null);
+  const [alertContent, setAlertContent] = React.useState<{ title: string; description: string }>({ title: "", description: "" });
   const [isPending, startTransition] = React.useTransition();
 
   const canEdit = po.status === 'DRAFT' || po.status === 'PENDING_APPROVAL';
   const canCancel = !['RECEIVED', 'CANCELLED'].includes(po.status);
-  // Allow deleting DRAFT or CANCELLED POs. Consider implications for PENDING_APPROVAL etc.
-  const canDelete = po.status === 'DRAFT' || po.status === 'CANCELLED'; 
+  const canDelete = po.status === 'DRAFT' || po.status === 'CANCELLED';
 
-  const handleAction = async () => {
+  const handleMainAction = async () => {
     if (!alertAction) return;
 
     startTransition(async () => {
@@ -57,7 +56,7 @@ export function PurchaseOrderRowActions({ po }: PurchaseOrderRowActionsProps) {
             throw new Error(result.message);
           }
         }
-        // Revalidation is handled by server actions, no need for router.refresh() here if actions use revalidatePath
+        // Revalidation is handled by server actions
       } catch (error) {
         console.error(`Failed to ${alertAction} PO:`, error);
         toast({
@@ -72,88 +71,69 @@ export function PurchaseOrderRowActions({ po }: PurchaseOrderRowActionsProps) {
     });
   };
 
-  const openAlertDialog = (actionType: "cancel" | "delete") => {
+  const openConfirmationDialog = (actionType: "cancel" | "delete") => {
     setAlertAction(actionType);
+    if (actionType === "delete") {
+      setAlertContent({
+        title: "Delete Purchase Order?",
+        description: `Are you sure you want to permanently delete PO ${po.id} and all its items? This action cannot be undone.`
+      });
+    } else if (actionType === "cancel") {
+      setAlertContent({
+        title: "Cancel Purchase Order?",
+        description: `Are you sure you want to cancel PO ${po.id}? This may have implications if it's already been processed by the supplier.`
+      });
+    }
     setIsAlertOpen(true);
   };
-  
-  const alertContent = {
-    title: alertAction === "delete" ? "Delete Purchase Order?" : "Cancel Purchase Order?",
-    description: alertAction === "delete" 
-      ? `Are you sure you want to permanently delete PO ${po.id} and all its items? This action cannot be undone.`
-      : `Are you sure you want to cancel PO ${po.id}? This may have implications if it's already been processed by the supplier.`
-  };
-
 
   return (
     <>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="h-8 w-8 p-0">
-            <span className="sr-only">Open menu for PO {po.id}</span>
-            <MoreHorizontal className="h-4 w-4" />
+      <div className="flex items-center justify-end gap-1">
+        <Link href={`/purchase-orders/${po.id}`}>
+          <Button variant="ghost" size="icon" className="h-8 w-8" title="View Details">
+            <Eye className="h-4 w-4" />
+            <span className="sr-only">View Details for {po.id}</span>
           </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem asChild>
-            <Link href={`/purchase-orders/${po.id}`}>
-              <Eye className="mr-2 h-4 w-4" /> View Details
-            </Link>
-          </DropdownMenuItem>
-          {canEdit && (
-            <DropdownMenuItem asChild>
-              <Link href={`/purchase-orders/${po.id}/edit`}> 
-                <Edit className="mr-2 h-4 w-4" /> Edit
-              </Link>
-            </DropdownMenuItem>
-          )}
-           {/* Placeholder for more actions based on status */}
-          {po.status === 'DRAFT' && ( // Example: Submit for approval
-            <DropdownMenuItem 
-              onClick={() => updatePurchaseOrderStatusAction(po.id, 'PENDING_APPROVAL').then(() => toast({title: "PO Submitted"})).catch(e => toast({title: "Error", description: e.message, variant:"destructive"}))}
-              disabled={isPending}
-            >
-              <Send className="mr-2 h-4 w-4" /> Submit for Approval
-            </DropdownMenuItem>
-          )}
-          {po.status === 'PENDING_APPROVAL' && (
-            <DropdownMenuItem 
-              onClick={() => updatePurchaseOrderStatusAction(po.id, 'APPROVED').then(() => toast({title: "PO Approved"})).catch(e => toast({title: "Error", description: e.message, variant:"destructive"}))}
-              disabled={isPending}
-            >
-              <CheckCircle className="mr-2 h-4 w-4" /> Approve PO
-            </DropdownMenuItem>
-          )}
-          {po.status === 'APPROVED' && (
-            <DropdownMenuItem 
-              onClick={() => updatePurchaseOrderStatusAction(po.id, 'ORDERED').then(() => toast({title: "PO Marked as Ordered"})).catch(e => toast({title: "Error", description: e.message, variant:"destructive"}))}
-              disabled={isPending}
-            >
-              <Send className="mr-2 h-4 w-4" /> Mark as Ordered
-            </DropdownMenuItem>
-          )}
-           {po.status === 'ORDERED' && ( // Simplified "Receive"
-            <DropdownMenuItem 
-              onClick={() => updatePurchaseOrderStatusAction(po.id, 'RECEIVED').then(() => toast({title: "PO Marked as Received"})).catch(e => toast({title: "Error", description: e.message, variant:"destructive"}))}
-              disabled={isPending}
-            >
-              <Truck className="mr-2 h-4 w-4" /> Mark as Received
-            </DropdownMenuItem>
-          )}
+        </Link>
 
-          <DropdownMenuSeparator />
-          {canCancel && (
-            <DropdownMenuItem onClick={() => openAlertDialog("cancel")} className="text-orange-600 focus:text-orange-700 focus:bg-orange-50">
-              <FileX2 className="mr-2 h-4 w-4" /> Cancel PO
-            </DropdownMenuItem>
-          )}
-          {canDelete && (
-            <DropdownMenuItem onClick={() => openAlertDialog("delete")} className="text-destructive focus:text-destructive focus:bg-destructive/10">
-              <Trash2 className="mr-2 h-4 w-4" /> Delete PO
-            </DropdownMenuItem>
-          )}
-        </DropdownMenuContent>
-      </DropdownMenu>
+        {canEdit && (
+          <Link href={`/purchase-orders/${po.id}/edit`}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" title="Edit PO">
+              <Edit className="h-4 w-4" />
+              <span className="sr-only">Edit {po.id}</span>
+            </Button>
+          </Link>
+        )}
+
+        {canCancel && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            title="Cancel PO"
+            onClick={() => openConfirmationDialog("cancel")}
+            disabled={isPending || po.status === 'CANCELLED'}
+          >
+            <FileX2 className="h-4 w-4 text-orange-600" />
+            <span className="sr-only">Cancel {po.id}</span>
+          </Button>
+        )}
+        
+        {canDelete && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+            title="Delete PO"
+            onClick={() => openConfirmationDialog("delete")}
+            disabled={isPending}
+          >
+            <Trash2 className="h-4 w-4" />
+            <span className="sr-only">Delete {po.id}</span>
+          </Button>
+        )}
+      </div>
 
       <AlertDialog open={isAlertOpen} onOpenChange={setIsAlertOpen}>
         <AlertDialogContent>
@@ -164,7 +144,7 @@ export function PurchaseOrderRowActions({ po }: PurchaseOrderRowActionsProps) {
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isPending} onClick={() => setIsAlertOpen(false)}>Close</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleAction}
+              onClick={handleMainAction}
               disabled={isPending}
               className={buttonVariants({ variant: alertAction === "delete" ? "destructive" : "outline" })}
             >
