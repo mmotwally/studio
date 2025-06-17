@@ -85,8 +85,7 @@ export async function createPurchaseOrderAction(values: PurchaseOrderFormValues)
 
   revalidatePath('/purchase-orders');
   revalidatePath('/purchase-orders/new');
-  // Consider redirecting to the detail page of the newly created PO later
-  redirect('/purchase-orders'); 
+  redirect(`/purchase-orders/${await getPurchaseOrderById(await generatePurchaseOrderId(await openDb()))?.id || 'purchase-orders'}`); 
 }
 
 export async function getPurchaseOrders(): Promise<PurchaseOrder[]> {
@@ -178,23 +177,19 @@ export async function deletePurchaseOrderAction(poId: string): Promise<{ success
     const db = await openDb();
     await db.run('BEGIN TRANSACTION');
     try {
-        // Check if PO exists and its status allows deletion (e.g., DRAFT or CANCELLED)
         const po = await db.get('SELECT status FROM purchase_orders WHERE id = ?', poId);
         if (!po) {
             await db.run('ROLLBACK');
             return { success: false, message: `Purchase Order ${poId} not found.` };
         }
-        // Add more sophisticated status checks if needed, e.g.
-        // if (po.status !== 'DRAFT' && po.status !== 'CANCELLED') {
-        //    await db.run('ROLLBACK');
-        //    return { success: false, message: `Cannot delete PO ${poId} in status ${po.status}.` };
-        // }
+        // Optional: Add more status checks here if deletion is restricted
+        // e.g., if (po.status !== 'DRAFT' && po.status !== 'CANCELLED') { ... }
 
         await db.run('DELETE FROM purchase_order_items WHERE purchaseOrderId = ?', poId);
         const result = await db.run('DELETE FROM purchase_orders WHERE id = ?', poId);
 
         if (result.changes === 0) {
-            await db.run('ROLLBACK');
+            await db.run('ROLLBACK'); // Should not happen if PO was found earlier
             return { success: false, message: `Failed to delete PO ${poId} or it was already deleted.` };
         }
         await db.run('COMMIT');
@@ -214,17 +209,26 @@ export async function updatePurchaseOrderStatusAction(poId: string, newStatus: P
     const db = await openDb();
     try {
         const lastUpdated = new Date().toISOString();
-        // Add logic here for implications of status change, e.g., stock updates on 'RECEIVED'
+        const po = await db.get('SELECT status FROM purchase_orders WHERE id = ?', poId);
+        if (!po) {
+            return { success: false, message: `Purchase Order ${poId} not found.` };
+        }
+
+        // Add more sophisticated workflow logic/validation here if needed
+        // For example, can't move from RECEIVED back to DRAFT, etc.
+
         await db.run('UPDATE purchase_orders SET status = ?, lastUpdated = ? WHERE id = ?', newStatus, lastUpdated, poId);
         
-        revalidatePath(`/purchase-orders/${poId}`); // If detail page exists
+        revalidatePath(`/purchase-orders/${poId}`);
         revalidatePath("/purchase-orders");
-        return { success: true, message: `Purchase Order "${poId}" status updated to ${newStatus}.` };
+        return { success: true, message: `Purchase Order "${poId}" status updated to ${newStatus.replace(/_/g, ' ').toLowerCase()}.` };
     } catch (error: any) {
         console.error(`Failed to update PO ${poId} status:`, error);
         return { success: false, message: `Failed to update PO status: ${error.message}` };
     }
 }
 
-
-// More actions (update) will be added in subsequent steps.
+// TODO: Implement updatePurchaseOrderAction for editing existing POs
+// This will be similar to createPurchaseOrderAction but will use UPDATE statements
+// and handle item modifications (add, remove, update).
+// It will also require a new page: src/app/(app)/purchase-orders/[poId]/edit/page.tsx

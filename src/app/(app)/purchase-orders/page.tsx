@@ -21,16 +21,16 @@ function getStatusBadgeVariant(status: PurchaseOrderStatus) {
   switch (status) {
     case 'DRAFT':
     case 'PENDING_APPROVAL':
-      return 'default'; // Yellowish/Orange
+      return 'default'; 
     case 'APPROVED':
     case 'ORDERED':
-      return 'secondary'; // Blueish
+      return 'secondary'; 
     case 'PARTIALLY_RECEIVED':
-      return 'default'; // Purplish
+      return 'default'; 
     case 'RECEIVED':
-      return 'outline'; // Greenish
+      return 'outline'; 
     case 'CANCELLED':
-      return 'destructive'; // Reddish
+      return 'destructive'; 
     default:
       return 'default';
   }

@@ -34,8 +34,8 @@ export function PurchaseOrderRowActions({ po }: PurchaseOrderRowActionsProps) {
 
   const canEdit = po.status === 'DRAFT' || po.status === 'PENDING_APPROVAL';
   const canCancel = !['RECEIVED', 'CANCELLED'].includes(po.status);
-  const canDelete = po.status === 'DRAFT' || po.status === 'CANCELLED';
-  // Add more specific conditions for other actions later
+  // Allow deleting DRAFT or CANCELLED POs. Consider implications for PENDING_APPROVAL etc.
+  const canDelete = po.status === 'DRAFT' || po.status === 'CANCELLED'; 
 
   const handleAction = async () => {
     if (!alertAction) return;
@@ -57,7 +57,7 @@ export function PurchaseOrderRowActions({ po }: PurchaseOrderRowActionsProps) {
             throw new Error(result.message);
           }
         }
-        router.refresh(); // Re-fetch data on the current page
+        // Revalidation is handled by server actions, no need for router.refresh() here if actions use revalidatePath
       } catch (error) {
         console.error(`Failed to ${alertAction} PO:`, error);
         toast({
@@ -80,8 +80,8 @@ export function PurchaseOrderRowActions({ po }: PurchaseOrderRowActionsProps) {
   const alertContent = {
     title: alertAction === "delete" ? "Delete Purchase Order?" : "Cancel Purchase Order?",
     description: alertAction === "delete" 
-      ? `Are you sure you want to permanently delete PO ${po.id}? This action cannot be undone.`
-      : `Are you sure you want to cancel PO ${po.id}? This may have implications if it's already been sent to the supplier.`
+      ? `Are you sure you want to permanently delete PO ${po.id} and all its items? This action cannot be undone.`
+      : `Are you sure you want to cancel PO ${po.id}? This may have implications if it's already been processed by the supplier.`
   };
 
 
@@ -90,37 +90,54 @@ export function PurchaseOrderRowActions({ po }: PurchaseOrderRowActionsProps) {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="ghost" className="h-8 w-8 p-0">
-            <span className="sr-only">Open menu</span>
+            <span className="sr-only">Open menu for PO {po.id}</span>
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem asChild>
-            <Link href={`/purchase-orders/${po.id}`}> {/* Detail page (to be created) */}
+            <Link href={`/purchase-orders/${po.id}`}>
               <Eye className="mr-2 h-4 w-4" /> View Details
             </Link>
           </DropdownMenuItem>
           {canEdit && (
             <DropdownMenuItem asChild>
-              <Link href={`/purchase-orders/${po.id}/edit`}> {/* Edit page (to be created) */}
+              <Link href={`/purchase-orders/${po.id}/edit`}> 
                 <Edit className="mr-2 h-4 w-4" /> Edit
               </Link>
             </DropdownMenuItem>
           )}
            {/* Placeholder for more actions based on status */}
+          {po.status === 'DRAFT' && ( // Example: Submit for approval
+            <DropdownMenuItem 
+              onClick={() => updatePurchaseOrderStatusAction(po.id, 'PENDING_APPROVAL').then(() => toast({title: "PO Submitted"})).catch(e => toast({title: "Error", description: e.message, variant:"destructive"}))}
+              disabled={isPending}
+            >
+              <Send className="mr-2 h-4 w-4" /> Submit for Approval
+            </DropdownMenuItem>
+          )}
           {po.status === 'PENDING_APPROVAL' && (
-            <DropdownMenuItem disabled>
+            <DropdownMenuItem 
+              onClick={() => updatePurchaseOrderStatusAction(po.id, 'APPROVED').then(() => toast({title: "PO Approved"})).catch(e => toast({title: "Error", description: e.message, variant:"destructive"}))}
+              disabled={isPending}
+            >
               <CheckCircle className="mr-2 h-4 w-4" /> Approve PO
             </DropdownMenuItem>
           )}
           {po.status === 'APPROVED' && (
-            <DropdownMenuItem disabled>
+            <DropdownMenuItem 
+              onClick={() => updatePurchaseOrderStatusAction(po.id, 'ORDERED').then(() => toast({title: "PO Marked as Ordered"})).catch(e => toast({title: "Error", description: e.message, variant:"destructive"}))}
+              disabled={isPending}
+            >
               <Send className="mr-2 h-4 w-4" /> Mark as Ordered
             </DropdownMenuItem>
           )}
-           {po.status === 'ORDERED' && (
-            <DropdownMenuItem disabled>
-              <Truck className="mr-2 h-4 w-4" /> Receive Stock
+           {po.status === 'ORDERED' && ( // Simplified "Receive"
+            <DropdownMenuItem 
+              onClick={() => updatePurchaseOrderStatusAction(po.id, 'RECEIVED').then(() => toast({title: "PO Marked as Received"})).catch(e => toast({title: "Error", description: e.message, variant:"destructive"}))}
+              disabled={isPending}
+            >
+              <Truck className="mr-2 h-4 w-4" /> Mark as Received
             </DropdownMenuItem>
           )}
 
@@ -145,7 +162,7 @@ export function PurchaseOrderRowActions({ po }: PurchaseOrderRowActionsProps) {
             <AlertDialogDescription>{alertContent.description}</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isPending}>Close</AlertDialogCancel>
+            <AlertDialogCancel disabled={isPending} onClick={() => setIsAlertOpen(false)}>Close</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleAction}
               disabled={isPending}

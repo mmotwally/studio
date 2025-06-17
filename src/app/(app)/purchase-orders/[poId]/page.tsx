@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation'; 
-import { ArrowLeft, Edit, MoreVertical, Printer, FileX2, ShoppingCart, Truck, UserCircle, CalendarDays, FileTextIcon, Sigma, Banknote, Tag } from 'lucide-react';
+import { ArrowLeft, Edit, MoreVertical, Printer, FileX2, ShoppingCart, Truck, UserCircle, CalendarDays, FileTextIcon, Sigma, Banknote, Tag, CheckCircle, Send } from 'lucide-react';
 import { getPurchaseOrderById, updatePurchaseOrderStatusAction } from '../actions'; 
 import type { PurchaseOrder, PurchaseOrderStatus, PurchaseOrderItem } from '@/types';
 import { Badge } from '@/components/ui/badge';
@@ -15,7 +15,7 @@ import { format } from 'date-fns';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
-// import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'; // For more actions
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 interface PurchaseOrderDetailPageProps {
   params: Promise<{ 
@@ -63,6 +63,8 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
   const [error, setError] = React.useState<string | null>(null);
   const { toast } = useToast();
   const router = useRouter();
+  const [isPending, startTransition] = React.useTransition();
+
 
   const fetchPurchaseOrder = React.useCallback(async () => {
     setIsLoading(true);
@@ -87,16 +89,17 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
     }
   }, [poId, fetchPurchaseOrder]);
 
-  // Placeholder for status update - will be fleshed out with workflows
   const handleStatusUpdate = async (newStatus: PurchaseOrderStatus) => {
     if (!purchaseOrder) return;
-    try {
-      // await updatePurchaseOrderStatusAction(purchaseOrder.id, newStatus);
-      toast({ title: "Status Updated", description: `PO status changed to ${newStatus.replace(/_/g, ' ').toLowerCase()}.` });
-      fetchPurchaseOrder(); 
-    } catch (err) {
-      toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
-    }
+    startTransition(async () => {
+        try {
+        await updatePurchaseOrderStatusAction(purchaseOrder.id, newStatus);
+        toast({ title: "Status Updated", description: `PO status changed to ${newStatus.replace(/_/g, ' ').toLowerCase()}.` });
+        fetchPurchaseOrder(); 
+        } catch (err) {
+        toast({ title: "Error", description: (err as Error).message, variant: "destructive" });
+        }
+    });
   };
 
   if (isLoading) {
@@ -150,6 +153,7 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
   }
   
   const canEdit = purchaseOrder.status === 'DRAFT' || purchaseOrder.status === 'PENDING_APPROVAL';
+  const canCancel = !['RECEIVED', 'CANCELLED'].includes(purchaseOrder.status);
 
   return (
     <>
@@ -165,7 +169,7 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
                 </Link>
               </Button>
             )}
-            {/* <DropdownMenu>
+            <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="icon">
                   <MoreVertical className="h-4 w-4" />
@@ -176,13 +180,13 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
                 <DropdownMenuItem disabled>
                   <Printer className="mr-2 h-4 w-4" /> Print PO
                 </DropdownMenuItem>
-                {purchaseOrder.status !== 'CANCELLED' && purchaseOrder.status !== 'RECEIVED' && (
+                 {canCancel && (
                    <DropdownMenuItem onClick={() => handleStatusUpdate('CANCELLED')} className="text-orange-600 focus:text-orange-700">
                     <FileX2 className="mr-2 h-4 w-4" /> Cancel PO
                   </DropdownMenuItem>
                 )}
               </DropdownMenuContent>
-            </DropdownMenu> */}
+            </DropdownMenu>
             <Button variant="outline" asChild>
               <Link href="/purchase-orders"><ArrowLeft className="mr-2 h-4 w-4" /> Back to Purchase Orders</Link>
             </Button>
@@ -233,19 +237,43 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
             )}
           </Card>
 
-          {/* Placeholder for future workflow actions card */}
           <Card className="shadow-lg">
             <CardHeader>
                 <CardTitle>Workflow Actions</CardTitle>
                 <CardDescription>Manage the status and progression of this PO.</CardDescription>
             </CardHeader>
-            <CardContent>
-                 <p className="text-muted-foreground">PO workflow actions will be available here based on status (e.g., Mark as Ordered, Receive Stock).</p>
-                 {/* Example:
-                 {purchaseOrder.status === 'APPROVED' && (
-                    <Button onClick={() => handleStatusUpdate('ORDERED')}>Mark as Ordered</Button>
+            <CardContent className="flex flex-wrap gap-2">
+                 {purchaseOrder.status === 'DRAFT' && (
+                    <Button onClick={() => handleStatusUpdate('PENDING_APPROVAL')} disabled={isPending}>
+                        <Send className="mr-2 h-4 w-4" /> Submit for Approval
+                    </Button>
                  )}
-                 */}
+                 {purchaseOrder.status === 'PENDING_APPROVAL' && (
+                    <>
+                        <Button onClick={() => handleStatusUpdate('APPROVED')} variant="default" disabled={isPending}>
+                            <CheckCircle className="mr-2 h-4 w-4" /> Approve PO
+                        </Button>
+                        <Button onClick={() => handleStatusUpdate('CANCELLED')} variant="destructive" disabled={isPending}>
+                            <FileX2 className="mr-2 h-4 w-4" /> Reject / Cancel PO
+                        </Button>
+                    </>
+                 )}
+                  {purchaseOrder.status === 'APPROVED' && (
+                    <Button onClick={() => handleStatusUpdate('ORDERED')} disabled={isPending}>
+                        <Send className="mr-2 h-4 w-4" /> Mark as Ordered
+                    </Button>
+                 )}
+                 {purchaseOrder.status === 'ORDERED' && ( // This will eventually open a "Receive Stock" dialog
+                    <Button onClick={() => handleStatusUpdate('RECEIVED')} disabled={isPending}> 
+                        <Truck className="mr-2 h-4 w-4" /> Mark as Received (Full)
+                    </Button>
+                 )}
+                 {purchaseOrder.status === 'RECEIVED' && (
+                     <p className="text-green-600">This PO has been fully received.</p>
+                 )}
+                 {purchaseOrder.status === 'CANCELLED' && (
+                     <p className="text-red-600">This PO has been cancelled.</p>
+                 )}
             </CardContent>
           </Card>
 
