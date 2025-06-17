@@ -25,8 +25,8 @@ const SEED_UNIT_LITER_ID  = 'u0a1b2c3-0007-4000-8000-000000000007';
 const SEED_UNIT_KG_ID     = 'u0a1b2c3-0008-4000-8000-000000000008';
 const SEED_UNIT_BOX_ID    = 'u0a1b2c3-0009-4000-8000-000000000009';
 const SEED_UNIT_ROLL_ID   = 'u0a1b2c3-0010-4000-8000-000000000010';
-const SEED_UNIT_ML_ID     = 'u0a1b2c3-0011-4000-8000-000000000011'; // Derived from Liter
-const SEED_UNIT_GRAM_ID   = 'u0a1b2c3-0012-4000-8000-000000000012'; // Derived from Kg
+const SEED_UNIT_ML_ID     = 'u0a1b2c3-0011-4000-8000-000000000011';
+const SEED_UNIT_GRAM_ID   = 'u0a1b2c3-0012-4000-8000-000000000012';
 
 const SEED_CAT_WOOD_PANELS_ID   = 'c0a1b2c3-0001-4000-8000-000000000001';
 const SEED_CAT_EDGE_BANDING_ID  = 'c0a1b2c3-0002-4000-8000-000000000002';
@@ -36,9 +36,45 @@ const SEED_CAT_FINISHES_ID      = 'c0a1b2c3-0005-4000-8000-000000000005';
 const SEED_CAT_ACCESSORIES_ID   = 'c0a1b2c3-0006-4000-8000-000000000006';
 const SEED_CAT_ADHESIVES_ID     = 'c0a1b2c3-0007-4000-8000-000000000007';
 
-// For sub-categories, locations, suppliers, their IDs can still be dynamic if not directly referenced by other seed data's FKs.
-// However, if inventory items were to reference specific supplier IDs, those supplier IDs would also need to be constant.
-// For now, inventory refers to supplierId by a dynamic UUID.
+// Constant UUIDs for Sub-Categories used in seeded inventory
+const SEED_SUB_CAT_PLYWOOD_ID       = 'sc01-0001-4000-8000-plywood';
+const SEED_SUB_CAT_MDF_ID           = 'sc01-0002-4000-8000-mdf';
+const SEED_SUB_CAT_PARTICLE_ID    = 'sc01-0003-4000-8000-particle';
+const SEED_SUB_CAT_VENEER_SHT_ID    = 'sc01-0004-4000-8000-veneersh';
+const SEED_SUB_CAT_PVC_EDGE_ID      = 'sc02-0001-4000-8000-pvcedge';
+const SEED_SUB_CAT_WOODVEN_EDGE_ID  = 'sc02-0002-4000-8000-woodvenedge';
+const SEED_SUB_CAT_HINGES_ID        = 'sc03-0001-4000-8000-hinges';
+const SEED_SUB_CAT_DRAWERSLIDES_ID  = 'sc03-0002-4000-8000-drawerslides';
+const SEED_SUB_CAT_HANDLES_ID       = 'sc03-0003-4000-8000-handles';
+const SEED_SUB_CAT_SHELFSUP_ID    = 'sc03-0004-4000-8000-shelfsupports';
+const SEED_SUB_CAT_LEGS_ID          = 'sc03-0005-4000-8000-legs';
+const SEED_SUB_CAT_SCREWS_ID        = 'sc04-0001-4000-8000-screws';
+const SEED_SUB_CAT_NAILS_ID         = 'sc04-0002-4000-8000-nails';
+const SEED_SUB_CAT_DOWELS_ID        = 'sc04-0003-4000-8000-dowels';
+const SEED_SUB_CAT_CAMLOCKS_ID      = 'sc04-0004-4000-8000-camlocks';
+const SEED_SUB_CAT_PAINT_ID         = 'sc05-0001-4000-8000-paint';
+const SEED_SUB_CAT_VARNISH_ID       = 'sc05-0002-4000-8000-varnish';
+const SEED_SUB_CAT_STAIN_ID         = 'sc05-0003-4000-8000-stain';
+const SEED_SUB_CAT_PRIMER_ID        = 'sc05-0004-4000-8000-primer';
+const SEED_SUB_CAT_DRAWERORG_ID     = 'sc06-0001-4000-8000-drawerorg';
+const SEED_SUB_CAT_LAZYSUSAN_ID     = 'sc06-0002-4000-8000-lazysusan';
+const SEED_SUB_CAT_LED_ID           = 'sc06-0003-4000-8000-led';
+const SEED_SUB_CAT_WOODGLUE_ID      = 'sc07-0001-4000-8000-woodglue';
+const SEED_SUB_CAT_SILICONE_ID      = 'sc07-0002-4000-8000-silicone';
+
+
+// Constant UUIDs for Locations used in seeded inventory
+const SEED_LOC_MAIN_WH_A1S1_ID      = 'loc01-0001-4000-8000-mainwh_a1s1';
+const SEED_LOC_WORKSHOP_B2_ID       = 'loc01-0002-4000-8000-workshop_b2';
+const SEED_LOC_SHOWROOM_BACK_ID   = 'loc01-0003-4000-8000-showroomback';
+const SEED_LOC_CUTTING_RACKC_ID   = 'loc01-0004-4000-8000-cutting_c';
+
+// Constant UUIDs for Suppliers used in seeded inventory
+const SEED_SUP_PANELPRO_ID          = 'sup01-0001-4000-8000-panelpro';
+const SEED_SUP_HARDWAREHUB_ID       = 'sup01-0002-4000-8000-hardwarehub';
+const SEED_SUP_FINISHINGTOUCH_ID    = 'sup01-0003-4000-8000-finishingtouch';
+const SEED_SUP_LOCALTIMBER_ID       = 'sup01-0004-4000-8000-localtimber';
+
 
 async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.Statement>) {
   await dbConnection.exec(`
@@ -262,144 +298,117 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Categories seeded.');
 
-  // Sub-Categories (Using dynamic UUIDs for these as they are less likely to be FK targets from UI state directly after load)
-  const subCatPlywoodId = crypto.randomUUID();
-  const subCatMdfId = crypto.randomUUID();
-  const subCatParticleBoardId = crypto.randomUUID();
-  const subCatVeneerSheetsId = crypto.randomUUID();
-  const subCatPvcEdgeId = crypto.randomUUID();
-  const subCatWoodVeneerEdgeId = crypto.randomUUID();
-  const subCatHingesId = crypto.randomUUID();
-  const subCatDrawerSlidesId = crypto.randomUUID();
-  const subCatHandlesId = crypto.randomUUID();
-  const subCatShelfSupportsId = crypto.randomUUID();
-  const subCatCabinetLegsId = crypto.randomUUID();
-  const subCatScrewsId = crypto.randomUUID();
-  const subCatNailsBradsId = crypto.randomUUID();
-  const subCatDowelsId = crypto.randomUUID();
-  const subCatCamLocksId = crypto.randomUUID();
-  const subCatPaintId = crypto.randomUUID();
-  const subCatVarnishId = crypto.randomUUID();
-  const subCatWoodStainId = crypto.randomUUID();
-  const subCatPrimerId = crypto.randomUUID();
-  const subCatDrawerOrgId = crypto.randomUUID();
-  const subCatLazySusanId = crypto.randomUUID();
-  const subCatLedStripId = crypto.randomUUID();
-  const subCatWoodGlueId = crypto.randomUUID();
-  const subCatSiliconeId = crypto.randomUUID();
-
-
+  // Sub-Categories
   const subCategoriesData = [
-    { id: subCatPlywoodId, name: 'Plywood', categoryId: SEED_CAT_WOOD_PANELS_ID, code: 'PLY' },
-    { id: subCatMdfId, name: 'MDF', categoryId: SEED_CAT_WOOD_PANELS_ID, code: 'MDF' },
-    { id: subCatParticleBoardId, name: 'Particle Board', categoryId: SEED_CAT_WOOD_PANELS_ID, code: 'PB' },
-    { id: subCatVeneerSheetsId, name: 'Veneer Sheets', categoryId: SEED_CAT_WOOD_PANELS_ID, code: 'VEN' },
-    { id: subCatPvcEdgeId, name: 'PVC Edge Banding', categoryId: SEED_CAT_EDGE_BANDING_ID, code: 'PVC' },
-    { id: subCatWoodVeneerEdgeId, name: 'Wood Veneer Edge Banding', categoryId: SEED_CAT_EDGE_BANDING_ID, code: 'WVE' },
-    { id: subCatHingesId, name: 'Hinges', categoryId: SEED_CAT_HARDWARE_ID, code: 'HNG' },
-    { id: subCatDrawerSlidesId, name: 'Drawer Slides', categoryId: SEED_CAT_HARDWARE_ID, code: 'DRS' },
-    { id: subCatHandlesId, name: 'Handles & Knobs', categoryId: SEED_CAT_HARDWARE_ID, code: 'HND' },
-    { id: subCatShelfSupportsId, name: 'Shelf Supports', categoryId: SEED_CAT_HARDWARE_ID, code: 'SHS' },
-    { id: subCatCabinetLegsId, name: 'Cabinet Legs', categoryId: SEED_CAT_HARDWARE_ID, code: 'LEG' },
-    { id: subCatScrewsId, name: 'Screws', categoryId: SEED_CAT_FASTENERS_ID, code: 'SCR' },
-    { id: subCatNailsBradsId, name: 'Nails & Brads', categoryId: SEED_CAT_FASTENERS_ID, code: 'NLB' },
-    { id: subCatDowelsId, name: 'Dowels', categoryId: SEED_CAT_FASTENERS_ID, code: 'DWL' },
-    { id: subCatCamLocksId, name: 'Cam Locks & Fittings', categoryId: SEED_CAT_FASTENERS_ID, code: 'CMF' },
-    { id: subCatPaintId, name: 'Paint', categoryId: SEED_CAT_FINISHES_ID, code: 'PNT' },
-    { id: subCatVarnishId, name: 'Varnish / Lacquer', categoryId: SEED_CAT_FINISHES_ID, code: 'VAR' },
-    { id: subCatWoodStainId, name: 'Wood Stain', categoryId: SEED_CAT_FINISHES_ID, code: 'STN' },
-    { id: subCatPrimerId, name: 'Primer', categoryId: SEED_CAT_FINISHES_ID, code: 'PRM' },
-    { id: subCatDrawerOrgId, name: 'Drawer Organizers', categoryId: SEED_CAT_ACCESSORIES_ID, code: 'DOR' },
-    { id: subCatLazySusanId, name: 'Lazy Susans', categoryId: SEED_CAT_ACCESSORIES_ID, code: 'LSN' },
-    { id: subCatLedStripId, name: 'LED Lighting Strips', categoryId: SEED_CAT_ACCESSORIES_ID, code: 'LED' },
-    { id: subCatWoodGlueId, name: 'Wood Glue', categoryId: SEED_CAT_ADHESIVES_ID, code: 'WGL' },
-    { id: subCatSiliconeId, name: 'Silicone Sealant', categoryId: SEED_CAT_ADHESIVES_ID, code: 'SIL' },
+    { id: SEED_SUB_CAT_PLYWOOD_ID, name: 'Plywood', categoryId: SEED_CAT_WOOD_PANELS_ID, code: 'PLY' },
+    { id: SEED_SUB_CAT_MDF_ID, name: 'MDF', categoryId: SEED_CAT_WOOD_PANELS_ID, code: 'MDF' },
+    { id: SEED_SUB_CAT_PARTICLE_ID, name: 'Particle Board', categoryId: SEED_CAT_WOOD_PANELS_ID, code: 'PB' },
+    { id: SEED_SUB_CAT_VENEER_SHT_ID, name: 'Veneer Sheets', categoryId: SEED_CAT_WOOD_PANELS_ID, code: 'VEN' },
+    { id: SEED_SUB_CAT_PVC_EDGE_ID, name: 'PVC Edge Banding', categoryId: SEED_CAT_EDGE_BANDING_ID, code: 'PVC' },
+    { id: SEED_SUB_CAT_WOODVEN_EDGE_ID, name: 'Wood Veneer Edge Banding', categoryId: SEED_CAT_EDGE_BANDING_ID, code: 'WVE' },
+    { id: SEED_SUB_CAT_HINGES_ID, name: 'Hinges', categoryId: SEED_CAT_HARDWARE_ID, code: 'HNG' },
+    { id: SEED_SUB_CAT_DRAWERSLIDES_ID, name: 'Drawer Slides', categoryId: SEED_CAT_HARDWARE_ID, code: 'DRS' },
+    { id: SEED_SUB_CAT_HANDLES_ID, name: 'Handles & Knobs', categoryId: SEED_CAT_HARDWARE_ID, code: 'HND' },
+    { id: SEED_SUB_CAT_SHELFSUP_ID, name: 'Shelf Supports', categoryId: SEED_CAT_HARDWARE_ID, code: 'SHS' },
+    { id: SEED_SUB_CAT_LEGS_ID, name: 'Cabinet Legs', categoryId: SEED_CAT_HARDWARE_ID, code: 'LEG' },
+    { id: SEED_SUB_CAT_SCREWS_ID, name: 'Screws', categoryId: SEED_CAT_FASTENERS_ID, code: 'SCR' },
+    { id: SEED_SUB_CAT_NAILS_ID, name: 'Nails & Brads', categoryId: SEED_CAT_FASTENERS_ID, code: 'NLB' },
+    { id: SEED_SUB_CAT_DOWELS_ID, name: 'Dowels', categoryId: SEED_CAT_FASTENERS_ID, code: 'DWL' },
+    { id: SEED_SUB_CAT_CAMLOCKS_ID, name: 'Cam Locks & Fittings', categoryId: SEED_CAT_FASTENERS_ID, code: 'CMF' },
+    { id: SEED_SUB_CAT_PAINT_ID, name: 'Paint', categoryId: SEED_CAT_FINISHES_ID, code: 'PNT' },
+    { id: SEED_SUB_CAT_VARNISH_ID, name: 'Varnish / Lacquer', categoryId: SEED_CAT_FINISHES_ID, code: 'VAR' },
+    { id: SEED_SUB_CAT_STAIN_ID, name: 'Wood Stain', categoryId: SEED_CAT_FINISHES_ID, code: 'STN' },
+    { id: SEED_SUB_CAT_PRIMER_ID, name: 'Primer', categoryId: SEED_CAT_FINISHES_ID, code: 'PRM' },
+    { id: SEED_SUB_CAT_DRAWERORG_ID, name: 'Drawer Organizers', categoryId: SEED_CAT_ACCESSORIES_ID, code: 'DOR' },
+    { id: SEED_SUB_CAT_LAZYSUSAN_ID, name: 'Lazy Susans', categoryId: SEED_CAT_ACCESSORIES_ID, code: 'LSN' },
+    { id: SEED_SUB_CAT_LED_ID, name: 'LED Lighting Strips', categoryId: SEED_CAT_ACCESSORIES_ID, code: 'LED' },
+    { id: SEED_SUB_CAT_WOODGLUE_ID, name: 'Wood Glue', categoryId: SEED_CAT_ADHESIVES_ID, code: 'WGL' },
+    { id: SEED_SUB_CAT_SILICONE_ID, name: 'Silicone Sealant', categoryId: SEED_CAT_ADHESIVES_ID, code: 'SIL' },
   ];
-  // Clear existing sub-categories before seeding to prevent conflicts if codes change for same name/category.
-  await db.run('DELETE FROM sub_categories');
+  
   for (const subCat of subCategoriesData) {
     try {
       await db.run(
-        'INSERT INTO sub_categories (id, name, categoryId, code) VALUES (?, ?, ?, ?)',
+        'INSERT INTO sub_categories (id, name, categoryId, code) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, categoryId=excluded.categoryId, code=excluded.code',
         subCat.id, subCat.name, subCat.categoryId, subCat.code
       );
     } catch (e) {
-      console.warn(`Could not insert sub-category ${subCat.name} for category ID ${subCat.categoryId}: ${(e as Error).message}`);
+      console.warn(`Could not insert/update sub-category ${subCat.name} for category ID ${subCat.categoryId}: ${(e as Error).message}`);
     }
   }
   console.log('Sub-Categories seeded.');
 
-  // Locations (Dynamic UUIDs)
-  const locMainWarehouseA1S1Id = crypto.randomUUID();
-  const locWorkshopStorageB2Id = crypto.randomUUID();
-  const locShowroomBackstockId = crypto.randomUUID();
-  const locCuttingDeptRackCId = crypto.randomUUID();
-
+  // Locations
   const locationsData = [
-    { id: locMainWarehouseA1S1Id, store: 'Main Warehouse', rack: 'A1', shelf: 'S1' },
-    { id: locWorkshopStorageB2Id, store: 'Workshop Storage', rack: 'B2', shelf: null },
-    { id: locShowroomBackstockId, store: 'Showroom Backstock', rack: null, shelf: null },
-    { id: locCuttingDeptRackCId, store: 'Cutting Department', rack: 'C', shelf: 'Bin 3' },
+    { id: SEED_LOC_MAIN_WH_A1S1_ID, store: 'Main Warehouse', rack: 'A1', shelf: 'S1' },
+    { id: SEED_LOC_WORKSHOP_B2_ID, store: 'Workshop Storage', rack: 'B2', shelf: null },
+    { id: SEED_LOC_SHOWROOM_BACK_ID, store: 'Showroom Backstock', rack: null, shelf: null },
+    { id: SEED_LOC_CUTTING_RACKC_ID, store: 'Cutting Department', rack: 'C', shelf: 'Bin 3' },
   ];
-  await db.run('DELETE FROM locations');
+  
   for (const loc of locationsData) {
     try {
       await db.run(
-        'INSERT INTO locations (id, store, rack, shelf) VALUES (?, ?, ?, ?)',
+        'INSERT INTO locations (id, store, rack, shelf) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET store=excluded.store, rack=excluded.rack, shelf=excluded.shelf',
         loc.id, loc.store, loc.rack, loc.shelf
       );
     } catch (e) {
-      console.warn(`Could not insert location ${loc.store} - ${loc.rack} - ${loc.shelf}: ${(e as Error).message}`);
+      console.warn(`Could not insert/update location ${loc.store} - ${loc.rack} - ${loc.shelf}: ${(e as Error).message}`);
     }
   }
   console.log('Locations seeded.');
 
-  // Suppliers (Dynamic UUIDs)
-  const supPanelProId = crypto.randomUUID();
-  const supHardwareHubId = crypto.randomUUID();
-  const supFinishingTouchesId = crypto.randomUUID();
-  const supLocalTimberId = crypto.randomUUID();
-
+  // Suppliers
   const suppliersData = [
-    { id: supPanelProId, name: 'PanelPro Supplies', contactPerson: 'John Doe', contactMail: 'john@panelpro.com', contactPhone: '555-1234', address: '123 Panel St, Suite A, Panel City' },
-    { id: supHardwareHubId, name: 'Hardware Hub Inc.', contactPerson: 'Jane Smith', contactMail: 'jane@hardwarehub.com', contactPhone: '555-5678', address: '456 Hinge Ave, Hardware Town' },
-    { id: supFinishingTouchesId, name: 'Finishing Touches Co.', contactPerson: 'Sam Lee', contactMail: 'sales@finishing.co', contactPhone: '555-9012', address: '789 Varnish Rd, Paintville' },
-    { id: supLocalTimberId, name: 'Local Timber Yard', contactPerson: null, contactMail: 'info@localtimber.com', contactPhone: '555-3456', address: '1 Forest Way, Timber Town' },
+    { id: SEED_SUP_PANELPRO_ID, name: 'PanelPro Supplies', contactPerson: 'John Doe', contactMail: 'john@panelpro.com', contactPhone: '555-1234', address: '123 Panel St, Suite A, Panel City' },
+    { id: SEED_SUP_HARDWAREHUB_ID, name: 'Hardware Hub Inc.', contactPerson: 'Jane Smith', contactMail: 'jane@hardwarehub.com', contactPhone: '555-5678', address: '456 Hinge Ave, Hardware Town' },
+    { id: SEED_SUP_FINISHINGTOUCH_ID, name: 'Finishing Touches Co.', contactPerson: 'Sam Lee', contactMail: 'sales@finishing.co', contactPhone: '555-9012', address: '789 Varnish Rd, Paintville' },
+    { id: SEED_SUP_LOCALTIMBER_ID, name: 'Local Timber Yard', contactPerson: null, contactMail: 'info@localtimber.com', contactPhone: '555-3456', address: '1 Forest Way, Timber Town' },
   ];
-  await db.run('DELETE FROM suppliers');
+  
   for (const sup of suppliersData) {
     try {
       await db.run(
-        'INSERT INTO suppliers (id, name, contactPerson, contactMail, contactPhone, address) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO suppliers (id, name, contactPerson, contactMail, contactPhone, address) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET name=excluded.name, contactPerson=excluded.contactPerson, contactMail=excluded.contactMail, contactPhone=excluded.contactPhone, address=excluded.address',
         sup.id, sup.name, sup.contactPerson, sup.contactMail, sup.contactPhone, sup.address
       );
     } catch (e) {
-      console.warn(`Could not insert supplier ${sup.name}: ${(e as Error).message}`);
+      console.warn(`Could not insert/update supplier ${sup.name}: ${(e as Error).message}`);
     }
   }
   console.log('Suppliers seeded.');
 
-  // Inventory Items (Uses constant string IDs for items, but dynamic UUIDs for FKs to locations/suppliers)
+  // Inventory Items
   const inventoryItemsData = [
     {
       id: 'WP-PLY-001', name: '18mm Birch Plywood (2440x1220mm)', description: 'High-quality birch plywood for structural and aesthetic applications.', imageUrl: 'https://placehold.co/300x200.png?text=Plywood',
       quantity: 50, unitCost: 45.50, lowStock: 0, minStockLevel: 10, maxStockLevel: 100,
-      categoryId: SEED_CAT_WOOD_PANELS_ID, subCategoryId: subCatPlywoodId, locationId: locMainWarehouseA1S1Id, supplierId: supPanelProId, unitId: SEED_UNIT_SHEET_ID,
+      categoryId: SEED_CAT_WOOD_PANELS_ID, subCategoryId: SEED_SUB_CAT_PLYWOOD_ID, locationId: SEED_LOC_MAIN_WH_A1S1_ID, supplierId: SEED_SUP_PANELPRO_ID, unitId: SEED_UNIT_SHEET_ID,
     },
     {
       id: 'WP-MDF-001', name: 'Standard MDF Sheet (2440x1220x18mm)', description: 'Medium-density fiberboard, ideal for paint-grade cabinet doors and panels.', imageUrl: 'https://placehold.co/300x200.png?text=MDF',
       quantity: 75, unitCost: 28.00, lowStock: 0, minStockLevel: 20, maxStockLevel: 150,
-      categoryId: SEED_CAT_WOOD_PANELS_ID, subCategoryId: subCatMdfId, locationId: locMainWarehouseA1S1Id, supplierId: supPanelProId, unitId: SEED_UNIT_SHEET_ID,
+      categoryId: SEED_CAT_WOOD_PANELS_ID, subCategoryId: SEED_SUB_CAT_MDF_ID, locationId: SEED_LOC_MAIN_WH_A1S1_ID, supplierId: SEED_SUP_PANELPRO_ID, unitId: SEED_UNIT_SHEET_ID,
     },
     {
       id: 'EB-PVC-001', name: 'White PVC Edge Banding (22mm x 0.45mm)', description: 'Durable PVC edge banding for finishing MDF and particle board edges.', imageUrl: 'https://placehold.co/300x200.png?text=Edge+Band',
       quantity: 5, unitCost: 15.00, lowStock: 1, minStockLevel: 2, maxStockLevel: 10,
-      categoryId: SEED_CAT_EDGE_BANDING_ID, subCategoryId: subCatPvcEdgeId, locationId: locWorkshopStorageB2Id, supplierId: supFinishingTouchesId, unitId: SEED_UNIT_ROLL_ID,
+      categoryId: SEED_CAT_EDGE_BANDING_ID, subCategoryId: SEED_SUB_CAT_PVC_EDGE_ID, locationId: SEED_LOC_WORKSHOP_B2_ID, supplierId: SEED_SUP_FINISHINGTOUCH_ID, unitId: SEED_UNIT_ROLL_ID,
     },
     {
       id: 'HW-HNG-001', name: 'Soft-Close Cabinet Hinges (Full Overlay)', description: 'European style soft-close hinges for a quiet and smooth cabinet door operation.', imageUrl: 'https://placehold.co/300x200.png?text=Hinges',
       quantity: 200, unitCost: 1.80, lowStock: 0, minStockLevel: 50, maxStockLevel: 300,
-      categoryId: SEED_CAT_HARDWARE_ID, subCategoryId: subCatHingesId, locationId: locWorkshopStorageB2Id, supplierId: supHardwareHubId, unitId: SEED_UNIT_PAIR_ID,
+      categoryId: SEED_CAT_HARDWARE_ID, subCategoryId: SEED_SUB_CAT_HINGES_ID, locationId: SEED_LOC_WORKSHOP_B2_ID, supplierId: SEED_SUP_HARDWAREHUB_ID, unitId: SEED_UNIT_PAIR_ID,
+    },
+     {
+      id: 'FS-SCR-001', name: 'Wood Screws 4x30mm (Box of 200)', description: 'General purpose countersunk wood screws.', imageUrl: 'https://placehold.co/300x200.png?text=Screws',
+      quantity: 30, unitCost: 4.50, lowStock: 0, minStockLevel: 5, maxStockLevel: 50,
+      categoryId: SEED_CAT_FASTENERS_ID, subCategoryId: SEED_SUB_CAT_SCREWS_ID, locationId: SEED_LOC_WORKSHOP_B2_ID, supplierId: SEED_SUP_HARDWAREHUB_ID, unitId: SEED_UNIT_BOX_ID,
+    },
+    {
+      id: 'FN-PNT-001', name: 'White Acrylic Paint (1 Liter)', description: 'Water-based white acrylic paint for furniture.', imageUrl: 'https://placehold.co/300x200.png?text=Paint',
+      quantity: 10, unitCost: 12.75, lowStock: 0, minStockLevel: 3, maxStockLevel: 20,
+      categoryId: SEED_CAT_FINISHES_ID, subCategoryId: SEED_SUB_CAT_PAINT_ID, locationId: SEED_LOC_SHOWROOM_BACK_ID, supplierId: SEED_SUP_FINISHINGTOUCH_ID, unitId: SEED_UNIT_LITER_ID,
     },
   ];
   await db.run('DELETE FROM inventory');
@@ -407,12 +416,13 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
     try {
       await db.run(
         `INSERT INTO inventory (id, name, description, imageUrl, quantity, unitCost, lastUpdated, lowStock, minStockLevel, maxStockLevel, categoryId, subCategoryId, locationId, supplierId, unitId)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET
+         name=excluded.name, description=excluded.description, imageUrl=excluded.imageUrl, quantity=excluded.quantity, unitCost=excluded.unitCost, lastUpdated=excluded.lastUpdated, lowStock=excluded.lowStock, minStockLevel=excluded.minStockLevel, maxStockLevel=excluded.maxStockLevel, categoryId=excluded.categoryId, subCategoryId=excluded.subCategoryId, locationId=excluded.locationId, supplierId=excluded.supplierId, unitId=excluded.unitId`,
         item.id, item.name, item.description, item.imageUrl, item.quantity, item.unitCost, new Date().toISOString(), item.lowStock, item.minStockLevel, item.maxStockLevel,
         item.categoryId, item.subCategoryId, item.locationId, item.supplierId, item.unitId
       );
     } catch (e) {
-      console.warn(`Could not insert inventory item ${item.name} with ID ${item.id}: ${(e as Error).message}`);
+      console.warn(`Could not insert/update inventory item ${item.name} with ID ${item.id}: ${(e as Error).message}`);
     }
   }
   console.log('Inventory Items seeded.');
@@ -483,7 +493,6 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
             console.log('Categories table is empty, but no schema reset was triggered. Seeding initial data.');
             await _seedInitialData(db);
           } else {
-            // Check if key seeded departments exist, if not, re-seed.
             const seededDeptCheck = await db.get('SELECT id FROM departments WHERE id = ?', SEED_DEPT_ENGINEERING_ID);
             if (!seededDeptCheck) {
                  console.log('Key seeded department (Engineering) not found. Re-seeding all initial data.');
@@ -492,8 +501,15 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
                 const inventoryCountResult = await db.get('SELECT COUNT(*) as count FROM inventory');
                 const inventoryCount = inventoryCountResult?.count ?? 0;
                 if (inventoryCount === 0) {
-                     console.log('Inventory table is empty. Re-seeding initial data for inventory (and potentially related lookups if they were also empty).');
-                    await _seedInitialData(db); // Re-seed all if inventory is empty as it might indicate a partial wipe or first seed
+                     console.log('Inventory table is empty. Re-seeding initial data.');
+                    await _seedInitialData(db); 
+                } else {
+                    // Check if a key seeded inventory item exists
+                    const keyInventoryItem = await db.get('SELECT id FROM inventory WHERE id = ?', 'WP-PLY-001');
+                    if (!keyInventoryItem) {
+                        console.log('Key seeded inventory item (WP-PLY-001) not found. Re-seeding all initial data.');
+                        await _seedInitialData(db);
+                    }
                 }
             }
           }
@@ -534,7 +550,6 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
   await _createTables(db);
   console.log('Database initialization by script complete. Tables created/ensured.');
 
-  // Always seed if dropping first, or if foundational tables like categories are empty or missing key seeded data.
   if (dropFirst) { 
     await _seedInitialData(db);
   } else { 
@@ -548,6 +563,12 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
         if (!seededDeptCheck) {
              console.log('Script: Key seeded department not found. Re-seeding all initial data.');
              await _seedInitialData(db);
+        } else {
+            const keyInventoryItem = await db.get('SELECT id FROM inventory WHERE id = ?', 'WP-PLY-001');
+            if (!keyInventoryItem) {
+                console.log('Script: Key seeded inventory item (WP-PLY-001) not found. Re-seeding all initial data.');
+                await _seedInitialData(db);
+            }
         }
     }
   }
@@ -555,4 +576,6 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
   return db;
 }
     
+    
+
     
