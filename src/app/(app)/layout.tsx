@@ -10,6 +10,7 @@ import {
   BarChart3,
   Settings as SettingsIcon,
   Menu,
+  Sparkles, // Added Sparkles icon
 } from 'lucide-react';
 import {
   SidebarProvider,
@@ -34,6 +35,7 @@ const navItems: NavItem[] = [
   { title: 'Requisitions', href: '/requisitions', icon: FileText },
   { title: 'Purchase Orders', href: '/purchase-orders', icon: ShoppingCart },
   { title: 'Reports', href: '/reports', icon: BarChart3 },
+  { title: 'Special Feature', href: '/special-feature', icon: Sparkles }, // New item
   { title: 'Settings', href: '/settings', icon: SettingsIcon },
 ];
 
