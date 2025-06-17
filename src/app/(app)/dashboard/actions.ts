@@ -28,12 +28,11 @@ export async function getDashboardData(): Promise<DashboardData> {
       "SELECT COUNT(*) as count FROM purchase_orders WHERE status IN ('ORDERED', 'PARTIALLY_RECEIVED')"
     );
     
-    // Approximate monthly expenditure: sum of totalAmount for POs marked as RECEIVED this month.
-    // This assumes totalAmount is accurate at the time of becoming RECEIVED.
-    // A more precise calculation might involve summing actual received item costs from stock movements.
+    // Approximate monthly expenditure: sum of item costs for POs marked as RECEIVED this month.
     const monthlyExpenditureResult = await db.get<{ total: number | null }>(
-      `SELECT SUM(po.totalAmount) as total 
+      `SELECT SUM(COALESCE(poi.quantityApproved, poi.quantityOrdered) * poi.unitCost) as total 
        FROM purchase_orders po
+       JOIN purchase_order_items poi ON po.id = poi.purchaseOrderId
        WHERE po.status = 'RECEIVED' 
        AND EXISTS (
            SELECT 1 FROM stock_movements sm
