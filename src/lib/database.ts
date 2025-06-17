@@ -36,7 +36,6 @@ const SEED_CAT_FINISHES_ID      = 'c0a1b2c3-0005-4000-8000-000000000005';
 const SEED_CAT_ACCESSORIES_ID   = 'c0a1b2c3-0006-4000-8000-000000000006';
 const SEED_CAT_ADHESIVES_ID     = 'c0a1b2c3-0007-4000-8000-000000000007';
 
-// Constant UUIDs for Sub-Categories used in seeded inventory
 const SEED_SUB_CAT_PLYWOOD_ID       = 'sc01-0001-4000-8000-plywood';
 const SEED_SUB_CAT_MDF_ID           = 'sc01-0002-4000-8000-mdf';
 const SEED_SUB_CAT_PARTICLE_ID    = 'sc01-0003-4000-8000-particle';
@@ -62,18 +61,17 @@ const SEED_SUB_CAT_LED_ID           = 'sc06-0003-4000-8000-led';
 const SEED_SUB_CAT_WOODGLUE_ID      = 'sc07-0001-4000-8000-woodglue';
 const SEED_SUB_CAT_SILICONE_ID      = 'sc07-0002-4000-8000-silicone';
 
-
-// Constant UUIDs for Locations used in seeded inventory
 const SEED_LOC_MAIN_WH_A1S1_ID      = 'loc01-0001-4000-8000-mainwh_a1s1';
 const SEED_LOC_WORKSHOP_B2_ID       = 'loc01-0002-4000-8000-workshop_b2';
 const SEED_LOC_SHOWROOM_BACK_ID   = 'loc01-0003-4000-8000-showroomback';
 const SEED_LOC_CUTTING_RACKC_ID   = 'loc01-0004-4000-8000-cutting_c';
 
-// Constant UUIDs for Suppliers used in seeded inventory
 const SEED_SUP_PANELPRO_ID          = 'sup01-0001-4000-8000-panelpro';
 const SEED_SUP_HARDWAREHUB_ID       = 'sup01-0002-4000-8000-hardwarehub';
 const SEED_SUP_FINISHINGTOUCH_ID    = 'sup01-0003-4000-8000-finishingtouch';
 const SEED_SUP_LOCALTIMBER_ID       = 'sup01-0004-4000-8000-localtimber';
+
+const KEY_INVENTORY_ITEM_ID = 'WP-PLY-001';
 
 
 async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.Statement>) {
@@ -182,14 +180,14 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
 
   await dbConnection.exec(`
     CREATE TABLE IF NOT EXISTS requisitions (
-      id TEXT PRIMARY KEY, -- e.g., REQ-YYYYMMDD-001
-      requesterId TEXT, -- For future use with user authentication
+      id TEXT PRIMARY KEY, 
+      requesterId TEXT, 
       departmentId TEXT,
       orderNumber TEXT,
       bomNumber TEXT,
       dateCreated TEXT NOT NULL,
       dateNeeded TEXT,
-      status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL', -- PENDING_APPROVAL, APPROVED, REJECTED, FULFILLED, PARTIALLY_FULFILLED, CANCELLED
+      status TEXT NOT NULL DEFAULT 'PENDING_APPROVAL', 
       notes TEXT,
       lastUpdated TEXT NOT NULL,
       FOREIGN KEY (requesterId) REFERENCES users(id) ON DELETE SET NULL,
@@ -199,7 +197,7 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
 
   await dbConnection.exec(`
     CREATE TABLE IF NOT EXISTS requisition_items (
-      id TEXT PRIMARY KEY, -- UUID
+      id TEXT PRIMARY KEY, 
       requisitionId TEXT NOT NULL,
       inventoryItemId TEXT NOT NULL,
       quantityRequested INTEGER NOT NULL,
@@ -233,7 +231,6 @@ async function _dropTables(dbConnection: Database<sqlite3.Database, sqlite3.Stat
 async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement>) {
   console.log('Seeding initial data...');
 
-  // Departments
   const departmentsData = [
     { id: SEED_DEPT_ENGINEERING_ID, name: 'Engineering', code: 'ENG' },
     { id: SEED_DEPT_PRODUCTION_ID, name: 'Production', code: 'PROD' },
@@ -249,7 +246,6 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Departments seeded.');
 
-  // Units of Measurement
   const units = [
     { id: SEED_UNIT_PCS_ID, name: 'Piece', abbreviation: 'pcs', base_unit_id: null, conversion_factor: 1.0 },
     { id: SEED_UNIT_SET_ID, name: 'Set', abbreviation: 'set', base_unit_id: null, conversion_factor: 1.0 },
@@ -278,7 +274,6 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Units of Measurement seeded.');
 
-  // Categories
   const categoriesData = [
     { id: SEED_CAT_WOOD_PANELS_ID, name: 'Wood Panels', code: 'WP' },
     { id: SEED_CAT_EDGE_BANDING_ID, name: 'Edge Banding', code: 'EB' },
@@ -298,7 +293,6 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Categories seeded.');
 
-  // Sub-Categories
   const subCategoriesData = [
     { id: SEED_SUB_CAT_PLYWOOD_ID, name: 'Plywood', categoryId: SEED_CAT_WOOD_PANELS_ID, code: 'PLY' },
     { id: SEED_SUB_CAT_MDF_ID, name: 'MDF', categoryId: SEED_CAT_WOOD_PANELS_ID, code: 'MDF' },
@@ -338,7 +332,6 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Sub-Categories seeded.');
 
-  // Locations
   const locationsData = [
     { id: SEED_LOC_MAIN_WH_A1S1_ID, store: 'Main Warehouse', rack: 'A1', shelf: 'S1' },
     { id: SEED_LOC_WORKSHOP_B2_ID, store: 'Workshop Storage', rack: 'B2', shelf: null },
@@ -358,7 +351,6 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Locations seeded.');
 
-  // Suppliers
   const suppliersData = [
     { id: SEED_SUP_PANELPRO_ID, name: 'PanelPro Supplies', contactPerson: 'John Doe', contactMail: 'john@panelpro.com', contactPhone: '555-1234', address: '123 Panel St, Suite A, Panel City' },
     { id: SEED_SUP_HARDWAREHUB_ID, name: 'Hardware Hub Inc.', contactPerson: 'Jane Smith', contactMail: 'jane@hardwarehub.com', contactPhone: '555-5678', address: '456 Hinge Ave, Hardware Town' },
@@ -378,10 +370,9 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Suppliers seeded.');
 
-  // Inventory Items
   const inventoryItemsData = [
     {
-      id: 'WP-PLY-001', name: '18mm Birch Plywood (2440x1220mm)', description: 'High-quality birch plywood for structural and aesthetic applications.', imageUrl: 'https://placehold.co/300x200.png?text=Plywood',
+      id: KEY_INVENTORY_ITEM_ID, name: '18mm Birch Plywood (2440x1220mm)', description: 'High-quality birch plywood for structural and aesthetic applications.', imageUrl: 'https://placehold.co/300x200.png?text=Plywood',
       quantity: 50, unitCost: 45.50, lowStock: 0, minStockLevel: 10, maxStockLevel: 100,
       categoryId: SEED_CAT_WOOD_PANELS_ID, subCategoryId: SEED_SUB_CAT_PLYWOOD_ID, locationId: SEED_LOC_MAIN_WH_A1S1_ID, supplierId: SEED_SUP_PANELPRO_ID, unitId: SEED_UNIT_SHEET_ID,
     },
@@ -411,7 +402,8 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
       categoryId: SEED_CAT_FINISHES_ID, subCategoryId: SEED_SUB_CAT_PAINT_ID, locationId: SEED_LOC_SHOWROOM_BACK_ID, supplierId: SEED_SUP_FINISHINGTOUCH_ID, unitId: SEED_UNIT_LITER_ID,
     },
   ];
-  await db.run('DELETE FROM inventory');
+  
+  await db.run('DELETE FROM inventory'); // Clear existing inventory before seeding new set
   for (const item of inventoryItemsData) {
     try {
       await db.run(
@@ -451,10 +443,9 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
           suppliers: ['contactPhone'],
           categories: ['code'],
           sub_categories: ['code', 'categoryId'],
-          requisitions: ['requesterId', 'departmentId', 'orderNumber', 'bomNumber', 'dateNeeded', 'status', 'notes', 'lastUpdated'],
+          requisitions: ['requesterId', 'departmentId', 'orderNumber', 'bomNumber', 'dateNeeded', 'status', 'notes', 'lastUpdated', 'departmentId'],
           requisition_items: ['requisitionId', 'inventoryItemId', 'quantityRequested', 'quantityApproved', 'quantityIssued', 'isApproved', 'notes'],
         };
-
 
         for (const tableName of tablesToEnsureExist) {
           const tableExists = await db.get(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}';`);
@@ -476,43 +467,40 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
             if (schemaNeedsReset) break; 
           }
         }
-
-
+        
+        let needsFullSeed = false;
         if (schemaNeedsReset) {
-          console.log('Performing data reset: dropping and recreating all tables due to detected schema mismatch or missing tables/columns.');
-          await _dropTables(db);
-          await _createTables(db);
-          console.log('All tables have been reset and recreated.');
-          await _seedInitialData(db); 
+          needsFullSeed = true;
         } else {
-          await _createTables(db); 
-          const categoryCountResult = await db.get('SELECT COUNT(*) as count FROM categories');
-          const categoryCount = categoryCountResult?.count ?? 0;
+          await _createTables(db); // Ensures tables exist if not a full schema reset
           
-          if (categoryCount === 0) {
-            console.log('Categories table is empty, but no schema reset was triggered. Seeding initial data.');
-            await _seedInitialData(db);
-          } else {
-            const seededDeptCheck = await db.get('SELECT id FROM departments WHERE id = ?', SEED_DEPT_ENGINEERING_ID);
-            if (!seededDeptCheck) {
-                 console.log('Key seeded department (Engineering) not found. Re-seeding all initial data.');
-                 await _seedInitialData(db);
-            } else {
-                const inventoryCountResult = await db.get('SELECT COUNT(*) as count FROM inventory');
-                const inventoryCount = inventoryCountResult?.count ?? 0;
-                if (inventoryCount === 0) {
-                     console.log('Inventory table is empty. Re-seeding initial data.');
-                    await _seedInitialData(db); 
-                } else {
-                    // Check if a key seeded inventory item exists
-                    const keyInventoryItem = await db.get('SELECT id FROM inventory WHERE id = ?', 'WP-PLY-001');
-                    if (!keyInventoryItem) {
-                        console.log('Key seeded inventory item (WP-PLY-001) not found. Re-seeding all initial data.');
-                        await _seedInitialData(db);
-                    }
-                }
+          const categoryCountResult = await db.get('SELECT COUNT(*) as count FROM categories');
+          if ((categoryCountResult?.count ?? 0) === 0) {
+            console.log('Categories table is empty. Flagging for full seed.');
+            needsFullSeed = true;
+          }
+
+          if (!needsFullSeed) {
+            const deptCheck = await db.get('SELECT id FROM departments WHERE id = ?', SEED_DEPT_ENGINEERING_ID);
+            if (!deptCheck) {
+              console.log('Key seeded department (Engineering) not found. Flagging for full seed.');
+              needsFullSeed = true;
             }
           }
+          if (!needsFullSeed) {
+            const invCheck = await db.get('SELECT id FROM inventory WHERE id = ?', KEY_INVENTORY_ITEM_ID);
+            if (!invCheck) {
+              console.log(`Key seeded inventory item (${KEY_INVENTORY_ITEM_ID}) not found. Flagging for full seed.`);
+              needsFullSeed = true;
+            }
+          }
+        }
+
+        if (needsFullSeed) {
+          console.log('Full data reset and seed will be performed by openDb.');
+          await _dropTables(db);
+          await _createTables(db);
+          await _seedInitialData(db);
         }
         
         console.log('App database tables ensured/initialized.');
@@ -542,37 +530,35 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
   });
   await db.exec('PRAGMA foreign_keys = ON;');
 
-  if (dropFirst) {
-    console.log('Dropping existing tables as requested by script...');
-    await _dropTables(db);
-  }
+  let needsFullSeed = dropFirst;
 
-  await _createTables(db);
-  console.log('Database initialization by script complete. Tables created/ensured.');
-
-  if (dropFirst) { 
-    await _seedInitialData(db);
-  } else { 
+  if (!needsFullSeed) {
+    // If not explicitly dropping, check if seeding is needed based on data state
+    await _createTables(db); // Ensure tables exist
     const categoryCountResult = await db.get('SELECT COUNT(*) as count FROM categories');
-    const categoryCount = categoryCountResult?.count ?? 0;
-    if (categoryCount === 0) {
-        console.log('Script: Categories table is empty. Seeding initial data.');
-        await _seedInitialData(db);
-    } else {
-        const seededDeptCheck = await db.get('SELECT id FROM departments WHERE id = ?', SEED_DEPT_ENGINEERING_ID);
-        if (!seededDeptCheck) {
-             console.log('Script: Key seeded department not found. Re-seeding all initial data.');
-             await _seedInitialData(db);
-        } else {
-            const keyInventoryItem = await db.get('SELECT id FROM inventory WHERE id = ?', 'WP-PLY-001');
-            if (!keyInventoryItem) {
-                console.log('Script: Key seeded inventory item (WP-PLY-001) not found. Re-seeding all initial data.');
-                await _seedInitialData(db);
-            }
-        }
+    if ((categoryCountResult?.count ?? 0) === 0) needsFullSeed = true;
+
+    if (!needsFullSeed) {
+      const deptCheck = await db.get('SELECT id FROM departments WHERE id = ?', SEED_DEPT_ENGINEERING_ID);
+      if (!deptCheck) needsFullSeed = true;
+    }
+    if (!needsFullSeed) {
+      const invCheck = await db.get('SELECT id FROM inventory WHERE id = ?', KEY_INVENTORY_ITEM_ID);
+      if (!invCheck) needsFullSeed = true;
     }
   }
 
+  if (needsFullSeed) {
+    console.log('Full data reset and seed will be performed by initializeDatabaseForScript.');
+    await _dropTables(db);
+    await _createTables(db);
+    await _seedInitialData(db);
+  } else {
+    console.log('Script: Database schema and key seed data appear to be intact. No full reset performed.');
+    await _createTables(db); // Still ensure all tables are there
+  }
+  
+  console.log('Database initialization by script complete.');
   return db;
 }
     
