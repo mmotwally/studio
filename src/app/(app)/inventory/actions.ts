@@ -18,6 +18,7 @@ import type { Database } from 'sqlite';
 import * as XLSX from 'xlsx';
 import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
 
+// PDF-lib imports
 import { PDFDocument, StandardFonts, rgb, PageSizes } from 'pdf-lib';
 
 
@@ -768,66 +769,80 @@ export async function getStockMovementDetailsAction(inventoryItemId: string, fro
 export async function generateStockMovementPdfAction(reportData: StockMovementReport): Promise<string> {
   try {
     const pdfDoc = await PDFDocument.create();
-    const page = pdfDoc.addPage(PageSizes.A4_Landscape);
+    const page = pdfDoc.addPage(PageSizes.A4_LANDSCAPE); // Changed to A4_LANDSCAPE
     const { width, height } = page.getSize();
     const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
     const boldFont = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
     const margin = 40;
     let y = height - margin;
-    const lineHeight = 14;
-    const smallLineHeight = 12;
+    const titleLineHeight = 18;
+    const headerLineHeight = 14;
+    const bodyLineHeight = 12;
     const tableTopMargin = 20;
     const cellPadding = 5;
 
+    // Main Title
     page.setFont(boldFont);
     page.setFontSize(16);
-    page.drawText(`Stock Movement Report - ${reportData.inventoryItemName} (${reportData.inventoryItemId})`, {
+    const titleText = `Stock Movement Report - ${reportData.inventoryItemName} (${reportData.inventoryItemId})`;
+    page.drawText(titleText, {
       x: margin,
       y: y,
       font: boldFont,
       size: 16,
     });
-    y -= lineHeight * 1.5;
+    y -= titleLineHeight * 1.5;
 
+    // Period
     page.setFont(font);
     page.setFontSize(10);
     page.drawText(`Period: ${reportData.periodFrom} to ${reportData.periodTo}`, { x: margin, y: y, size: 10 });
-    y -= lineHeight * 1.5;
+    y -= headerLineHeight * 1.5;
 
-    const summaryTexts = [
-        `Opening Stock: ${reportData.openingStock}`,
-        `Total In (+): ${reportData.totalIn}`,
-        `Total Out (-): ${reportData.totalOut}`,
-        `Closing Stock: ${reportData.closingStock}`,
-    ];
+    // Summary Section (2x2 grid like)
+    const summaryItemWidth = (width - 2 * margin) / 2 - cellPadding * 2;
+    const summaryLineHeight = 12;
+
+    page.drawText(`Opening Stock: ${reportData.openingStock}`, { x: margin, y: y, size: 10 });
+    page.drawText(`Total In (+): ${reportData.totalIn}`, { x: margin + summaryItemWidth + cellPadding, y: y, size: 10 });
+    y -= summaryLineHeight * 1.2;
+    page.drawText(`Closing Stock: ${reportData.closingStock}`, { x: margin, y: y, size: 10 });
+    page.drawText(`Total Out (-): ${reportData.totalOut}`, { x: margin + summaryItemWidth + cellPadding, y: y, size: 10 });
     
-    let summaryX = margin;
-    summaryTexts.forEach(text => {
-        page.drawText(text, { x: summaryX, y: y, size: 10 });
-        summaryX += (width - 2 * margin) / 4; 
-    });
-    y -= lineHeight * 1.5 + tableTopMargin;
+    y -= headerLineHeight * 1.5 + tableTopMargin;
 
 
+    // Table Headers
     const tableHeaders = ['Date', 'Type', 'Ref', 'Qty Chg', 'Balance', 'Notes', 'User'];
-    const colWidths = [100, 100, 70, 60, 60, 200, 70]; 
+    const colWidths = [90, 100, 80, 60, 60, 220, 70]; // Adjusted for A4 Landscape and content
     let currentX = margin;
 
     page.setFont(boldFont);
+    page.setFontSize(9); 
     tableHeaders.forEach((header, i) => {
-      page.drawText(header, { x: currentX + cellPadding, y: y, size: 9, font: boldFont });
+      page.drawText(header, { x: currentX + cellPadding, y: y, font: boldFont, size: 9 });
       currentX += colWidths[i];
     });
-    y -= smallLineHeight * 1.2; 
-    page.drawLine({start: {x: margin, y: y + cellPadding}, end: {x: width - margin, y: y + cellPadding}, thickness: 0.5, color: rgb(0.7, 0.7, 0.7)});
+    y -= bodyLineHeight * 0.8; // Line height for header text
+    
+    // Line below header
+    page.drawLine({
+        start: { x: margin, y: y + cellPadding * 0.5 }, // Adjust line position slightly
+        end: { x: width - margin, y: y + cellPadding * 0.5 },
+        thickness: 0.8, // Slightly thicker line for header separation
+        color: rgb(0.3, 0.3, 0.3), // Darker line
+    });
+    y -= bodyLineHeight * 0.8; // Space after line
 
-
+    // Table Body
     page.setFont(font);
+    page.setFontSize(8);
     reportData.movements.forEach(mov => {
-      if (y < margin + smallLineHeight * 2) { 
-        page.addPage(PageSizes.A4_Landscape);
-        y = height - margin - smallLineHeight; 
+      if (y < margin + bodyLineHeight * 2) { 
+        page.addPage(PageSizes.A4_LANDSCAPE);
+        y = height - margin - bodyLineHeight; 
+        // Redraw headers on new page might be needed for very long tables, skipping for now for simplicity
       }
       currentX = margin;
       const rowData = [
@@ -843,21 +858,21 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
         page.drawText(cell, { x: currentX + cellPadding, y: y, size: 8 });
         currentX += colWidths[i];
       });
-      y -= smallLineHeight * 1.2;
+      y -= bodyLineHeight * 1.2;
     });
     
     if (reportData.movements.length === 0) {
         page.drawText('No movements recorded for this period.', {
             x: margin + (width - 2 * margin) / 2 - font.widthOfTextAtSize('No movements recorded for this period.', 8) / 2,
-            y: y - smallLineHeight,
+            y: y - bodyLineHeight, // Place it below where the first row would have been
             font: font,
             size: 8,
             color: rgb(0.5, 0.5, 0.5)
         });
     }
     
-    page.drawLine({start: {x: margin, y: y + cellPadding}, end: {x: width - margin, y: y + cellPadding}, thickness: 0.5, color: rgb(0.7, 0.7, 0.7)});
-
+    // Optional: Line at the end of the table
+    // page.drawLine({start: {x: margin, y: y + cellPadding}, end: {x: width - margin, y: y + cellPadding}, thickness: 0.5, color: rgb(0.7, 0.7, 0.7)});
 
     const pdfBytes = await pdfDoc.save();
     const base64String = Buffer.from(pdfBytes).toString('base64');
@@ -871,6 +886,7 @@ export async function generateStockMovementPdfAction(reportData: StockMovementRe
     
 
     
+
 
 
 
