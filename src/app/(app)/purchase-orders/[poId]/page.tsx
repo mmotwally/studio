@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation'; 
+import { useRouter, useSearchParams } from 'next/navigation'; 
 import { ArrowLeft, Edit, MoreVertical, Printer, FileX2, ShoppingCart, Truck, UserCircle, CalendarDays, FileTextIcon, Sigma, Banknote, Tag, CheckCircle, Send } from 'lucide-react';
 import { getPurchaseOrderById, updatePurchaseOrderStatusAction } from '../actions'; 
 import type { PurchaseOrder, PurchaseOrderStatus, PurchaseOrderItem } from '@/types';
@@ -16,6 +16,18 @@ import { Separator } from '@/components/ui/separator';
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { buttonVariants } from '@/components/ui/button'; // Import buttonVariants
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+
 
 interface PurchaseOrderDetailPageProps {
   params: Promise<{ 
@@ -63,7 +75,27 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
   const [error, setError] = React.useState<string | null>(null);
   const { toast } = useToast();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [isPending, startTransition] = React.useTransition();
+  const [isCancelAlertOpen, setIsCancelAlertOpen] = React.useState(false);
+
+   React.useEffect(() => {
+    let toastShown = false;
+    if (searchParams.get('updated') === 'true') {
+      toast({ title: "Success", description: "Purchase Order updated successfully." });
+      toastShown = true;
+    } else if (searchParams.get('created') === 'true') {
+      toast({ title: "Success", description: "Purchase Order created successfully." });
+      toastShown = true;
+    }
+
+    if (toastShown) {
+      const newSearchParams = new URLSearchParams(searchParams.toString());
+      newSearchParams.delete('updated');
+      newSearchParams.delete('created');
+      router.replace(`/purchase-orders/${poId}?${newSearchParams.toString()}`, { scroll: false });
+    }
+  }, [searchParams, poId, router, toast]);
 
 
   const fetchPurchaseOrder = React.useCallback(async () => {
@@ -101,6 +133,12 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
         }
     });
   };
+  
+  const handleConfirmCancel = () => {
+    setIsCancelAlertOpen(false);
+    handleStatusUpdate('CANCELLED');
+  };
+
 
   if (isLoading) {
     return (
@@ -181,7 +219,7 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
                   <Printer className="mr-2 h-4 w-4" /> Print PO
                 </DropdownMenuItem>
                  {canCancel && (
-                   <DropdownMenuItem onClick={() => handleStatusUpdate('CANCELLED')} className="text-orange-600 focus:text-orange-700">
+                   <DropdownMenuItem onClick={() => setIsCancelAlertOpen(true)} className="text-orange-600 focus:text-orange-700 cursor-pointer">
                     <FileX2 className="mr-2 h-4 w-4" /> Cancel PO
                   </DropdownMenuItem>
                 )}
@@ -210,6 +248,7 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
                       <TableHead className="text-right">Qty Ordered</TableHead>
                       <TableHead className="text-right">Unit Cost</TableHead>
                       <TableHead className="text-right">Total Cost</TableHead>
+                      <TableHead className="text-right">Qty Approved</TableHead>
                       <TableHead className="text-right">Qty Received</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -221,6 +260,7 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
                         <TableCell className="text-right">{item.quantityOrdered}</TableCell>
                         <TableCell className="text-right">${item.unitCost.toFixed(2)}</TableCell>
                         <TableCell className="text-right">${(item.quantityOrdered * item.unitCost).toFixed(2)}</TableCell>
+                        <TableCell className="text-right">{item.quantityApproved ?? '-'}</TableCell>
                         <TableCell className="text-right">{item.quantityReceived || 0}</TableCell>
                       </TableRow>
                     ))}
@@ -253,8 +293,8 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
                         <Button onClick={() => handleStatusUpdate('APPROVED')} variant="default" disabled={isPending}>
                             <CheckCircle className="mr-2 h-4 w-4" /> Approve PO
                         </Button>
-                        <Button onClick={() => handleStatusUpdate('CANCELLED')} variant="destructive" disabled={isPending}>
-                            <FileX2 className="mr-2 h-4 w-4" /> Reject / Cancel PO
+                        <Button onClick={() => handleStatusUpdate('DRAFT')} variant="outline" disabled={isPending}>
+                             Revert to Draft
                         </Button>
                     </>
                  )}
@@ -264,15 +304,15 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
                     </Button>
                  )}
                  {purchaseOrder.status === 'ORDERED' && ( // This will eventually open a "Receive Stock" dialog
-                    <Button onClick={() => handleStatusUpdate('RECEIVED')} disabled={isPending}> 
-                        <Truck className="mr-2 h-4 w-4" /> Mark as Received (Full)
+                    <Button onClick={() => router.push(`/purchase-orders/${poId}/receive`)} disabled={isPending}> 
+                        <Truck className="mr-2 h-4 w-4" /> Receive Stock
                     </Button>
                  )}
                  {purchaseOrder.status === 'RECEIVED' && (
-                     <p className="text-green-600">This PO has been fully received.</p>
+                     <p className="text-green-600 font-semibold">This PO has been fully received.</p>
                  )}
                  {purchaseOrder.status === 'CANCELLED' && (
-                     <p className="text-red-600">This PO has been cancelled.</p>
+                     <p className="text-red-600 font-semibold">This PO has been cancelled.</p>
                  )}
             </CardContent>
           </Card>
@@ -357,6 +397,27 @@ export default function PurchaseOrderDetailPage({ params: paramsPromise }: Purch
           </Card>
         </div>
       </div>
+      <AlertDialog open={isCancelAlertOpen} onOpenChange={setIsCancelAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Purchase Order?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel PO {purchaseOrder?.id}? This may have implications if it has already been processed by the supplier.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isPending} onClick={() => setIsCancelAlertOpen(false)}>Close</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleConfirmCancel}
+              disabled={isPending}
+              className={buttonVariants({ variant: "destructive" })}
+            >
+              {isPending ? "Cancelling..." : "Confirm Cancel"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }
+

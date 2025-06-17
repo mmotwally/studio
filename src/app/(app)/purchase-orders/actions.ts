@@ -56,7 +56,7 @@ export async function createPurchaseOrderAction(values: PurchaseOrderFormValues)
       const purchaseOrderItemId = crypto.randomUUID();
       await db.run(
         `INSERT INTO purchase_order_items (id, purchaseOrderId, inventoryItemId, description, quantityOrdered, unitCost, quantityApproved, quantityReceived)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, // Added quantityApproved
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         purchaseOrderItemId,
         purchaseOrderId,
         item.inventoryItemId,
@@ -86,18 +86,95 @@ export async function createPurchaseOrderAction(values: PurchaseOrderFormValues)
 
   revalidatePath('/purchase-orders');
   revalidatePath('/purchase-orders/new');
-  // Fetch the newly created PO's ID to redirect to its detail page.
-  // This is a bit indirect; if generatePurchaseOrderId was guaranteed unique for the session, we could use its output.
-  // However, to be safe, fetch the latest PO for this supplier created today.
-  // A more robust way might be to have createPurchaseOrderAction return the ID.
+  // Redirect to the new PO's detail page after creation
   const dbForRedirect = await openDb();
   const newPo = await dbForRedirect.get(
       'SELECT id FROM purchase_orders WHERE supplierId = ? AND date(orderDate) = date(?) ORDER BY id DESC LIMIT 1',
       values.supplierId,
       values.orderDate.toISOString().split('T')[0]
   );
-  redirect(`/purchase-orders/${newPo?.id || ''}`); 
+  const newPoId = newPo?.id;
+
+  if (newPoId) {
+    redirect(`/purchase-orders/${newPoId}?created=true`);
+  } else {
+    redirect('/purchase-orders'); // Fallback
+  }
 }
+
+export async function updatePurchaseOrderAction(poId: string, values: PurchaseOrderFormValues) {
+  let db;
+  try {
+    db = await openDb();
+    await db.run('BEGIN TRANSACTION');
+
+    const existingPO = await db.get('SELECT status FROM purchase_orders WHERE id = ?', poId);
+    if (!existingPO) {
+      throw new Error(`Purchase Order with ID ${poId} not found.`);
+    }
+    if (existingPO.status !== 'DRAFT' && existingPO.status !== 'PENDING_APPROVAL') {
+      throw new Error(`Purchase Order cannot be edited. Current status: ${existingPO.status}.`);
+    }
+
+    const lastUpdated = new Date().toISOString();
+
+    await db.run(
+      `UPDATE purchase_orders 
+       SET supplierId = ?, orderDate = ?, expectedDeliveryDate = ?, notes = ?, shippingAddress = ?, billingAddress = ?, lastUpdated = ?
+       WHERE id = ?`,
+      values.supplierId,
+      values.orderDate.toISOString(),
+      values.expectedDeliveryDate ? values.expectedDeliveryDate.toISOString() : null,
+      values.notes,
+      values.shippingAddress,
+      values.billingAddress,
+      lastUpdated,
+      poId
+    );
+
+    // Delete existing items and re-insert them
+    // This is simpler than diffing but might be inefficient for very large POs.
+    // For more complex scenarios, a diffing approach or individual item updates would be better.
+    await db.run('DELETE FROM purchase_order_items WHERE purchaseOrderId = ?', poId);
+
+    for (const item of values.items) {
+      const purchaseOrderItemId = crypto.randomUUID();
+      await db.run(
+        `INSERT INTO purchase_order_items (id, purchaseOrderId, inventoryItemId, description, quantityOrdered, unitCost, quantityApproved, quantityReceived)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        purchaseOrderItemId,
+        poId,
+        item.inventoryItemId,
+        item.description,
+        item.quantityOrdered,
+        item.unitCost,
+        null, // quantityApproved is generally handled by a separate approval step, so keep it null on edit or carry over if needed
+        0 // quantityReceived is handled by receiving step
+      );
+    }
+
+    await db.run('COMMIT');
+  } catch (error) {
+    if (db) {
+      try {
+        await db.run('ROLLBACK');
+      } catch (rollbackError) {
+        console.error('Failed to rollback transaction for PO update:', rollbackError);
+      }
+    }
+    console.error(`Failed to update purchase order ${poId}:`, error);
+    if (error instanceof Error) {
+      throw new Error(`Database operation failed: ${error.message}`);
+    }
+    throw new Error('Database operation failed. Could not update purchase order.');
+  }
+
+  revalidatePath('/purchase-orders');
+  revalidatePath(`/purchase-orders/${poId}`);
+  revalidatePath(`/purchase-orders/${poId}/edit`);
+  redirect(`/purchase-orders/${poId}?updated=true`);
+}
+
 
 export async function getPurchaseOrders(): Promise<PurchaseOrder[]> {
   const db = await openDb();
@@ -120,7 +197,7 @@ export async function getPurchaseOrders(): Promise<PurchaseOrder[]> {
   
   return poData.map(po => ({
     ...po,
-    status: po.status as PurchaseOrderStatus, // Ensure status is correctly typed
+    status: po.status as PurchaseOrderStatus, 
     totalAmount: po.totalAmount || 0,
     itemCount: po.itemCount || 0,
   }));
@@ -195,7 +272,7 @@ export async function deletePurchaseOrderAction(poId: string): Promise<{ success
             await db.run('ROLLBACK');
             return { success: false, message: `Purchase Order ${poId} not found.` };
         }
-        // Allow deletion only for DRAFT or CANCELLED POs
+        
         if (po.status !== 'DRAFT' && po.status !== 'CANCELLED') {
             await db.run('ROLLBACK');
             return { success: false, message: `Purchase Order ${poId} cannot be deleted. Status is ${po.status}. Only DRAFT or CANCELLED POs can be deleted.` };
@@ -205,7 +282,7 @@ export async function deletePurchaseOrderAction(poId: string): Promise<{ success
         const result = await db.run('DELETE FROM purchase_orders WHERE id = ?', poId);
 
         if (result.changes === 0) {
-            await db.run('ROLLBACK'); // Should not happen if PO was found earlier
+            await db.run('ROLLBACK'); 
             return { success: false, message: `Failed to delete PO ${poId} or it was already deleted.` };
         }
         await db.run('COMMIT');
@@ -230,18 +307,20 @@ export async function updatePurchaseOrderStatusAction(poId: string, newStatus: P
             return { success: false, message: `Purchase Order ${poId} not found.` };
         }
 
-        // TODO: Add more sophisticated workflow logic/validation here based on current and new status.
-        // For example:
-        // If newStatus is 'APPROVED' and current is 'PENDING_APPROVAL', proceed.
-        // If newStatus is 'ORDERED' and current is 'APPROVED', proceed.
-        // If newStatus is 'CANCELLED', check if it's allowed from current status.
-        // If newStatus is 'PENDING_APPROVAL' from 'DRAFT', proceed.
-        
-        // For 'APPROVED' status, if coming from 'PENDING_APPROVAL', 
-        // we should ideally set quantityApproved for all items to quantityOrdered by default.
-        // This will be handled by a more specific approval action later.
-        // This generic status update should be used for simpler transitions like DRAFT -> PENDING_APPROVAL
-        // or an admin overriding a status.
+        // Basic workflow validation
+        const allowedTransitions: Record<PurchaseOrderStatus, PurchaseOrderStatus[]> = {
+            DRAFT: ['PENDING_APPROVAL', 'CANCELLED'],
+            PENDING_APPROVAL: ['APPROVED', 'CANCELLED', 'DRAFT'], // Can revert to draft
+            APPROVED: ['ORDERED', 'CANCELLED'],
+            ORDERED: ['PARTIALLY_RECEIVED', 'RECEIVED', 'CANCELLED'], // Add partially received later
+            PARTIALLY_RECEIVED: ['RECEIVED', 'CANCELLED'],
+            RECEIVED: [], // No direct status change from received, usually done via other processes
+            CANCELLED: []  // No direct status change from cancelled
+        };
+
+        if (!allowedTransitions[po.status as PurchaseOrderStatus]?.includes(newStatus)) {
+             return { success: false, message: `Cannot change PO status from ${po.status} to ${newStatus}.` };
+        }
 
         await db.run('UPDATE purchase_orders SET status = ?, lastUpdated = ? WHERE id = ?', newStatus, lastUpdated, poId);
         
@@ -253,11 +332,6 @@ export async function updatePurchaseOrderStatusAction(poId: string, newStatus: P
         return { success: false, message: `Failed to update PO status: ${error.message}` };
     }
 }
-
-// TODO: Implement updatePurchaseOrderAction for editing existing POs
-// This will be similar to createPurchaseOrderAction but will use UPDATE statements
-// and handle item modifications (add, remove, update).
-// It will also require a new page: src/app/(app)/purchase-orders/[poId]/edit/page.tsx
 
 // TODO: Implement approvePurchaseOrderItemsAction (sets quantityApproved on items, moves PO to APPROVED)
 // TODO: Implement receivePurchaseOrderItemsAction (updates inventory, PO item quantityReceived, PO status)
