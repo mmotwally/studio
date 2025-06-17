@@ -80,6 +80,18 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
   });
 
   async function onSubmit(values: ApproveRequisitionFormValues) {
+    // Client-side pre-check based on the requisition data the dialog has
+    if (requisition.status !== 'PENDING_APPROVAL') {
+      toast({
+        title: "Action Not Allowed",
+        description: `This requisition is currently in "${requisition.status.replace(/_/g, ' ').toLowerCase()}" status and items cannot be approved. The view might be outdated. Please refresh or close this dialog.`,
+        variant: "destructive",
+      });
+      setIsSubmitting(false); // Ensure button is re-enabled
+      // setOpen(false); // Optionally close the dialog immediately
+      return;
+    }
+
     setIsSubmitting(true);
     setServerError(null);
     let caughtError: any = null;
@@ -90,21 +102,12 @@ export function ApproveRequisitionItemsDialog({ requisition, setOpen, onApproval
     }));
 
     try {
-      // This action is expected to redirect on success or throw an application error.
       await approveRequisitionItemsAction(values.requisitionId, itemsToSubmit);
-      
-      // If we reach here, it means the action completed without an error and without redirecting,
-      // which is not the typical success path for this action as it's designed to redirect.
-      // This part acts as a fallback.
-      toast({
-        title: "Processing Complete",
-        description: "Approval decisions sent. The page should refresh shortly.",
-      });
-      if (onApprovalProcessed) onApprovalProcessed(); 
-      setOpen(false);
-
+      // If action redirects, this part is usually not reached.
+      // The `onApprovalProcessed` and `setOpen(false)` calls are typically handled
+      // by the parent page re-rendering after the redirect.
     } catch (error: any) {
-      caughtError = error; // Capture error to check for redirect in finally
+      caughtError = error;
       if (error.digest?.startsWith('NEXT_REDIRECT')) {
         // Re-throw the redirect error so Next.js can handle it
         throw error; 
