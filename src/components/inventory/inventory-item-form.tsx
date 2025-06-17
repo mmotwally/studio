@@ -69,7 +69,7 @@ export function InventoryItemForm({
 
   const form = useForm<InventoryItemFormValues>({
     resolver: zodResolver(inventoryItemSchema),
-    defaultValues: defaultValues || {
+    defaultValues: defaultValues || { // Ensure a base structure if defaultValues is undefined initially
       name: "",
       description: "",
       quantity: 0,
@@ -78,13 +78,29 @@ export function InventoryItemForm({
       maxStockLevel: 0,
       lowStock: false,
       categoryId: "",
-      subCategoryId: "",
-      locationId: "",
-      supplierId: "",
+      subCategoryId: null,
+      locationId: null,
+      supplierId: null,
       unitId: "",
       removeImage: false,
     },
   });
+
+  // Effect to reset form when defaultValues prop changes (primarily for edit mode)
+  React.useEffect(() => {
+    if (defaultValues) {
+      // Ensure optional fields are explicitly null if they are empty strings in defaultValues
+      // to match react-hook-form's handling and Select component expectations for clearing.
+      const processedDefaults = {
+        ...defaultValues,
+        subCategoryId: defaultValues.subCategoryId || null,
+        locationId: defaultValues.locationId || null,
+        supplierId: defaultValues.supplierId || null,
+      };
+      form.reset(processedDefaults);
+    }
+  }, [defaultValues, form.reset]);
+
 
   const selectedCategoryId = form.watch("categoryId");
 
@@ -115,11 +131,11 @@ export function InventoryItemForm({
         setSuppliers(fetchedSuppliers.map(s => ({ value: s.id, label: s.name })));
         setUnits(fetchedUnits.map(u => ({ value: u.id, label: `${u.name} ${u.abbreviation ? '('+u.abbreviation+')' : ''}`.trim() })));
 
-        // If editing, and categoryId is set, load subcategories
-        if (isEditMode && defaultValues?.categoryId) {
-          const fetchedSubCategories = await getSubCategories(defaultValues.categoryId);
-          setSubCategories(fetchedSubCategories.map(sc => ({ value: sc.id, label: `${sc.name} (${sc.code})` })));
-        }
+        // If editing, and categoryId is set from defaultValues, load its subcategories
+        // This is now handled more robustly by the form.reset and the subsequent selectedCategoryId effect.
+        // However, ensuring subcategories are loaded if defaultValues.categoryId is present can be done here too,
+        // or rely on selectedCategoryId effect. For simplicity, let selectedCategoryId effect handle it
+        // to avoid potential race conditions with form.reset.
 
       } catch (error) {
         console.error("Failed to load dropdown data:", error);
@@ -133,51 +149,48 @@ export function InventoryItemForm({
       }
     }
     loadDropdownData();
-  }, [toast, isEditMode, defaultValues?.categoryId]);
+  }, [toast]); // Removed defaultValues from here as form.reset handles it.
 
   React.useEffect(() => {
-    async function loadSubCategories() {
+    async function loadSubCategoriesForSelectedCategory() {
       if (selectedCategoryId) {
-        // Only fetch if not in edit mode initial load for this category,
-        // or if category has changed from initial default value.
-        if (!(isEditMode && selectedCategoryId === defaultValues?.categoryId && subCategories.length > 0) || (isEditMode && selectedCategoryId !== defaultValues?.categoryId) || !isEditMode ) {
-          try {
-            const fetchedSubCategories = await getSubCategories(selectedCategoryId);
-            setSubCategories(fetchedSubCategories.map(sc => ({ value: sc.id, label: `${sc.name} (${sc.code})` })));
-            // If category changed from the initial one in edit mode, reset subCategory
-            if (isEditMode && selectedCategoryId !== defaultValues?.categoryId) {
-                 form.setValue("subCategoryId", "");
-            }
-          } catch (error) {
-             console.error("Failed to load sub-categories:", error);
-             setSubCategories([]);
-             form.setValue("subCategoryId", "");
+        // Fetch sub-categories for the currently selected categoryId
+        try {
+          const fetchedSubCategories = await getSubCategories(selectedCategoryId);
+          setSubCategories(fetchedSubCategories.map(sc => ({ value: sc.id, label: `${sc.name} (${sc.code})` })));
+          // If the main category changes, and we are in edit mode,
+          // we might need to reset subCategoryId IF it's no longer valid for the new category.
+          // form.reset in the main useEffect should handle initial default subCategory.
+          // If user *changes* category, then subCategory field should be reset.
+          if (form.getValues('categoryId') !== defaultValues?.categoryId) {
+             form.setValue("subCategoryId", null);
           }
+
+        } catch (error) {
+           console.error("Failed to load sub-categories:", error);
+           setSubCategories([]);
+           form.setValue("subCategoryId", null);
         }
       } else {
         setSubCategories([]);
-        form.setValue("subCategoryId", ""); 
+        form.setValue("subCategoryId", null); 
       }
     }
     
-    if(!isLoadingDropdownData && selectedCategoryId) {
-        loadSubCategories();
-    } else if (!selectedCategoryId) {
-        setSubCategories([]);
-        form.setValue("subCategoryId", "");
+    if(!isLoadingDropdownData) { // Only run if main dropdowns are loaded
+        loadSubCategoriesForSelectedCategory();
     }
-  }, [selectedCategoryId, isLoadingDropdownData, form, isEditMode, defaultValues?.categoryId, subCategories.length]);
+  }, [selectedCategoryId, isLoadingDropdownData, form, defaultValues?.categoryId]);
 
 
   const handleFormSubmit = async (values: InventoryItemFormValues) => {
     const formData = new FormData();
 
-    // Append all basic string/number/boolean values
     Object.entries(values).forEach(([key, value]) => {
       if (value !== null && value !== undefined) {
         if (typeof value === 'boolean') {
           formData.append(key, value.toString());
-        } else if (key !== 'removeImage') { // removeImage is handled by checkbox state
+        } else if (key !== 'removeImage') { 
           formData.append(key, value as string | Blob);
         }
       }
@@ -187,7 +200,6 @@ export function InventoryItemForm({
       formData.append('removeImage', 'true');
     }
 
-    // Append image file if one is selected
     if (imageFileRef.current?.files && imageFileRef.current.files[0]) {
       formData.append('imageFile', imageFileRef.current.files[0]);
     }
@@ -201,11 +213,11 @@ export function InventoryItemForm({
       const reader = new FileReader();
       reader.onloadend = () => {
         setImagePreview(reader.result as string);
-        setRemoveImageChecked(false); // If new image is selected, uncheck remove
+        setRemoveImageChecked(false); 
         form.setValue('removeImage', false);
       };
       reader.readAsDataURL(file);
-    } else if (!isEditMode) { // Only clear preview if not editing (or if explicitly removed)
+    } else if (!isEditMode) { 
       setImagePreview(null);
     }
   };
@@ -214,12 +226,12 @@ export function InventoryItemForm({
     setRemoveImageChecked(checked);
     form.setValue('removeImage', checked);
     if (checked) {
-      setImagePreview(null); // Clear preview if "Remove Image" is checked
+      setImagePreview(null); 
       if (imageFileRef.current) {
-        imageFileRef.current.value = ""; // Clear the file input
+        imageFileRef.current.value = ""; 
       }
     } else if (initialImageUrl) {
-        setImagePreview(initialImageUrl); // Restore initial preview if unchecking remove and no new file selected
+        setImagePreview(initialImageUrl); 
     }
   };
 
@@ -240,8 +252,8 @@ export function InventoryItemForm({
         <FormItem>
           <FormLabel>{label}{isRequired ? '*' : ''}</FormLabel>
           <Select
-            onValueChange={(value) => field.onChange(value === "" ? null : value)} // Handle unsetting
-            value={field.value || ""} // Ensure value is string for Select
+            onValueChange={(value) => field.onChange(value === "" ? null : value)}
+            value={field.value || ""} // Use empty string for Select value if field.value is null/undefined
             disabled={isLoadingOpt || isDisabled || (!isLoadingOpt && options.length === 0 && name !== 'subCategoryId')}
           >
             <FormControl>
@@ -268,7 +280,7 @@ export function InventoryItemForm({
                 <div className="p-4 text-center text-sm text-muted-foreground">
                   {name === 'subCategoryId' && !selectedCategoryId && "Select a category first to see sub-categories."}
                   {name === 'subCategoryId' && selectedCategoryId && "No sub-categories for this category."}
-                  {name !== 'subCategoryId' && "No options available."}
+                  {name !== 'subCategoryId' && "No options available. Please add some first via Settings or quick add."}
                 </div>
               )}
             </SelectContent>
@@ -338,7 +350,7 @@ export function InventoryItemForm({
                         <FormItem className="flex flex-row items-center space-x-2 mt-2">
                             <FormControl>
                             <Checkbox
-                                checked={field.value}
+                                checked={field.value || false}
                                 onCheckedChange={(checked) => {
                                     const val = typeof checked === 'boolean' ? checked : false;
                                     field.onChange(val);

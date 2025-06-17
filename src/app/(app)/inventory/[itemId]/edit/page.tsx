@@ -9,6 +9,7 @@ import { getInventoryItemById, updateInventoryItemAction } from '../../actions';
 import type { InventoryItem, InventoryItemFormValues } from '@/types';
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
+import { Button } from '@/components/ui/button';
 
 
 export default function EditInventoryItemPage() {
@@ -65,6 +66,26 @@ export default function EditInventoryItemPage() {
     }
   };
 
+  const defaultFormValues = React.useMemo<InventoryItemFormValues | undefined>(() => {
+    if (!item) return undefined;
+    return {
+      name: item.name,
+      description: item.description || "",
+      quantity: item.quantity,
+      unitCost: item.unitCost,
+      minStockLevel: item.minStockLevel || 0,
+      maxStockLevel: item.maxStockLevel || 0,
+      lowStock: item.lowStock || false,
+      categoryId: item.categoryId || "",
+      subCategoryId: item.subCategoryId || null, // Ensure null for empty optional selects
+      locationId: item.locationId || null,   // Ensure null for empty optional selects
+      supplierId: item.supplierId || null,   // Ensure null for empty optional selects
+      unitId: item.unitId || "",
+      removeImage: false, // Initial state for remove image
+    };
+  }, [item]);
+
+
   if (isLoading) {
     return (
       <>
@@ -93,31 +114,15 @@ export default function EditInventoryItemPage() {
     );
   }
 
-  if (!item) {
+  if (!item || !defaultFormValues) { // Check for defaultFormValues as well
      return (
       <>
-        <PageHeader title="Edit Item" description="Item not found." />
+        <PageHeader title="Edit Item" description="Item not found or data incomplete." />
          <Button onClick={() => router.push('/inventory')} variant="outline">Back to Inventory</Button>
       </>
     );
   }
 
-  const defaultFormValues: InventoryItemFormValues = {
-    name: item.name,
-    description: item.description || "",
-    quantity: item.quantity,
-    unitCost: item.unitCost,
-    minStockLevel: item.minStockLevel || 0,
-    maxStockLevel: item.maxStockLevel || 0,
-    lowStock: item.lowStock || false,
-    categoryId: item.categoryId || "",
-    subCategoryId: item.subCategoryId || "",
-    locationId: item.locationId || "",
-    supplierId: item.supplierId || "",
-    unitId: item.unitId || "",
-    removeImage: false, // Initial state for remove image
-    // imageUrl is handled by the form's preview logic
-  };
 
   return (
     <>
@@ -130,7 +135,7 @@ export default function EditInventoryItemPage() {
         defaultValues={defaultFormValues}
         isEditMode={true}
         isLoading={isSubmitting}
-        initialImageUrl={item.imageUrl} // Pass for initial preview
+        initialImageUrl={item.imageUrl} 
       />
     </>
   );
