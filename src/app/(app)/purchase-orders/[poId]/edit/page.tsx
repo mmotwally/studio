@@ -6,7 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { PurchaseOrderForm } from '@/components/purchase-orders/purchase-order-form';
-import { getPurchaseOrderById, updatePurchaseOrderAction } from '../../actions'; // Assuming update action will be here
+import { getPurchaseOrderById, updatePurchaseOrderAction } from '../../actions';
 import type { PurchaseOrderFormValues } from '../../schema';
 import type { PurchaseOrder } from '@/types';
 import { useToast } from "@/hooks/use-toast";
@@ -16,7 +16,8 @@ import { ArrowLeft } from 'lucide-react';
 
 export default function EditPurchaseOrderPage() {
   const router = useRouter();
-  const params = useParams();
+  const paramsPromise = useParams();
+  const params = React.use(paramsPromise);
   const poId = params.poId as string;
   const { toast } = useToast();
 
@@ -51,7 +52,7 @@ export default function EditPurchaseOrderPage() {
     }
   }, [poId, toast]);
 
-  const handleSubmit = async (values: PurchaseOrderFormValues) => {
+  const handleSubmit = (values: PurchaseOrderFormValues) => {
     if (!purchaseOrder) return;
     if (purchaseOrder.status !== 'DRAFT' && purchaseOrder.status !== 'PENDING_APPROVAL') {
         toast({ title: "Cannot Update", description: "This PO can no longer be edited.", variant: "destructive" });
@@ -75,6 +76,7 @@ export default function EditPurchaseOrderPage() {
         });
         setIsSubmitting(false); // Only reset if not a redirect
       }
+      // No need to setIsSubmitting(false) here for success, as redirect handles it.
     });
   };
 
@@ -92,8 +94,7 @@ export default function EditPurchaseOrderPage() {
         description: item.description || "",
         quantityOrdered: item.quantityOrdered,
         unitCost: item.unitCost,
-        // quantityApproved might be set here if the form supports it during edit, 
-        // but currently it's more for display on detail or separate approval step
+        // quantityApproved is not part of the form values for edit, it's handled by a separate process.
       })) || [{ inventoryItemId: "", quantityOrdered: 1, unitCost: 0, description: "" }],
     };
   }, [purchaseOrder]);
