@@ -217,9 +217,9 @@ export default function CabinetDesignerPage() {
         });
          toast({
             title: "Calculation with Custom Template",
-            description: `Attempting to calculate using template: ${currentTemplate.name}. Note: Full dynamic formula evaluation from user-defined templates is conceptual and requires a robust backend parser. Currently, only the 'standard_base_2_door' has fully hardcoded calculation logic in actions.ts.`,
+            description: `Attempting to calculate using template: ${currentTemplate.name}. Backend will try to evaluate formulas dynamically.`,
             variant: "default",
-            duration: 10000,
+            duration: 7000,
         });
     } else if (calculationInput.cabinetType === 'standard_base_2_door') {
         result = await calculateCabinetDetails(calculationInput);
@@ -227,7 +227,7 @@ export default function CabinetDesignerPage() {
     else {
       toast({
         title: "Calculation Not Implemented",
-        description: `Calculation logic for "${cabinetTypes.find(ct => ct.value === calculationInput.cabinetType)?.label}" is not yet implemented in this prototype. Only 'Standard Base Cabinet - 2 Door' (using formulas) or a basic custom template (conceptual evaluation) is currently supported.`,
+        description: `Calculation logic for "${cabinetTypes.find(ct => ct.value === calculationInput.cabinetType)?.label}" is not yet implemented in this prototype. Only 'Standard Base Cabinet - 2 Door' or a defined custom template is currently supported.`,
         variant: "default",
         duration: 7000,
       });
@@ -359,9 +359,9 @@ export default function CabinetDesignerPage() {
   const handleSaveTemplate = () => {
     console.log("Saving Template (Conceptual):", currentTemplate);
     toast({
-        title: "Template Saved (Conceptual)",
-        description: `Template "${currentTemplate.name}" definition logged. To use it for calculation, select it from the 'Cabinet Type' dropdown in the Calculator view. Full dynamic calculation with this template is conceptual.`,
-        duration: 7000,
+        title: "Template Added (This Session)",
+        description: `Template "${currentTemplate.name}" is ready for calculation. The backend will attempt dynamic calculation with its formulas. (Note: Complex formulas may have limitations.)`,
+        duration: 8000,
     });
 
     const existingTypeIndex = cabinetTypes.findIndex(ct => ct.value === currentTemplate.id);
@@ -532,7 +532,7 @@ export default function CabinetDesignerPage() {
       <Card className="lg:col-span-2 shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center"><Palette className="mr-2 h-5 w-5 text-primary" />Calculation Results</CardTitle>
-          <CardDescription>Estimated parts, materials, and costs. (Currently for 'Standard Base 2 Door' or basic custom template)</CardDescription>
+          <CardDescription>Estimated parts, materials, and costs.</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading && (<div className="flex items-center justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Calculating...</p></div>)}
@@ -598,7 +598,7 @@ export default function CabinetDesignerPage() {
             <Card className="shadow-lg">
             <CardHeader>
                 <CardTitle className="flex items-center"><DraftingCompass className="mr-2 h-5 w-5 text-primary" />Define New Cabinet Template</CardTitle>
-                <CardDescription>Specify the parameters, parts, formulas, and edge banding for your custom cabinet. This is a conceptual editor.</CardDescription>
+                <CardDescription>Specify the parameters, parts, formulas, and edge banding for your custom cabinet.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -784,7 +784,7 @@ export default function CabinetDesignerPage() {
             </CardContent>
             <CardFooter className="flex justify-end space-x-3">
                 <Button variant="outline" onClick={() => setViewMode('calculator')}>Cancel</Button>
-                <Button onClick={handleSaveTemplate}><Save className="mr-2 h-4 w-4" /> Save Template (Conceptual)</Button>
+                <Button onClick={handleSaveTemplate}><Save className="mr-2 h-4 w-4" /> Save Template</Button>
             </CardFooter>
             </Card>
         </TooltipProvider>
