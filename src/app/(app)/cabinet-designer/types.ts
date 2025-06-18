@@ -25,6 +25,7 @@ export type CabinetPartType =
   | 'Toe Kick';
 
 export type CabinetTypeContext = 'Base' | 'Wall' | 'Drawer' | 'General';
+export type FormulaDimensionType = 'Width' | 'Height' | 'Quantity' | 'Thickness';
 
 
 export interface CabinetPart {
@@ -108,11 +109,13 @@ export interface PartDefinition {
   cabinetContext?: CabinetTypeContext; // Context like Base, Wall, Drawer
   quantityFormula: string; 
   widthFormula: string; 
-  widthFormulaKey?: string; // Key if selected from predefined
+  widthFormulaKey?: string; // Key if selected from predefined or ID of custom formula
   heightFormula: string; 
-  heightFormulaKey?: string; // Key if selected from predefined
+  heightFormulaKey?: string; // Key if selected from predefined or ID of custom formula
   materialId: string; 
   thicknessFormula?: string; 
+  thicknessFormulaKey?: string; // Key if selected from predefined or ID of custom formula
+  quantityFormulaKey?: string; // Key if selected from predefined or ID of custom formula
   edgeBanding?: EdgeBandingAssignment;
   grainDirection?: 'with' | 'reverse' | 'none' | null; 
   notes?: string;
@@ -163,15 +166,32 @@ export const PREDEFINED_MATERIALS: Array<{id: string; name: string; hasGrain?: b
 
 
 export interface PredefinedFormula {
-  key: string;
+  key: string; // A unique key for predefined formulas (e.g., 'SIDE_BASE_STD_H')
   name: string; // User-friendly name for the dropdown
   description: string;
   example?: string;
-  partType: CabinetPartType | CabinetPartType[] | []; // Can apply to one or multiple part types, or [] if general like QTY_1
-  context: CabinetTypeContext[] | null; // Can apply to one or multiple contexts, or null if general
-  dimension: 'Width' | 'Height' | 'Quantity' | 'Thickness'; // Which dimension this formula is for
+  partType: CabinetPartType | CabinetPartType[] | []; 
+  context: CabinetTypeContext[] | null; 
+  dimension: FormulaDimensionType; 
   formula: string; // The actual formula string
 }
+
+export interface CustomFormulaEntry {
+  id: string; // UUID from database
+  name: string; // User-defined name
+  formulaString: string; // The actual formula string
+  dimensionType: FormulaDimensionType;
+  description?: string;
+  createdAt: string;
+  // Optional: part_types and cabinet_contexts could be added here if needed for filtering
+  // For UI consistency with PredefinedFormula, we might add a 'key' field equal to 'id'
+  // and a 'formula' field equal to 'formulaString' when merging lists.
+}
+
+export type CombinedFormulaItem = Omit<PredefinedFormula, 'key'> & {
+  id: string; // For Predefined, this could be the 'key'. For Custom, it's the DB 'id'.
+  isCustom: boolean; // Flag to distinguish
+};
 
 
 // --- Drawer Set Calculator Types ---
@@ -210,3 +230,4 @@ export interface DrawerSetCalculatorResult {
   totalFrontsHeightWithReveals?: number; 
   cabinetInternalHeight?: number; 
 }
+

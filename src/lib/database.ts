@@ -274,10 +274,23 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       parameters TEXT NOT NULL, -- JSON string
       parts TEXT NOT NULL, -- JSON string
       accessories TEXT, -- JSON string, optional
-      -- userId TEXT, -- Optional: for user-specific templates
       createdAt TEXT NOT NULL,
       lastUpdated TEXT NOT NULL
-      -- FOREIGN KEY (userId) REFERENCES users(id) ON DELETE SET NULL
+    );
+  `);
+
+  await dbConnection.exec(`
+    CREATE TABLE IF NOT EXISTS custom_formulas (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      formula_string TEXT NOT NULL,
+      dimension_type TEXT NOT NULL CHECK (dimension_type IN ('Width', 'Height', 'Quantity', 'Thickness')),
+      description TEXT,
+      -- For future filtering, not used in initial implementation UI
+      -- part_types TEXT, -- JSON array of CabinetPartType
+      -- cabinet_contexts TEXT, -- JSON array of CabinetTypeContext
+      created_at TEXT NOT NULL,
+      UNIQUE (name, dimension_type) -- Ensure unique name per dimension type
     );
   `);
 
@@ -285,6 +298,7 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
 }
 
 async function _dropTables(dbConnection: Database<sqlite3.Database, sqlite3.Statement>) {
+  await dbConnection.exec(`DROP TABLE IF EXISTS custom_formulas;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS cabinet_templates;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS stock_movements;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS purchase_order_items;`);
@@ -535,7 +549,7 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
         await db.exec('PRAGMA foreign_keys = ON;');
 
         let schemaNeedsReset = false;
-        const tablesToEnsureExist = ['departments', 'inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles', 'requisitions', 'requisition_items', 'purchase_orders', 'purchase_order_items', 'stock_movements', 'cabinet_templates'];
+        const tablesToEnsureExist = ['departments', 'inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles', 'requisitions', 'requisition_items', 'purchase_orders', 'purchase_order_items', 'stock_movements', 'cabinet_templates', 'custom_formulas'];
         const columnsToCheck: Record<string, string[]> = {
           inventory: ['minStockLevel', 'maxStockLevel', 'description', 'imageUrl', 'lastPurchasePrice', 'averageCost'],
           units_of_measurement: ['conversion_factor', 'base_unit_id'],
@@ -548,6 +562,7 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
           purchase_order_items: ['purchaseOrderId', 'inventoryItemId', 'quantityOrdered', 'unitCost', 'quantityApproved'],
           stock_movements: ['inventoryItemId', 'movementType', 'quantityChanged', 'balanceAfterMovement', 'movementDate'],
           cabinet_templates: ['name', 'type', 'defaultDimensions', 'parameters', 'parts', 'createdAt', 'lastUpdated'],
+          custom_formulas: ['name', 'formula_string', 'dimension_type', 'created_at'],
         };
 
         for (const tableName of tablesToEnsureExist) {
@@ -682,5 +697,4 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
 
     
 
-    
 

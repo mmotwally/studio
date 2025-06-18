@@ -1,7 +1,7 @@
 
 'use server';
 
-import type { CalculatedCabinet, CabinetCalculationInput, CabinetPart, AccessoryItem, CabinetTemplateData, PartDefinition, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer, DrawerPartCalculation } from './types';
+import type { CalculatedCabinet, CabinetCalculationInput, CabinetPart, AccessoryItem, CabinetTemplateData, PartDefinition, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer, DrawerPartCalculation, CustomFormulaEntry, FormulaDimensionType } from './types';
 import { openDb } from '@/lib/database';
 import { revalidatePath } from 'next/cache';
 
@@ -42,11 +42,11 @@ function evaluateFormula(formula: string | undefined, params: { W: number, H: nu
     // A proper library like math.js or a custom parser is needed.
     // Basic check for allowed chars (alphanumeric, math operators, parens, decimal point, space)
     // This regex is still very permissive for an `eval` call.
-    if (formula.match(/^[a-zA-Z0-9.+\-*/\s()]*$/)) {
+    if (formula.match(/^[a-zA-Z0-9.+\-*/\s()_]*$/)) { // Added underscore for param names
       // Construct the evaluation string by defining variables in the scope
       let evalString = '';
       for (const key in evalScope) {
-        if (evalScope[key] !== undefined) {
+        if (evalScope[key] !== undefined && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) { // Ensure valid JS variable names
           evalString += `const ${key} = ${evalScope[key]}; `;
         }
       }
@@ -81,7 +81,7 @@ export async function calculateCabinetDetails(
   let templateToUse = input.customTemplate;
 
   // If customTemplate is not directly provided, but cabinetType refers to a DB template ID, try to load it.
-  if (!templateToUse && input.cabinetType && input.cabinetType !== 'standard_base_2_door') {
+  if (!templateToUse && input.cabinetType && input.cabinetType !== 'standard_base_2_door') { // Add more predefined checks if needed
     const dbTemplate = await getCabinetTemplateByIdAction(input.cabinetType);
     if (dbTemplate) {
       templateToUse = dbTemplate;
@@ -440,13 +440,11 @@ export async function saveCabinetTemplateAction(
   const db = await openDb();
   try {
     const now = new Date().toISOString();
-    // If templateData.id is already set (e.g., from client-side generation or editing existing), use it.
-    // Otherwise, generate a new one (though client should ideally always provide one for new templates too).
     const id = templateData.id || crypto.randomUUID();
 
     await db.run(
       `INSERT INTO cabinet_templates (id, name, type, previewImage, defaultDimensions, parameters, parts, accessories, createdAt, lastUpdated)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name,
          type = excluded.type,
@@ -455,7 +453,7 @@ export async function saveCabinetTemplateAction(
          parameters = excluded.parameters,
          parts = excluded.parts,
          accessories = excluded.accessories,
-         lastUpdated = excluded.lastUpdated`,
+         lastUpdated = datetime('now')`,
       id,
       templateData.name,
       templateData.type,
@@ -463,9 +461,7 @@ export async function saveCabinetTemplateAction(
       JSON.stringify(templateData.defaultDimensions),
       JSON.stringify(templateData.parameters),
       JSON.stringify(templateData.parts),
-      templateData.accessories ? JSON.stringify(templateData.accessories) : null,
-      now, // createdAt - only set on initial insert by table default or explicit insert logic
-      now  // lastUpdated
+      templateData.accessories ? JSON.stringify(templateData.accessories) : null
     );
     revalidatePath('/cabinet-designer');
     return { success: true, id: id };
@@ -531,3 +527,70 @@ export async function deleteCabinetTemplateAction(
   }
 }
 
+
+// --- Custom Formula Database Actions ---
+
+export async function saveCustomFormulaAction(
+  name: string,
+  formulaString: string,
+  dimensionType: FormulaDimensionType,
+  description?: string
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  const db = await openDb();
+  try {
+    const id = crypto.randomUUID();
+    const createdAt = new Date().toISOString();
+
+    await db.run(
+      `INSERT INTO custom_formulas (id, name, formula_string, dimension_type, description, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      id,
+      name,
+      formulaString,
+      dimensionType,
+      description || null,
+      createdAt
+    );
+    revalidatePath('/cabinet-designer'); // To refresh dropdowns if they show custom formulas
+    return { success: true, id: id };
+  } catch (error) {
+    console.error("Failed to save custom formula:", error);
+    if (error instanceof Error && error.message.includes("UNIQUE constraint failed")) {
+      return { success: false, error: `A custom formula with the name "${name}" for dimension type "${dimensionType}" already exists.` };
+    }
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+export async function getCustomFormulasAction(): Promise<CustomFormulaEntry[]> {
+  const db = await openDb();
+  try {
+    const rows = await db.all<any[]>("SELECT id, name, formula_string, dimension_type, description, created_at FROM custom_formulas ORDER BY name ASC");
+    return rows.map(row => ({
+      id: row.id,
+      name: row.name,
+      formulaString: row.formula_string,
+      dimensionType: row.dimension_type as FormulaDimensionType,
+      description: row.description,
+      createdAt: row.created_at,
+    }));
+  } catch (error) {
+    console.error("Failed to get custom formulas:", error);
+    return [];
+  }
+}
+
+export async function deleteCustomFormulaAction(id: string): Promise<{ success: boolean; error?: string }> {
+  const db = await openDb();
+  try {
+    const result = await db.run("DELETE FROM custom_formulas WHERE id = ?", id);
+    if (result.changes === 0) {
+      return { success: false, error: `Custom formula with ID ${id} not found.` };
+    }
+    revalidatePath('/cabinet-designer');
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to delete custom formula:", error);
+    return { success: false, error: (error as Error).message };
+  }
+}
