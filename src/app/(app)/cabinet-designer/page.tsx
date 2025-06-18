@@ -24,6 +24,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AddPartDialog } from '@/components/cabinet-designer/add-part-dialog';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { PREDEFINED_FORMULAS } from './predefined-formulas';
 
 
 // Available cabinet types for selection
@@ -45,6 +46,7 @@ const initialNewTemplate: CabinetTemplateData = {
   id: `custom_${Date.now()}`,
   name: 'My New Custom Cabinet',
   type: 'custom',
+  previewImage: 'https://placehold.co/300x200/FADBD8/C0392B.png', // Updated preview image
   defaultDimensions: { width: 600, height: 700, depth: 500 },
   parameters: {
     PT: 18, // Panel Thickness
@@ -246,7 +248,7 @@ export default function CabinetDesignerPage() {
         case 'tall_pantry_2_door': return "pantry cabinet";
         case 'base_cabinet_1_door_1_drawer': return "kitchen drawer";
         case 'corner_wall_cabinet': return "corner cabinet";
-        case currentTemplate?.id: return "custom cabinet";
+        case currentTemplate?.id: return "drawer door"; // Updated hint for custom templates
         default: return "cabinet furniture";
     }
   }
@@ -296,7 +298,14 @@ export default function CabinetDesignerPage() {
     setCurrentTemplate(prev => {
         const newTemplate = JSON.parse(JSON.stringify(prev));
         if (newTemplate.parts && newTemplate.parts[partIndex]) {
-            newTemplate.parts[partIndex][formulaField] = selectedFormulaValue;
+            if (selectedFormulaValue === PREDEFINED_FORMULAS.find(f => f.key === 'CUSTOM')?.formula) { // Assuming CUSTOM formula has empty string value
+                (newTemplate.parts[partIndex] as any)[`${formulaField}Key`] = 'CUSTOM';
+                (newTemplate.parts[partIndex] as any)[formulaField] = ""; // Clear the formula for custom input
+            } else {
+                const selectedFormula = PREDEFINED_FORMULAS.find(f => f.formula === selectedFormulaValue);
+                (newTemplate.parts[partIndex] as any)[`${formulaField}Key`] = selectedFormula?.key;
+                (newTemplate.parts[partIndex] as any)[formulaField] = selectedFormulaValue;
+            }
         } else {
             console.error(`Part at index ${partIndex} not found for formula selection.`);
         }
@@ -387,56 +396,80 @@ export default function CabinetDesignerPage() {
   };
 
 
-  const FormulaInputWithHelper = ({ partIndex, formulaField, label, placeholder }: { partIndex: number, formulaField: keyof PartDefinition, label: string, placeholder: string }) => (
-    <div className="flex items-end gap-2">
-      <div className="flex-grow">
-        <Label htmlFor={`part_${partIndex}_${formulaField}`}>{label}</Label>
-        {(formulaField === 'widthFormula' || formulaField === 'heightFormula' || formulaField === 'thicknessFormula' || formulaField === 'quantityFormula') ? (
-            <Textarea
-              id={`part_${partIndex}_${formulaField}`}
-              rows={1}
-              value={(currentTemplate.parts[partIndex] as any)[formulaField] || ''}
-              onChange={(e) => handleTemplateInputChange(e, `parts.${formulaField}`, partIndex, formulaField as keyof PartDefinition)}
-              placeholder={placeholder}
-              className="text-sm"
-            />
-        ) : (
-             <Input
-                id={`part_${partIndex}_${formulaField}`}
-                value={(currentTemplate.parts[partIndex] as any)[formulaField] || ''}
-                onChange={(e) => handleTemplateInputChange(e, `parts.${formulaField}`, partIndex, formulaField as keyof PartDefinition)}
-                placeholder={placeholder}
-                className="text-sm"
-             />
-        )}
-      </div>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="outline" size="sm" className="whitespace-nowrap px-2">
-            <ChevronDown className="h-4 w-4" /> <span className="ml-1 text-xs">Ins</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-64 max-h-80 overflow-y-auto">
-          {formulaHelpItems.map((item) => (
-            <DropdownMenuItem key={item.id} onSelect={() => handleFormulaSelect(partIndex, formulaField as any, item.value)} className="flex justify-between items-center">
-              <span className="text-xs">{item.label}</span>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 opacity-50 hover:opacity-100">
-                    <HelpCircle className="h-3 w-3" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="left" className="max-w-xs text-xs p-2 bg-popover text-popover-foreground">
-                  <p className="font-semibold">{item.description}</p>
-                  <p className="text-xs text-muted-foreground">{item.example}</p>
-                </TooltipContent>
-              </Tooltip>
-            </DropdownMenuItem>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
-  );
+  const FormulaInputWithHelper = ({ partIndex, formulaField, label, placeholder }: { partIndex: number, formulaField: keyof PartDefinition, label: string, placeholder: string }) => {
+      const currentFormulaKey = (currentTemplate.parts[partIndex] as any)[`${formulaField}Key`];
+      const isCustom = currentFormulaKey === 'CUSTOM' || !PREDEFINED_FORMULAS.find(f => f.key === currentFormulaKey && (f.dimension === 'Width' ? formulaField === 'widthFormula' : f.dimension === 'Height' ? formulaField === 'heightFormula' : f.dimension === 'Quantity' ? formulaField === 'quantityFormula' : formulaField === 'thicknessFormula' ));
+      const relevantFormulas = PREDEFINED_FORMULAS.filter(f => {
+          const part = currentTemplate.parts[partIndex];
+          if (!part) return false;
+          const contextMatch = f.context === null || (part.cabinetContext && f.context.includes(part.cabinetContext));
+          const partTypeMatch = Array.isArray(f.partType) ? f.partType.includes(part.partType) : f.partType === part.partType || f.partType.length === 0;
+          const dimensionMatch = (f.dimension === 'Width' && formulaField === 'widthFormula') ||
+                               (f.dimension === 'Height' && formulaField === 'heightFormula') ||
+                               (f.dimension === 'Quantity' && formulaField === 'quantityFormula') ||
+                               (f.dimension === 'Thickness' && formulaField === 'thicknessFormula');
+          return contextMatch && partTypeMatch && dimensionMatch;
+      }).sort((a,b) => a.name.localeCompare(b.name));
+
+
+      return (
+        <div className="flex items-end gap-2">
+          <div className="flex-grow">
+            <Label htmlFor={`part_${partIndex}_${formulaField}`}>{label}</Label>
+            {(formulaField === 'widthFormula' || formulaField === 'heightFormula' || formulaField === 'quantityFormula' || formulaField === 'thicknessFormula') ? (
+                <Textarea
+                  id={`part_${partIndex}_${formulaField}`}
+                  rows={1}
+                  value={(currentTemplate.parts[partIndex] as any)[formulaField] || ''}
+                  onChange={(e) => handleTemplateInputChange(e, `parts.${formulaField}`, partIndex, formulaField as keyof PartDefinition)}
+                  placeholder={placeholder}
+                  className="text-sm"
+                  readOnly={!isCustom && formulaField !== 'quantityFormula' && formulaField !== 'thicknessFormula'}
+                />
+            ) : (
+                 <Input
+                    id={`part_${partIndex}_${formulaField}`}
+                    value={(currentTemplate.parts[partIndex] as any)[formulaField] || ''}
+                    onChange={(e) => handleTemplateInputChange(e, `parts.${formulaField}`, partIndex, formulaField as keyof PartDefinition)}
+                    placeholder={placeholder}
+                    className="text-sm"
+                    readOnly={!isCustom}
+                 />
+            )}
+          </div>
+          {(formulaField === 'widthFormula' || formulaField === 'heightFormula' || formulaField === 'quantityFormula' || formulaField === 'thicknessFormula') && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="whitespace-nowrap px-2">
+                  <ChevronDown className="h-4 w-4" /> <span className="ml-1 text-xs">Ins</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72 max-h-96 overflow-y-auto">
+                {relevantFormulas.map((item) => (
+                  <DropdownMenuItem key={item.key} onSelect={() => handleFormulaSelect(partIndex, formulaField as any, item.formula)} className="flex justify-between items-center">
+                    <span className="text-xs">{item.name} ({item.formula})</span>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 opacity-50 hover:opacity-100">
+                          <HelpCircle className="h-3 w-3" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="max-w-xs text-xs p-2 bg-popover text-popover-foreground">
+                        <p className="font-semibold">{item.description}</p>
+                        <p className="text-xs text-muted-foreground">{item.example}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </DropdownMenuItem>
+                ))}
+                 <DropdownMenuItem key="CUSTOM" onSelect={() => handleFormulaSelect(partIndex, formulaField as any, PREDEFINED_FORMULAS.find(f => f.key === 'CUSTOM')?.formula || "")} className="flex justify-between items-center">
+                     <span className="text-xs">Custom Formula...</span>
+                 </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
+      );
+  };
 
 
   const renderCalculatorView = () => (
