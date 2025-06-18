@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { FormItem } from '@/components/ui/form'; // Form is not directly used here, FormItem for Checkbox layout
 import { useToast } from "@/hooks/use-toast";
-import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle } from 'lucide-react';
+import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks } from 'lucide-react';
 import { calculateCabinetDetails, calculateDrawerSet } from './actions';
 import type { CabinetCalculationInput, CalculatedCabinet, CabinetPart, CabinetTemplateData, PartDefinition, CabinetPartType, CabinetTypeContext, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer as SingleCalculatedDrawer } from './types';
 import { PREDEFINED_MATERIALS } from './types';
@@ -215,12 +215,6 @@ export default function CabinetDesignerPage() {
             cabinetType: currentTemplate.id,
             customTemplate: currentTemplate
         });
-         toast({
-            title: "Calculation with Custom Template",
-            description: `Attempting to calculate using template: ${currentTemplate.name}. Backend will try to evaluate formulas dynamically.`,
-            variant: "default",
-            duration: 7000,
-        });
     } else if (calculationInput.cabinetType === 'standard_base_2_door') {
         result = await calculateCabinetDetails(calculationInput);
     }
@@ -357,18 +351,18 @@ export default function CabinetDesignerPage() {
   };
 
   const handleSaveTemplate = () => {
-    console.log("Saving Template (Conceptual):", currentTemplate);
+    const templateName = currentTemplate.name || "Unnamed Template";
     toast({
         title: "Template Added (This Session)",
-        description: `Template "${currentTemplate.name}" is ready for calculation. The backend will attempt dynamic calculation with its formulas. (Note: Complex formulas may have limitations.)`,
+        description: `Template "${templateName}" is ready for calculation. The backend will attempt dynamic calculation with its formulas. (Note: Complex formulas may have limitations.)`,
         duration: 8000,
     });
 
     const existingTypeIndex = cabinetTypes.findIndex(ct => ct.value === currentTemplate.id);
     if (existingTypeIndex > -1) {
-        cabinetTypes[existingTypeIndex] = { value: currentTemplate.id, label: `${currentTemplate.name} (Custom)` };
+        cabinetTypes[existingTypeIndex] = { value: currentTemplate.id, label: `${templateName} (Custom)` };
     } else {
-        cabinetTypes.push({value: currentTemplate.id, label: `${currentTemplate.name} (Custom)`});
+        cabinetTypes.push({value: currentTemplate.id, label: `${templateName} (Custom)`});
     }
 
     setCalculationInput({
@@ -581,6 +575,31 @@ export default function CabinetDesignerPage() {
           {!isLoading && !calculatedData && !calculationError && (<div className="text-center py-10 text-muted-foreground"><Library className="mx-auto h-12 w-12 mb-4" /><p>Select a cabinet type, enter dimensions, and click "Calculate" to see the results.</p></div>)}
         </CardContent>
       </Card>
+      
+      {/* Project Planner Placeholder Card */}
+      <Card className="lg:col-span-3 shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center"><ListChecks className="mr-2 h-5 w-5 text-primary" />Project Planner (Conceptual)</CardTitle>
+          <CardDescription>
+            Plan multiple cabinets for a project. Full project-level calculation is a planned future feature.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <Textarea
+            placeholder="List your project cabinets here for planning (e.g.,&#10;- 2 x Base Cabinet 2-Door (600W x 720H x 580D)&#10;- 1 x Wall Cabinet 1-Door (400W x 600H x 300D)&#10;- ...)"
+            rows={5}
+            className="text-sm"
+          />
+          <Button className="w-full md:w-auto" disabled>
+            Calculate Entire Project
+          </Button>
+          <p className="text-xs text-muted-foreground">
+            Note: For now, please calculate each cabinet individually using the 'Configure Cabinet' section above. 
+            The list above is for your manual planning purposes only.
+          </p>
+        </CardContent>
+      </Card>
+
     </div>
   );
 
@@ -872,4 +891,4 @@ export default function CabinetDesignerPage() {
   );
 }
 
-
+      
