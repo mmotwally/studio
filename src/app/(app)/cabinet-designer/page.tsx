@@ -132,6 +132,8 @@ export default function CabinetDesignerPage() {
     setCalculationInput(prev => ({ ...prev, cabinetType: value }));
     if (value === 'standard_base_2_door') {
         setCalculationInput(prev => ({ ...prev, width: defaultDims.width, height: defaultDims.height, depth: defaultDims.depth }));
+    } else if (value === 'base_cabinet_1_door_1_drawer') {
+        setCalculationInput(prev => ({ ...prev, width: 600, height: 720, depth: 560 })); // Example specific dims
     }
     setCalculatedData(null);
     setCalculationError(null);
@@ -216,7 +218,7 @@ export default function CabinetDesignerPage() {
         case 'standard_base_2_door': return "base cabinet";
         case 'wall_cabinet_1_door': return "wall cabinet";
         case 'tall_pantry_2_door': return "pantry cabinet";
-        case 'base_cabinet_1_door_1_drawer': return "kitchen drawer";
+        case 'base_cabinet_1_door_1_drawer': return "drawer door";
         case 'corner_wall_cabinet': return "corner cabinet";
         case currentTemplate?.id: return "drawer door";
         default: return "cabinet furniture";
@@ -613,7 +615,7 @@ export default function CabinetDesignerPage() {
                             <Card key={part.partId || index} className="p-4 relative bg-card/80">
                                 <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
                                 
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 items-start">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 items-start">
                                     <div><Label>Part Type</Label><Input disabled value={part.partType} className="text-sm" /> </div>
                                     <div><Label>Part Name Label</Label><Input value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} placeholder="e.g., Side Panel" className="text-sm"/></div>
                                     <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula" placeholder="e.g., 2"/>
@@ -788,3 +790,4 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
+
