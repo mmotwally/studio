@@ -23,6 +23,7 @@ import { Dialog, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { AddPartDialog } from '@/components/cabinet-designer/add-part-dialog';
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 
 
 // Available cabinet types for selection
@@ -522,248 +523,250 @@ export default function CabinetDesignerPage() {
           {!isLoading && !calculatedData && !calculationError && (<div className="text-center py-10 text-muted-foreground"><Library className="mx-auto h-12 w-12 mb-4" /><p>Select a cabinet type, enter dimensions, and click "Calculate" to see the results.</p></div>)}
         </CardContent>
       </Card>
-
-      {/* Drawer Set Calculator Card */}
-      <Card className="lg:col-span-3 shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center"><BoxSelect className="mr-2 h-5 w-5 text-primary" />Drawer Set Calculator</CardTitle>
-          <CardDescription>Calculate components for a set of drawers within a cabinet.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div><Label htmlFor="ds_cabInternalHeight">Cabinet Internal Height (mm)</Label><Input id="ds_cabInternalHeight" name="cabinetInternalHeight" type="number" value={drawerSetInput.cabinetInternalHeight} onChange={handleDrawerSetInputChange} placeholder="e.g., 684"/></div>
-            <div><Label htmlFor="ds_cabWidth">Cabinet Width (mm)</Label><Input id="ds_cabWidth" name="cabinetWidth" type="number" value={drawerSetInput.cabinetWidth} onChange={handleDrawerSetInputChange} placeholder="e.g., 564"/></div>
-            <div><Label htmlFor="ds_numDrawers">Number of Drawers</Label><Input id="ds_numDrawers" name="numDrawers" type="number" value={drawerSetInput.numDrawers} onChange={handleDrawerSetInputChange} placeholder="e.g., 3"/></div>
-            <div><Label htmlFor="ds_drawerReveal">Drawer Reveal (mm)</Label><Input id="ds_drawerReveal" name="drawerReveal" type="number" value={drawerSetInput.drawerReveal} onChange={handleDrawerSetInputChange} placeholder="e.g., 3"/></div>
-            <div><Label htmlFor="ds_panelThickness">Panel Thickness (T, mm)</Label><Input id="ds_panelThickness" name="panelThickness" type="number" value={drawerSetInput.panelThickness} onChange={handleDrawerSetInputChange} placeholder="e.g., 18"/></div>
-            <div><Label htmlFor="ds_slideClearance">Total Slide Clearance (mm)</Label><Input id="ds_slideClearance" name="drawerSlideClearanceTotal" type="number" value={drawerSetInput.drawerSlideClearanceTotal} onChange={handleDrawerSetInputChange} placeholder="e.g., 13"/></div>
-            <div><Label htmlFor="ds_boxSideDepth">Drawer Box Side Depth (mm)</Label><Input id="ds_boxSideDepth" name="drawerBoxSideDepth" type="number" value={drawerSetInput.drawerBoxSideDepth} onChange={handleDrawerSetInputChange} placeholder="e.g., 500"/></div>
-            <div><Label htmlFor="ds_boxSideHeight">Drawer Box Side Height (mm)</Label><Input id="ds_boxSideHeight" name="drawerBoxSideHeight" type="number" value={drawerSetInput.drawerBoxSideHeight} onChange={handleDrawerSetInputChange} placeholder="e.g., 150"/></div>
-            <div className="lg:col-span-3"><Label htmlFor="ds_customFronts">Custom Drawer Front Heights (mm, comma-separated, optional)</Label><Input id="ds_customFronts" name="customDrawerFrontHeights" type="text" value={drawerSetInput.customDrawerFrontHeights?.join(', ') || ''} onChange={handleDrawerSetInputChange} placeholder="e.g., 100, 150, 200"/></div>
-          </div>
-          <Button onClick={handleCalculateDrawerSet} className="w-full md:w-auto" disabled={isCalculatingDrawers}>
-            {isCalculatingDrawers ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Calculator className="mr-2 h-4 w-4" />}
-            {isCalculatingDrawers ? "Calculating Drawers..." : "Calculate Drawer Set Components"}
-          </Button>
-
-          {isCalculatingDrawers && (<div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2">Calculating drawer parts...</p></div>)}
-          {drawerCalcError && !isCalculatingDrawers && (
-            <div className="text-destructive bg-destructive/10 p-3 rounded-md text-sm flex items-center gap-2">
-              <AlertCircle className="h-4 w-4"/> {drawerCalcError}
-            </div>
-          )}
-          {drawerSetResult && drawerSetResult.success && drawerSetResult.calculatedDrawers.length > 0 && !isCalculatingDrawers && (
-            <div className="space-y-4 mt-4">
-              <h3 className="text-md font-semibold">Calculated Drawer Components:</h3>
-              {drawerSetResult.cabinetInternalHeight && drawerSetResult.totalFrontsHeightWithReveals && (
-                 <p className="text-xs text-muted-foreground">
-                    Total height used by fronts + reveals: {drawerSetResult.totalFrontsHeightWithReveals.toFixed(1)}mm (Cabinet internal height: {drawerSetResult.cabinetInternalHeight.toFixed(1)}mm)
-                 </p>
-              )}
-              {drawerSetResult.calculatedDrawers.map((drawer: SingleCalculatedDrawer) => (
-                <Card key={drawer.drawerNumber} className="bg-muted/30">
-                  <CardHeader className="pb-2 pt-3 px-4">
-                    <CardTitle className="text-base">Drawer {drawer.drawerNumber}</CardTitle>
-                    <CardDescription className="text-xs">Front Height: {drawer.overallFrontHeight.toFixed(1)}mm, Box Side Height: {drawer.boxHeight.toFixed(1)}mm</CardDescription>
-                  </CardHeader>
-                  <CardContent className="px-4 pb-3">
-                    <Table className="text-xs">
-                      <TableHeader><TableRow><TableHead>Part Name</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Width (mm)</TableHead><TableHead className="text-right">Height (mm)</TableHead><TableHead className="text-center">Thick (mm)</TableHead></TableRow></TableHeader>
-                      <TableBody>
-                        {drawer.parts.map(part => (
-                          <TableRow key={part.name}>
-                            <TableCell>{part.name}</TableCell>
-                            <TableCell className="text-center">{part.quantity}</TableCell>
-                            <TableCell className="text-right">{part.width.toFixed(1)}</TableCell>
-                            <TableCell className="text-right">{part.height.toFixed(1)}</TableCell>
-                            <TableCell className="text-center">{part.thickness.toFixed(0)}</TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-          {!isCalculatingDrawers && !drawerSetResult && !drawerCalcError && (<div className="text-center py-6 text-muted-foreground text-sm">Enter drawer parameters and click "Calculate Drawer Set Components".</div>)}
-        </CardContent>
-      </Card>
-
-
     </div>
   );
 
  const renderTemplateDefinitionView = () => (
-    <TooltipProvider>
-    <Card className="shadow-lg">
-      <CardHeader>
-        <CardTitle className="flex items-center"><DraftingCompass className="mr-2 h-5 w-5 text-primary" />Define New Cabinet Template</CardTitle>
-        <CardDescription>Specify the parameters, parts, formulas, and edge banding for your custom cabinet. This is a conceptual editor.</CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-6">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div><Label htmlFor="templateName">Template Name</Label><Input id="templateName" name="name" value={currentTemplate.name} onChange={(e) => handleTemplateInputChange(e, 'name')} placeholder="e.g., Kitchen Base - Drawers"/></div>
-          <div>
-            <Label htmlFor="templateType">Template Type</Label>
-            <Select value={currentTemplate.type} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'type', value } } as any, 'type')}>
-                <SelectTrigger id="templateType"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                    <SelectItem value="base">Base Cabinet</SelectItem>
-                    <SelectItem value="wall">Wall Cabinet</SelectItem>
-                    <SelectItem value="tall">Tall Cabinet</SelectItem>
-                    <SelectItem value="custom">Custom</SelectItem>
-                </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <Card>
-            <CardHeader><CardTitle className="text-lg">Default Dimensions (mm)</CardTitle></CardHeader>
-            <CardContent className="grid grid-cols-3 gap-4">
-                <div><Label htmlFor="defaultWidth">Width</Label><Input id="defaultWidth" name="width" type="number" value={currentTemplate.defaultDimensions.width} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.width')} /></div>
-                <div><Label htmlFor="defaultHeight">Height</Label><Input id="defaultHeight" name="height" type="number" value={currentTemplate.defaultDimensions.height} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.height')} /></div>
-                <div><Label htmlFor="defaultDepth">Depth</Label><Input id="defaultDepth" name="depth" type="number" value={currentTemplate.defaultDimensions.depth} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.depth')} /></div>
-            </CardContent>
-        </Card>
-
-        <Card>
-            <CardHeader><CardTitle className="text-lg">Global Parameters (mm)</CardTitle><CardDescription>Define variables to use in formulas (e.g., W - 2\*PT).</CardDescription></CardHeader>
-            <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {globalParameterUIDefinitions.map(({ key, displayName, tooltip }) => (
-                    <div key={key}>
-                        <div className="flex items-center justify-between mb-1">
-                            <Label htmlFor={`param_${key}`}>{displayName}</Label>
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <Button variant="ghost" size="icon" className="h-5 w-5 opacity-60 hover:opacity-100 p-0">
-                                        <HelpCircle className="h-3.5 w-3.5" />
-                                    </Button>
-                                </TooltipTrigger>
-                                <TooltipContent side="top" className="max-w-xs text-xs p-2">
-                                    <p className="font-medium">{tooltip}</p>
-                                </TooltipContent>
-                            </Tooltip>
-                        </div>
-                        <Input
-                            id={`param_${key}`}
-                            name={key}
-                            type="number"
-                            value={(currentTemplate.parameters as any)[key] || ''}
-                            onChange={(e) => handleTemplateInputChange(e, `parameters.${key}`)}
-                        />
-                    </div>
-                ))}
-            </CardContent>
-        </Card>
-
-        <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-                <div><CardTitle className="text-lg">Part Definitions</CardTitle><CardDescription>Define each part, its quantity, dimensions (using formulas), material, and edge banding.</CardDescription></div>
-                 <Dialog open={isAddPartDialogOpen} onOpenChange={setIsAddPartDialogOpen}>
-                    <DialogTrigger asChild>
-                         <Button size="sm"><PlusCircle className="mr-2 h-4 w-4" />Add Part</Button>
-                    </DialogTrigger>
-                    <AddPartDialog
-                        setOpen={setIsAddPartDialogOpen}
-                        onAddPart={handleAddPartToTemplate}
-                        existingPartCount={currentTemplate.parts.length}
-                        templateParameters={currentTemplate.parameters}
-                    />
-                 </Dialog>
+    <div className="space-y-6">
+        <TooltipProvider>
+            <Card className="shadow-lg">
+            <CardHeader>
+                <CardTitle className="flex items-center"><DraftingCompass className="mr-2 h-5 w-5 text-primary" />Define New Cabinet Template</CardTitle>
+                <CardDescription>Specify the parameters, parts, formulas, and edge banding for your custom cabinet. This is a conceptual editor.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-                {currentTemplate.parts.map((part, index) => (
-                    <Card key={part.partId || index} className="p-4 relative bg-card/80">
-                         <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 items-start">
-                            <div><Label>Part Type</Label><Input disabled value={part.partType} className="text-sm" /> </div>
-                            <div><Label>Part Name Label</Label><Input value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} placeholder="e.g., Side Panel" className="text-sm"/></div>
-                            <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula" placeholder="e.g., 2"/>
+            <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><Label htmlFor="templateName">Template Name</Label><Input id="templateName" name="name" value={currentTemplate.name} onChange={(e) => handleTemplateInputChange(e, 'name')} placeholder="e.g., Kitchen Base - Drawers"/></div>
+                <div>
+                    <Label htmlFor="templateType">Template Type</Label>
+                    <Select value={currentTemplate.type} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'type', value } } as any, 'type')}>
+                        <SelectTrigger id="templateType"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="base">Base Cabinet</SelectItem>
+                            <SelectItem value="wall">Wall Cabinet</SelectItem>
+                            <SelectItem value="tall">Tall Cabinet</SelectItem>
+                            <SelectItem value="custom">Custom</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+                </div>
 
-                            <FormulaInputWithHelper partIndex={index} formulaField="widthFormula" label="Width Formula" placeholder="e.g., D or W - 2*PT"/>
-                            <FormulaInputWithHelper partIndex={index} formulaField="heightFormula" label="Height Formula" placeholder="e.g., H or D - BPO"/>
+                <Card>
+                    <CardHeader><CardTitle className="text-lg">Default Dimensions (mm)</CardTitle></CardHeader>
+                    <CardContent className="grid grid-cols-3 gap-4">
+                        <div><Label htmlFor="defaultWidth">Width</Label><Input id="defaultWidth" name="width" type="number" value={currentTemplate.defaultDimensions.width} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.width')} /></div>
+                        <div><Label htmlFor="defaultHeight">Height</Label><Input id="defaultHeight" name="height" type="number" value={currentTemplate.defaultDimensions.height} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.height')} /></div>
+                        <div><Label htmlFor="defaultDepth">Depth</Label><Input id="defaultDepth" name="depth" type="number" value={currentTemplate.defaultDimensions.depth} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.depth')} /></div>
+                    </CardContent>
+                </Card>
 
-                            <div>
-                                <Label>Material ID</Label>
-                                 <Select
-                                    value={part.materialId}
-                                    onValueChange={(value) => handleTemplateInputChange({ target: { name: 'materialId', value }} as any, 'parts.materialId', index, 'materialId')}
-                                >
-                                    <SelectTrigger className="text-sm"><SelectValue placeholder="Select material" /></SelectTrigger>
-                                    <SelectContent>
-                                        {PREDEFINED_MATERIALS.map((material) => (
-                                            <SelectItem key={material.id} value={material.id}>
-                                                {material.name} {material.hasGrain ? "(Grain)" : ""}
-                                            </SelectItem>
+                <Card>
+                    <CardHeader><CardTitle className="text-lg">Global Parameters (mm)</CardTitle><CardDescription>Define variables to use in formulas (e.g., W - 2\*PT).</CardDescription></CardHeader>
+                    <CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        {globalParameterUIDefinitions.map(({ key, displayName, tooltip }) => (
+                            <div key={key}>
+                                <div className="flex items-center justify-between mb-1">
+                                    <Label htmlFor={`param_${key}`}>{displayName}</Label>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-5 w-5 opacity-60 hover:opacity-100 p-0">
+                                                <HelpCircle className="h-3.5 w-3.5" />
+                                            </Button>
+                                        </TooltipTrigger>
+                                        <TooltipContent side="top" className="max-w-xs text-xs p-2">
+                                            <p className="font-medium">{tooltip}</p>
+                                        </TooltipContent>
+                                    </Tooltip>
+                                </div>
+                                <Input
+                                    id={`param_${key}`}
+                                    name={key}
+                                    type="number"
+                                    value={(currentTemplate.parameters as any)[key] || ''}
+                                    onChange={(e) => handleTemplateInputChange(e, `parameters.${key}`)}
+                                />
+                            </div>
+                        ))}
+                    </CardContent>
+                </Card>
+
+                <Card>
+                    <CardHeader className="flex flex-row items-center justify-between">
+                        <div><CardTitle className="text-lg">Part Definitions</CardTitle><CardDescription>Define each part, its quantity, dimensions (using formulas), material, and edge banding.</CardDescription></div>
+                        <Dialog open={isAddPartDialogOpen} onOpenChange={setIsAddPartDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button size="sm"><PlusCircle className="mr-2 h-4 w-4" />Add Part</Button>
+                            </DialogTrigger>
+                            <AddPartDialog
+                                setOpen={setIsAddPartDialogOpen}
+                                onAddPart={handleAddPartToTemplate}
+                                existingPartCount={currentTemplate.parts.length}
+                                templateParameters={currentTemplate.parameters}
+                            />
+                        </Dialog>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        {currentTemplate.parts.map((part, index) => (
+                            <Card key={part.partId || index} className="p-4 relative bg-card/80">
+                                <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 items-start">
+                                    <div><Label>Part Type</Label><Input disabled value={part.partType} className="text-sm" /> </div>
+                                    <div><Label>Part Name Label</Label><Input value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} placeholder="e.g., Side Panel" className="text-sm"/></div>
+                                    <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula" placeholder="e.g., 2"/>
+
+                                    <FormulaInputWithHelper partIndex={index} formulaField="widthFormula" label="Width Formula" placeholder="e.g., D or W - 2*PT"/>
+                                    <FormulaInputWithHelper partIndex={index} formulaField="heightFormula" label="Height Formula" placeholder="e.g., H or D - BPO"/>
+
+                                    <div>
+                                        <Label>Material ID</Label>
+                                        <Select
+                                            value={part.materialId}
+                                            onValueChange={(value) => handleTemplateInputChange({ target: { name: 'materialId', value }} as any, 'parts.materialId', index, 'materialId')}
+                                        >
+                                            <SelectTrigger className="text-sm"><SelectValue placeholder="Select material" /></SelectTrigger>
+                                            <SelectContent>
+                                                {PREDEFINED_MATERIALS.map((material) => (
+                                                    <SelectItem key={material.id} value={material.id}>
+                                                        {material.name} {material.hasGrain ? "(Grain)" : ""}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <FormulaInputWithHelper partIndex={index} formulaField="thicknessFormula" label="Thickness Formula" placeholder="e.g., PT or 18"/>
+
+                                    <div>
+                                        <Label>Grain Direction</Label>
+                                        <Select
+                                            value={part.grainDirection || 'none'}
+                                            onValueChange={(value) => handleTemplateInputChange({ target: { name: 'grainDirection', value: value === 'none' ? null : value }} as any, 'parts.grainDirection', index, 'grainDirection')}
+                                        >
+                                            <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="none">None</SelectItem>
+                                                <SelectItem value="with">With Grain (Height)</SelectItem>
+                                                <SelectItem value="reverse">Reverse Grain (Width)</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div>
+                                        <Label>Cabinet Context</Label>
+                                        <Input disabled value={part.cabinetContext || 'General'} className="text-sm" />
+                                    </div>
+
+                                </div>
+                                <div className="mt-3">
+                                    <Label className="font-medium">Edge Banding (Applied to this part's edges):</Label>
+                                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 text-sm">
+                                        {(['front', 'back', 'top', 'bottom'] as Array<keyof PartDefinition['edgeBanding']>).map(edge => (
+                                            <FormItem key={edge} className="flex flex-row items-center space-x-2">
+                                                <Checkbox
+                                                    id={`edge_${index}_${edge}`}
+                                                    checked={!!part.edgeBanding?.[edge]}
+                                                    onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, 'parts.edgeBanding', index, edge as keyof PartDefinition['edgeBanding'])}
+                                                />
+                                                <Label htmlFor={`edge_${index}_${edge}`} className="capitalize font-normal">{edge}</Label>
+                                            </FormItem>
                                         ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <FormulaInputWithHelper partIndex={index} formulaField="thicknessFormula" label="Thickness Formula" placeholder="e.g., PT or 18"/>
+                                    </div>
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                        For typical panels: "Top" & "Bottom" refer to edges along Width dimension. "Front" & "Back" refer to edges along Height dimension. Adjust interpretation based on part type.
+                                    </p>
+                                </div>
+                                {part.notes && (
+                                    <div className="mt-3">
+                                        <Label className="font-medium">Part Notes:</Label>
+                                        <Textarea value={part.notes} onChange={(e) => handleTemplateInputChange(e, 'parts.notes', index, 'notes')} rows={2} className="text-sm"/>
+                                    </div>
+                                )}
+                            </Card>
+                        ))}
+                        {currentTemplate.parts.length === 0 && <p className="text-muted-foreground text-center py-4">No parts defined yet. Click "Add Part" to begin.</p>}
+                    </CardContent>
+                </Card>
 
-                             <div>
-                                <Label>Grain Direction</Label>
-                                 <Select
-                                    value={part.grainDirection || 'none'}
-                                    onValueChange={(value) => handleTemplateInputChange({ target: { name: 'grainDirection', value: value === 'none' ? null : value }} as any, 'parts.grainDirection', index, 'grainDirection')}
-                                >
-                                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="none">None</SelectItem>
-                                        <SelectItem value="with">With Grain (Height)</SelectItem>
-                                        <SelectItem value="reverse">Reverse Grain (Width)</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div>
-                                <Label>Cabinet Context</Label>
-                                <Input disabled value={part.cabinetContext || 'General'} className="text-sm" />
-                            </div>
+                <Card>
+                    <CardHeader><CardTitle className="text-lg">Accessories (Conceptual)</CardTitle></CardHeader>
+                    <CardContent><p className="text-sm text-muted-foreground">Define accessories like hinges, handles, with quantity formulas. (UI for this is not yet implemented).</p></CardContent>
+                </Card>
 
-                        </div>
-                        <div className="mt-3">
-                            <Label className="font-medium">Edge Banding (Applied to this part's edges):</Label>
-                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 text-sm">
-                                {(['front', 'back', 'top', 'bottom'] as Array<keyof PartDefinition['edgeBanding']>).map(edge => (
-                                    <FormItem key={edge} className="flex flex-row items-center space-x-2">
-                                        <Checkbox
-                                            id={`edge_${index}_${edge}`}
-                                            checked={!!part.edgeBanding?.[edge]}
-                                            onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, 'parts.edgeBanding', index, edge as keyof PartDefinition['edgeBanding'])}
-                                        />
-                                        <Label htmlFor={`edge_${index}_${edge}`} className="capitalize font-normal">{edge}</Label>
-                                    </FormItem>
-                                ))}
-                            </div>
-                             <p className="text-xs text-muted-foreground mt-1">
-                                For typical panels: "Top" & "Bottom" refer to edges along Width dimension. "Front" & "Back" refer to edges along Height dimension. Adjust interpretation based on part type.
-                            </p>
-                        </div>
-                         {part.notes && (
-                            <div className="mt-3">
-                                <Label className="font-medium">Part Notes:</Label>
-                                <Textarea value={part.notes} onChange={(e) => handleTemplateInputChange(e, 'parts.notes', index, 'notes')} rows={2} className="text-sm"/>
-                            </div>
-                        )}
-                    </Card>
-                ))}
-                 {currentTemplate.parts.length === 0 && <p className="text-muted-foreground text-center py-4">No parts defined yet. Click "Add Part" to begin.</p>}
             </CardContent>
-        </Card>
+            <CardFooter className="flex justify-end space-x-3">
+                <Button variant="outline" onClick={() => setViewMode('calculator')}>Cancel</Button>
+                <Button onClick={handleSaveTemplate}><Save className="mr-2 h-4 w-4" /> Save Template (Conceptual)</Button>
+            </CardFooter>
+            </Card>
+        </TooltipProvider>
 
-        <Card>
-            <CardHeader><CardTitle className="text-lg">Accessories (Conceptual)</CardTitle></CardHeader>
-            <CardContent><p className="text-sm text-muted-foreground">Define accessories like hinges, handles, with quantity formulas. (UI for this is not yet implemented).</p></CardContent>
-        </Card>
+        {/* Drawer Set Calculator - Conditionally rendered if template type might involve drawers */}
+        {(currentTemplate.type === 'base' || currentTemplate.type === 'tall' || currentTemplate.type === 'custom') && (
+            <Card className="shadow-lg">
+                <CardHeader>
+                <CardTitle className="flex items-center"><BoxSelect className="mr-2 h-5 w-5 text-primary" />Drawer Set Calculator</CardTitle>
+                <CardDescription>Helper tool to calculate drawer components for your cabinet template. These parts would then need to be added to the 'Part Definitions' above manually for now.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div><Label htmlFor="ds_cabInternalHeight">Cabinet Internal Height (mm)</Label><Input id="ds_cabInternalHeight" name="cabinetInternalHeight" type="number" value={drawerSetInput.cabinetInternalHeight} onChange={handleDrawerSetInputChange} placeholder="e.g., 684"/></div>
+                    <div><Label htmlFor="ds_cabWidth">Cabinet Width (mm)</Label><Input id="ds_cabWidth" name="cabinetWidth" type="number" value={drawerSetInput.cabinetWidth} onChange={handleDrawerSetInputChange} placeholder="e.g., 564"/></div>
+                    <div><Label htmlFor="ds_numDrawers">Number of Drawers</Label><Input id="ds_numDrawers" name="numDrawers" type="number" value={drawerSetInput.numDrawers} onChange={handleDrawerSetInputChange} placeholder="e.g., 3"/></div>
+                    <div><Label htmlFor="ds_drawerReveal">Drawer Reveal (mm)</Label><Input id="ds_drawerReveal" name="drawerReveal" type="number" value={drawerSetInput.drawerReveal} onChange={handleDrawerSetInputChange} placeholder="e.g., 3"/></div>
+                    <div><Label htmlFor="ds_panelThickness">Panel Thickness (T, mm)</Label><Input id="ds_panelThickness" name="panelThickness" type="number" value={drawerSetInput.panelThickness} onChange={handleDrawerSetInputChange} placeholder="e.g., 18"/></div>
+                    <div><Label htmlFor="ds_slideClearance">Total Slide Clearance (mm)</Label><Input id="ds_slideClearance" name="drawerSlideClearanceTotal" type="number" value={drawerSetInput.drawerSlideClearanceTotal} onChange={handleDrawerSetInputChange} placeholder="e.g., 13"/></div>
+                    <div><Label htmlFor="ds_boxSideDepth">Drawer Box Side Depth (mm)</Label><Input id="ds_boxSideDepth" name="drawerBoxSideDepth" type="number" value={drawerSetInput.drawerBoxSideDepth} onChange={handleDrawerSetInputChange} placeholder="e.g., 500"/></div>
+                    <div><Label htmlFor="ds_boxSideHeight">Drawer Box Side Height (mm)</Label><Input id="ds_boxSideHeight" name="drawerBoxSideHeight" type="number" value={drawerSetInput.drawerBoxSideHeight} onChange={handleDrawerSetInputChange} placeholder="e.g., 150"/></div>
+                    <div className="lg:col-span-3"><Label htmlFor="ds_customFronts">Custom Drawer Front Heights (mm, comma-separated, optional)</Label><Input id="ds_customFronts" name="customDrawerFrontHeights" type="text" value={drawerSetInput.customDrawerFrontHeights?.join(', ') || ''} onChange={handleDrawerSetInputChange} placeholder="e.g., 100, 150, 200"/></div>
+                </div>
+                <Button onClick={handleCalculateDrawerSet} className="w-full md:w-auto" disabled={isCalculatingDrawers}>
+                    {isCalculatingDrawers ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Calculator className="mr-2 h-4 w-4" />}
+                    {isCalculatingDrawers ? "Calculating Drawers..." : "Calculate Drawer Set Components"}
+                </Button>
 
-      </CardContent>
-      <CardFooter className="flex justify-end space-x-3">
-        <Button variant="outline" onClick={() => setViewMode('calculator')}>Cancel</Button>
-        <Button onClick={handleSaveTemplate}><Save className="mr-2 h-4 w-4" /> Save Template (Conceptual)</Button>
-      </CardFooter>
-    </Card>
-    </TooltipProvider>
+                {isCalculatingDrawers && (<div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2">Calculating drawer parts...</p></div>)}
+                {drawerCalcError && !isCalculatingDrawers && (
+                    <div className="text-destructive bg-destructive/10 p-3 rounded-md text-sm flex items-center gap-2">
+                    <AlertCircle className="h-4 w-4"/> {drawerCalcError}
+                    </div>
+                )}
+                {drawerSetResult && drawerSetResult.success && drawerSetResult.calculatedDrawers.length > 0 && !isCalculatingDrawers && (
+                    <div className="space-y-4 mt-4">
+                    <h3 className="text-md font-semibold">Calculated Drawer Components:</h3>
+                    {drawerSetResult.cabinetInternalHeight && drawerSetResult.totalFrontsHeightWithReveals && (
+                        <p className="text-xs text-muted-foreground">
+                            Total height used by fronts + reveals: {drawerSetResult.totalFrontsHeightWithReveals.toFixed(1)}mm (Cabinet internal height: {drawerSetResult.cabinetInternalHeight.toFixed(1)}mm)
+                        </p>
+                    )}
+                    {drawerSetResult.calculatedDrawers.map((drawer: SingleCalculatedDrawer) => (
+                        <Card key={drawer.drawerNumber} className="bg-muted/30">
+                        <CardHeader className="pb-2 pt-3 px-4">
+                            <CardTitle className="text-base">Drawer {drawer.drawerNumber}</CardTitle>
+                            <CardDescription className="text-xs">Front Height: {drawer.overallFrontHeight.toFixed(1)}mm, Box Side Height: {drawer.boxHeight.toFixed(1)}mm</CardDescription>
+                        </CardHeader>
+                        <CardContent className="px-4 pb-3">
+                            <Table className="text-xs">
+                            <TableHeader><TableRow><TableHead>Part Name</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Width (mm)</TableHead><TableHead className="text-right">Height (mm)</TableHead><TableHead className="text-center">Thick (mm)</TableHead></TableRow></TableHeader>
+                            <TableBody>
+                                {drawer.parts.map(part => (
+                                <TableRow key={part.name}>
+                                    <TableCell>{part.name}</TableCell>
+                                    <TableCell className="text-center">{part.quantity}</TableCell>
+                                    <TableCell className="text-right">{part.width.toFixed(1)}</TableCell>
+                                    <TableCell className="text-right">{part.height.toFixed(1)}</TableCell>
+                                    <TableCell className="text-center">{part.thickness.toFixed(0)}</TableCell>
+                                </TableRow>
+                                ))}
+                            </TableBody>
+                            </Table>
+                        </CardContent>
+                        </Card>
+                    ))}
+                    </div>
+                )}
+                {!isCalculatingDrawers && !drawerSetResult && !drawerCalcError && (<div className="text-center py-6 text-muted-foreground text-sm">Enter drawer parameters and click "Calculate Drawer Set Components".</div>)}
+                </CardContent>
+            </Card>
+        )}
+    </div>
   );
 
   return (
