@@ -657,23 +657,6 @@ export default function CabinetDesignerPage() {
             </CardContent>
         </Card>
 
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center"><BookOpen className="mr-2 h-5 w-5 text-muted-foreground" />Formula & Parameter Reference</CardTitle>
-            <CardDescription>Use these in your part dimension formulas.</CardDescription>
-          </CardHeader>
-          <CardContent className="max-h-60 overflow-y-auto text-xs space-y-2 p-4 bg-muted/30 rounded-md">
-            {formulaHelpItems.map(item => (
-              <div key={item.id} className="p-2 border rounded-md bg-background shadow-sm">
-                <code className="font-semibold text-primary">{item.value}</code>
-                <p className="text-muted-foreground text-[11px] mt-0.5">{item.description}</p>
-                <p className="text-[10px] text-muted-foreground/70 mt-0.5">Example: {item.example}</p>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
         <Card>
             <CardHeader className="flex flex-row items-center justify-between">
                 <div><CardTitle className="text-lg">Part Definitions</CardTitle><CardDescription>Define each part, its quantity, dimensions (using formulas), material, and edge banding.</CardDescription></div>
@@ -793,3 +776,4 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
+
