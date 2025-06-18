@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { FormItem } from '@/components/ui/form'; // Form is not directly used here, FormItem for Checkbox layout
 import { useToast } from "@/hooks/use-toast";
-import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks } from 'lucide-react';
+import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2 } from 'lucide-react';
 import { calculateCabinetDetails, calculateDrawerSet } from './actions';
 import type { CabinetCalculationInput, CalculatedCabinet, CabinetPart, CabinetTemplateData, PartDefinition, CabinetPartType, CabinetTypeContext, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer as SingleCalculatedDrawer } from './types';
 import { PREDEFINED_MATERIALS } from './types';
@@ -107,7 +107,7 @@ function evaluateFormulaClientSide(
     const scope: Record<string, number | undefined> = { W, H, D, PT, BPT, BPO, TRD, DCG, DG, B, DW, DD, DH, Clearance };
     
     // Replace parameter names in formula with their values
-    // This is a very naive replacement and only works for simple cases.
+    // This is a naive replacement and only works for simple cases.
     let formulaToEvaluate = formula;
     for (const key in scope) {
       if (scope[key] !== undefined) {
@@ -142,6 +142,16 @@ function evaluateFormulaClientSide(
   }
 }
 
+interface ProjectCabinetItem {
+  id: string;
+  templateId: string;
+  templateName: string;
+  quantity: number;
+  width: number;
+  height: number;
+  depth: number;
+}
+
 
 export default function CabinetDesignerPage() {
   const { toast } = useToast();
@@ -174,6 +184,9 @@ export default function CabinetDesignerPage() {
   const [drawerSetResult, setDrawerSetResult] = React.useState<DrawerSetCalculatorResult | null>(null);
   const [isCalculatingDrawers, setIsCalculatingDrawers] = React.useState(false);
   const [drawerCalcError, setDrawerCalcError] = React.useState<string | null>(null);
+  
+  // --- Project Planner State ---
+  const [projectCabinetItems, setProjectCabinetItems] = React.useState<ProjectCabinetItem[]>([]);
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -490,13 +503,84 @@ export default function CabinetDesignerPage() {
       );
   };
 
+  // --- Project Planner Handlers ---
+  const handleAddProjectItem = () => {
+    const firstTemplate = cabinetTypes[0];
+    let initialWidth = defaultDims.width;
+    let initialHeight = defaultDims.height;
+    let initialDepth = defaultDims.depth;
+
+    if (firstTemplate.value === currentTemplate?.id && currentTemplate) {
+        initialWidth = currentTemplate.defaultDimensions.width;
+        initialHeight = currentTemplate.defaultDimensions.height;
+        initialDepth = currentTemplate.defaultDimensions.depth;
+    } else if (firstTemplate.value === 'standard_base_2_door') {
+        // defaultDims is already set for this
+    }
+    // For other predefined types, we might need a lookup or use generic defaults
+    
+    setProjectCabinetItems(prev => [
+      ...prev,
+      {
+        id: `proj_item_${Date.now()}`,
+        templateId: firstTemplate.value,
+        templateName: firstTemplate.label,
+        quantity: 1,
+        width: initialWidth,
+        height: initialHeight,
+        depth: initialDepth,
+      }
+    ]);
+  };
+
+  const handleRemoveProjectItem = (itemId: string) => {
+    setProjectCabinetItems(prev => prev.filter(item => item.id !== itemId));
+  };
+
+  const handleProjectItemChange = (itemId: string, field: keyof Omit<ProjectCabinetItem, 'id'|'templateName'>, value: string | number) => {
+    setProjectCabinetItems(prev =>
+      prev.map(item => {
+        if (item.id === itemId) {
+          const updatedItem = { ...item, [field]: value };
+          if (field === 'templateId') {
+            const selectedTemplateInfo = cabinetTypes.find(ct => ct.value === value);
+            updatedItem.templateName = selectedTemplateInfo?.label || "Unknown Template";
+            
+            // Update dimensions based on new template
+            if (selectedTemplateInfo?.value === currentTemplate?.id && currentTemplate) {
+                updatedItem.width = currentTemplate.defaultDimensions.width;
+                updatedItem.height = currentTemplate.defaultDimensions.height;
+                updatedItem.depth = currentTemplate.defaultDimensions.depth;
+            } else if (selectedTemplateInfo?.value === 'standard_base_2_door') {
+                updatedItem.width = defaultDims.width;
+                updatedItem.height = defaultDims.height;
+                updatedItem.depth = defaultDims.depth;
+            } else if (selectedTemplateInfo?.value === 'base_cabinet_1_door_1_drawer') {
+                updatedItem.width = 600;
+                updatedItem.height = 720;
+                updatedItem.depth = 560;
+            } else {
+                // Fallback for other predefined types if their specific defaults aren't handy
+                // You might want to define these in the cabinetTypes array or a separate lookup
+                updatedItem.width = 600; 
+                updatedItem.height = 700;
+                updatedItem.depth = 500;
+            }
+          }
+          return updatedItem;
+        }
+        return item;
+      })
+    );
+  };
+
 
   const renderCalculatorView = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <Card className="lg:col-span-1 shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center"><Settings2 className="mr-2 h-5 w-5 text-primary" />Configure Cabinet</CardTitle>
-          <CardDescription>Select type and customize dimensions.</CardDescription>
+          <CardDescription>Select type and customize dimensions for individual calculation.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <Button onClick={() => { setCurrentTemplate(JSON.parse(JSON.stringify(initialNewTemplate))); setViewMode('templateDefinition'); }} variant="outline" className="w-full">
@@ -526,7 +610,7 @@ export default function CabinetDesignerPage() {
       <Card className="lg:col-span-2 shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center"><Palette className="mr-2 h-5 w-5 text-primary" />Calculation Results</CardTitle>
-          <CardDescription>Estimated parts, materials, and costs.</CardDescription>
+          <CardDescription>Estimated parts, materials, and costs for the configured cabinet.</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading && (<div className="flex items-center justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Calculating...</p></div>)}
@@ -576,26 +660,88 @@ export default function CabinetDesignerPage() {
         </CardContent>
       </Card>
       
-      {/* Project Planner Placeholder Card */}
       <Card className="lg:col-span-3 shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center"><ListChecks className="mr-2 h-5 w-5 text-primary" />Project Planner (Conceptual)</CardTitle>
           <CardDescription>
-            Plan multiple cabinets for a project. Full project-level calculation is a planned future feature.
+            Add cabinet instances to your project. Specify template, quantity, and dimensions for each.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Textarea
-            placeholder="List your project cabinets here for planning (e.g.,&#10;- 2 x Base Cabinet 2-Door (600W x 720H x 580D)&#10;- 1 x Wall Cabinet 1-Door (400W x 600H x 300D)&#10;- ...)"
-            rows={5}
-            className="text-sm"
-          />
+          {projectCabinetItems.map((item, index) => (
+            <Card key={item.id} className="p-4 space-y-3 relative bg-muted/30">
+               <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10 h-7 w-7" onClick={() => handleRemoveProjectItem(item.id)}><XCircle className="h-4 w-4"/></Button>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 items-end">
+                <div className="sm:col-span-2 md:col-span-2">
+                  <Label htmlFor={`project_template_${item.id}`} className="text-xs">Cabinet Template</Label>
+                  <Select
+                    value={item.templateId}
+                    onValueChange={(value) => handleProjectItemChange(item.id, 'templateId', value)}
+                  >
+                    <SelectTrigger id={`project_template_${item.id}`} className="h-9 text-xs">
+                      <SelectValue placeholder="Select template" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {cabinetTypes.map(type => (
+                        <SelectItem key={type.value} value={type.value} className="text-xs">{type.label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                 <div>
+                  <Label htmlFor={`project_qty_${item.id}`} className="text-xs">Quantity</Label>
+                  <Input
+                    id={`project_qty_${item.id}`}
+                    type="number"
+                    value={item.quantity}
+                    onChange={(e) => handleProjectItemChange(item.id, 'quantity', parseInt(e.target.value, 10) || 1)}
+                    className="h-9 text-xs"
+                    min={1}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor={`project_width_${item.id}`} className="text-xs">Width (mm)</Label>
+                  <Input
+                    id={`project_width_${item.id}`}
+                    type="number"
+                    value={item.width}
+                    onChange={(e) => handleProjectItemChange(item.id, 'width', parseInt(e.target.value, 10) || 0)}
+                    className="h-9 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor={`project_height_${item.id}`} className="text-xs">Height (mm)</Label>
+                  <Input
+                    id={`project_height_${item.id}`}
+                    type="number"
+                    value={item.height}
+                    onChange={(e) => handleProjectItemChange(item.id, 'height', parseInt(e.target.value, 10) || 0)}
+                    className="h-9 text-xs"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor={`project_depth_${item.id}`} className="text-xs">Depth (mm)</Label>
+                  <Input
+                    id={`project_depth_${item.id}`}
+                    type="number"
+                    value={item.depth}
+                    onChange={(e) => handleProjectItemChange(item.id, 'depth', parseInt(e.target.value, 10) || 0)}
+                    className="h-9 text-xs"
+                  />
+                </div>
+              </div>
+            </Card>
+          ))}
+           <Button onClick={handleAddProjectItem} variant="outline" size="sm" className="mt-3">
+            <PlusCircle className="mr-2 h-4 w-4" /> Add Cabinet to Project
+          </Button>
+          <Separator className="my-4" />
           <Button className="w-full md:w-auto" disabled>
-            Calculate Entire Project
+            Calculate Entire Project (Conceptual)
           </Button>
           <p className="text-xs text-muted-foreground">
-            Note: For now, please calculate each cabinet individually using the 'Configure Cabinet' section above. 
-            The list above is for your manual planning purposes only.
+            Note: Full project calculation (aggregating parts from all instances) is a planned feature.
+            For now, use the 'Configure Cabinet' section above to calculate each unique configuration individually.
           </p>
         </CardContent>
       </Card>
@@ -705,8 +851,24 @@ export default function CabinetDesignerPage() {
                                 <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
                                 
                                 <div className="mb-3">
-                                    <Label htmlFor={`partName_${index}`} className="sr-only">Part Name Label</Label>
-                                    <Input id={`partName_${index}`} value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} placeholder="e.g., Side Panel" className="text-base font-medium"/>
+                                     <FormField
+                                        control={{} as any} // RHF not used here, direct state update
+                                        name={`parts.${index}.nameLabel`}
+                                        render={() => (
+                                            <FormItem>
+                                                <FormLabel htmlFor={`partName_${index}`} className="sr-only">Part Name Label</FormLabel>
+                                                <FormControl>
+                                                <Input 
+                                                    id={`partName_${index}`} 
+                                                    value={part.nameLabel} 
+                                                    onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} 
+                                                    placeholder="e.g., Side Panel" 
+                                                    className="text-base font-medium"
+                                                />
+                                                </FormControl>
+                                            </FormItem>
+                                        )}
+                                    />
                                 </div>
                                 <div className="mb-3 p-2 border rounded-md bg-muted/30 text-xs space-y-0.5">
                                     <p><span className="font-medium">Type:</span> {part.partType} ({part.cabinetContext || 'General'})</p>
