@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from 'react';
@@ -11,11 +12,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Form, FormItem } from '@/components/ui/form'; // Added FormItem import
+import { Form, FormItem } from '@/components/ui/form';
 import { useToast } from "@/hooks/use-toast";
 import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle } from 'lucide-react';
 import { calculateCabinetDetails, calculateDrawerSet } from './actions';
 import type { CabinetCalculationInput, CalculatedCabinet, CabinetPart, CabinetTemplateData, PartDefinition, CabinetPartType, CabinetTypeContext, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer as SingleCalculatedDrawer } from './types';
+import { PREDEFINED_MATERIALS } from './types';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -50,6 +52,7 @@ const initialNewTemplate: CabinetTemplateData = {
     DG: 2,  // Door Gap (overall)
     DCG: 3, // Door Center Gap
     TRD: 80, // Top Rail Depth
+    B: 10, // Back Panel Gap
     // Drawer Specific Parameters
     DW: 500, // Drawer Width (overall opening)
     DD: 450, // Drawer Depth (slide length/box depth)
@@ -57,8 +60,8 @@ const initialNewTemplate: CabinetTemplateData = {
     Clearance: 13 // Total side clearance for drawer slides
   },
   parts: [
-    { partId: 'side_panels_initial', nameLabel: 'Side Panels (Example)', partType: 'Side Panel', cabinetContext: 'Base', quantityFormula: '2', widthFormula: 'D', heightFormula: 'H - PT', materialId: 'PLY_18MM_BIRCH', thicknessFormula: 'PT', edgeBanding: { front: true }, grainDirection: 'with' },
-    { partId: 'bottom_panel_initial', nameLabel: 'Bottom Panel (Example)', partType: 'Bottom Panel', cabinetContext: 'Base', quantityFormula: '1', widthFormula: 'W - 2*PT', heightFormula: 'D', materialId: 'PLY_18MM_BIRCH', thicknessFormula: 'PT', edgeBanding: { front: true } },
+    { partId: 'side_panels_initial', nameLabel: 'Side Panels (Example)', partType: 'Side Panel', cabinetContext: 'Base', quantityFormula: '2', widthFormula: 'D', heightFormula: 'H - PT', materialId: 'Material1', thicknessFormula: 'PT', edgeBanding: { front: true }, grainDirection: 'with' },
+    { partId: 'bottom_panel_initial', nameLabel: 'Bottom Panel (Example)', partType: 'Bottom Panel', cabinetContext: 'Base', quantityFormula: '1', widthFormula: 'W - 2*PT', heightFormula: 'D', materialId: 'Material1', thicknessFormula: 'PT', edgeBanding: { front: true } },
   ],
   accessories: [],
 };
@@ -78,6 +81,7 @@ const formulaHelpItems: FormulaHelpItem[] = [
   { id: 'PT', label: 'PT', value: 'PT', description: "Panel Thickness (from global parameters).", example: "If Panel Thickness is 18mm, PT = 18." },
   { id: 'BPT', label: 'BPT', value: 'BPT', description: "Back Panel Thickness (from global parameters).", example: "If Back Panel Thickness is 3mm, BPT = 3." },
   { id: 'BPO', label: 'BPO', value: 'BPO', description: "Back Panel Offset/Gap (from global parameters).", example: "If Back Panel Offset is 10mm, BPO = 10." },
+  { id: 'B', label: 'B', value: 'B', description: "Back Panel Gap (from global parameters, generic).", example: "If Back Panel Gap is 10mm, B = 10." },
   { id: 'DG', label: 'DG', value: 'DG', description: "Door Gap (total side or vertical, from global parameters).", example: "If Door Gap is 2mm, DG = 2." },
   { id: 'DCG', label: 'DCG', value: 'DCG', description: "Door Center Gap (between two doors, from global parameters).", example: "If Door Center Gap is 3mm, DCG = 3." },
   { id: 'TRD', label: 'TRD', value: 'TRD', description: "Top Rail Depth (from global parameters).", example: "If Top Rail Depth is 80mm, TRD = 80." },
@@ -102,6 +106,7 @@ const globalParameterUIDefinitions: GlobalParameterUIDefinition[] = [
   { key: 'PT', displayName: 'Panel Thickness', tooltip: 'Main panel thickness (PT)' },
   { key: 'BPT', displayName: 'Back Panel Thickness', tooltip: 'Thickness of the back panel (BPT)' },
   { key: 'BPO', displayName: 'Back Panel Offset', tooltip: 'Inset distance for the back panel (BPO)' },
+  { key: 'B', displayName: 'Back Panel Gap (General)', tooltip: 'General gap for back panel considerations (B)' },
   { key: 'DG', displayName: 'Door Gap', tooltip: 'General gap around doors (DG)' },
   { key: 'DCG', displayName: 'Door Center Gap', tooltip: 'Gap between two doors (DCG)' },
   { key: 'TRD', displayName: 'Top Rail Depth', tooltip: 'Depth/width of top rails (TRD)' },
@@ -385,7 +390,7 @@ export default function CabinetDesignerPage() {
     <div className="flex items-end gap-2">
       <div className="flex-grow">
         <Label htmlFor={`part_${partIndex}_${formulaField}`}>{label}</Label>
-        {(formulaField === 'widthFormula' || formulaField === 'heightFormula') ? (
+        {(formulaField === 'widthFormula' || formulaField === 'heightFormula' || formulaField === 'thicknessFormula' || formulaField === 'quantityFormula') ? (
             <Textarea
               id={`part_${partIndex}_${formulaField}`}
               rows={1}
@@ -661,12 +666,9 @@ export default function CabinetDesignerPage() {
           <CardContent className="max-h-60 overflow-y-auto text-xs space-y-2 p-4 bg-muted/30 rounded-md">
             {formulaHelpItems.map(item => (
               <div key={item.id} className="p-2 border rounded-md bg-background shadow-sm">
-                <div className="flex justify-between items-center">
-                    <code className="font-semibold text-primary">{item.value}</code>
-                    {/* Tooltip removed here as requested */}
-                </div>
+                <code className="font-semibold text-primary">{item.value}</code>
                 <p className="text-muted-foreground text-[11px] mt-0.5">{item.description}</p>
-                 <p className="text-[10px] text-muted-foreground/70 mt-0.5">Example: {item.example}</p>
+                <p className="text-[10px] text-muted-foreground/70 mt-0.5">Example: {item.example}</p>
               </div>
             ))}
           </CardContent>
@@ -701,14 +703,21 @@ export default function CabinetDesignerPage() {
 
                             <div>
                                 <Label>Material ID</Label>
-                                <Input
+                                 <Select
                                     value={part.materialId}
-                                    onChange={(e) => handleTemplateInputChange(e, 'parts.materialId', index, 'materialId')}
-                                    placeholder="e.g., MDF_18MM"
-                                    className="text-sm"
-                                />
+                                    onValueChange={(value) => handleTemplateInputChange({ target: { name: 'materialId', value }} as any, 'parts.materialId', index, 'materialId')}
+                                >
+                                    <SelectTrigger className="text-sm"><SelectValue placeholder="Select material" /></SelectTrigger>
+                                    <SelectContent>
+                                        {PREDEFINED_MATERIALS.map((material) => (
+                                            <SelectItem key={material.id} value={material.id}>
+                                                {material.name} {material.hasGrain ? "(Grain)" : ""}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
                             </div>
-                            <FormulaInputWithHelper partIndex={index} formulaField="thicknessFormula" label="Thickness Formula" placeholder="e.g., PT or BPT"/>
+                            <FormulaInputWithHelper partIndex={index} formulaField="thicknessFormula" label="Thickness Formula" placeholder="e.g., PT or 18"/>
 
                              <div>
                                 <Label>Grain Direction</Label>
@@ -775,7 +784,7 @@ export default function CabinetDesignerPage() {
   );
 
   return (
-    <TooltipProvider> {/* Ensure TooltipProvider wraps the entire page if tooltips are used outside of specific views */}
+    <TooltipProvider> 
       <PageHeader
         title="Cabinet Designer"
         description={viewMode === 'calculator' ? "Configure cabinet modules, calculate parts, and estimate costs." : "Define a new parametric cabinet template."}

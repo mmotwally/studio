@@ -55,14 +55,16 @@ const addPartFormSchema = z.object({
   nameLabel: z.string().min(1, "Part name label is required."),
   quantityFormula: z.string().min(1, "Quantity formula is required (e.g., '1', '2', or parameter).").default("1"),
   
-  widthFormulaKey: z.string().optional(), // Key of the selected predefined formula for width
-  customWidthFormula: z.string().optional(), // Custom formula string if key is CUSTOM_FORMULA_KEY
+  widthFormulaKey: z.string().optional(), 
+  customWidthFormula: z.string().optional(), 
   
   heightFormulaKey: z.string().optional(),
   customHeightFormula: z.string().optional(),
 
-  thicknessFormula: z.string().min(1, "Thickness formula is required (e.g., 'PT').").default("PT"),
   materialId: z.string().min(1, "Material selection is required."),
+  thicknessChoice: z.enum(["global", "custom"]).default("global"),
+  customThicknessValue: z.string().optional(),
+
   grainDirection: z.enum(["with", "reverse", "none"]).nullable().default(null),
   edgeBanding_front: z.boolean().default(false),
   edgeBanding_back: z.boolean().default(false),
@@ -80,7 +82,13 @@ const addPartFormSchema = z.object({
         return false;
     }
     return true;
-}, { message: "Custom height formula cannot be empty if 'Custom Formula' is selected.", path: ["customHeightFormula"] });
+}, { message: "Custom height formula cannot be empty if 'Custom Formula' is selected.", path: ["customHeightFormula"] })
+.refine(data => {
+    if (data.thicknessChoice === "custom" && (!data.customThicknessValue?.trim() || isNaN(parseFloat(data.customThicknessValue)) || parseFloat(data.customThicknessValue) <=0 )) {
+        return false;
+    }
+    return true;
+}, { message: "Custom thickness must be a valid positive number if 'Specify Custom Thickness' is selected.", path: ["customThicknessValue"] });
 
 
 type AddPartFormValues = z.infer<typeof addPartFormSchema>;
@@ -89,7 +97,7 @@ interface AddPartDialogProps {
   setOpen: (open: boolean) => void;
   onAddPart: (newPart: PartDefinition) => void;
   existingPartCount: number;
-  templateParameters: CabinetTemplateData['parameters']; // Pass global parameters for context
+  templateParameters: CabinetTemplateData['parameters']; 
 }
 
 export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateParameters }: AddPartDialogProps) {
@@ -102,13 +110,14 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
       partType: 'Side Panel',
       cabinetContext: 'Base',
       nameLabel: "Side Panel",
-      quantityFormula: "2", // Default for Side Panel
+      quantityFormula: "2", 
       widthFormulaKey: PREDEFINED_FORMULAS.find(f => f.partType === 'Side Panel' && f.context?.includes('Base') && f.dimension === 'Width')?.key || CUSTOM_FORMULA_KEY,
       customWidthFormula: PREDEFINED_FORMULAS.find(f => f.partType === 'Side Panel' && f.context?.includes('Base') && f.dimension === 'Width')?.formula || "D",
       heightFormulaKey: PREDEFINED_FORMULAS.find(f => f.partType === 'Side Panel' && f.context?.includes('Base') && f.dimension === 'Height')?.key || CUSTOM_FORMULA_KEY,
       customHeightFormula: PREDEFINED_FORMULAS.find(f => f.partType === 'Side Panel' && f.context?.includes('Base') && f.dimension === 'Height')?.formula || "H - PT",
-      thicknessFormula: "PT",
       materialId: PREDEFINED_MATERIALS[0]?.id || "",
+      thicknessChoice: "global",
+      customThicknessValue: "",
       grainDirection: 'with',
       edgeBanding_front: true,
       edgeBanding_back: false,
@@ -122,13 +131,14 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
   const selectedCabinetContext = form.watch("cabinetContext");
   const selectedWidthFormulaKey = form.watch("widthFormulaKey");
   const selectedHeightFormulaKey = form.watch("heightFormulaKey");
+  const selectedThicknessChoice = form.watch("thicknessChoice");
 
   const getFilteredFormulas = (dimension: 'Width' | 'Height') => {
     return PREDEFINED_FORMULAS.filter(f =>
       f.dimension === dimension &&
       (Array.isArray(f.partType) ? f.partType.includes(selectedPartType) : f.partType === selectedPartType || f.partType.length === 0) &&
       (f.context === null || (selectedCabinetContext && f.context.includes(selectedCabinetContext))) &&
-      f.key !== CUSTOM_FORMULA_KEY // Exclude the generic custom key from main list
+      f.key !== CUSTOM_FORMULA_KEY 
     ).sort((a,b) => a.name.localeCompare(b.name));
   };
   
@@ -149,17 +159,15 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
             form.setValue("quantityFormula", "1", { shouldDirty: true });
         }
         
-        // Auto-select first relevant formula for width
         const firstWidthFormula = availableWidthFormulas[0];
         if (firstWidthFormula) {
             form.setValue("widthFormulaKey", firstWidthFormula.key, { shouldDirty: true });
             form.setValue("customWidthFormula", firstWidthFormula.formula, { shouldDirty: true });
         } else {
             form.setValue("widthFormulaKey", CUSTOM_FORMULA_KEY, { shouldDirty: true });
-            form.setValue("customWidthFormula", "", { shouldDirty: true }); // Clear if no predefined available
+            form.setValue("customWidthFormula", "", { shouldDirty: true }); 
         }
 
-        // Auto-select first relevant formula for height
         const firstHeightFormula = availableHeightFormulas[0];
         if (firstHeightFormula) {
             form.setValue("heightFormulaKey", firstHeightFormula.key, { shouldDirty: true });
@@ -190,6 +198,10 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
                                ? values.customHeightFormula || ""
                                : PREDEFINED_FORMULAS.find(f => f.key === values.heightFormulaKey)?.formula || values.customHeightFormula || "";
 
+      const finalThicknessFormula = values.thicknessChoice === "global"
+                               ? "PT"
+                               : values.customThicknessValue || "PT"; 
+
 
       const newPart: PartDefinition = {
         partId: `${values.partType.toLowerCase().replace(/[\s()]+/g, '_')}_${existingPartCount + 1}_${Date.now()}`,
@@ -201,7 +213,7 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
         widthFormulaKey: values.widthFormulaKey,
         heightFormula: finalHeightFormula,
         heightFormulaKey: values.heightFormulaKey,
-        thicknessFormula: values.thicknessFormula,
+        thicknessFormula: finalThicknessFormula,
         materialId: values.materialId,
         grainDirection: values.grainDirection,
         edgeBanding: edgeBanding,
@@ -214,7 +226,7 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
         description: `"${values.nameLabel}" has been added to the template.`,
       });
       setOpen(false);
-      form.reset(); // Reset to defaults for next time
+      form.reset(); 
     } catch (error) {
       console.error("Failed to add part:", error);
       toast({
@@ -338,7 +350,7 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
               </FormItem>
             )}
           />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          
             <FormField
                 control={form.control}
                 name="quantityFormula"
@@ -350,37 +362,53 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
                 </FormItem>
                 )}
             />
+
+          {renderFormulaSelect('Width', availableWidthFormulas, 'widthFormulaKey', 'customWidthFormula')}
+          {renderFormulaSelect('Height', availableHeightFormulas, 'heightFormulaKey', 'customHeightFormula')}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <FormField
+              control={form.control}
+              name="materialId"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Material*</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl><SelectTrigger><SelectValue placeholder="Select material" /></SelectTrigger></FormControl>
+                    <SelectContent>{PREDEFINED_MATERIALS.map((material) => (<SelectItem key={material.id} value={material.id}>{material.name} {material.hasGrain ? "(Grain)" : ""}</SelectItem>))}</SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
             <FormField
                 control={form.control}
-                name="thicknessFormula"
+                name="thicknessChoice"
                 render={({ field }) => (
                 <FormItem>
-                    <FormLabel>Thickness Formula*</FormLabel>
-                    <FormControl><Input placeholder="e.g., PT or BPT" {...field} /></FormControl>
+                    <FormLabel>Part Thickness*</FormLabel>
+                    <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
+                        <FormItem className="flex items-center space-x-2"><RadioGroupItem value="global" id="thickness-global" /><Label htmlFor="thickness-global" className="font-normal">Use Global Panel Thickness (PT)</Label></FormItem>
+                        <FormItem className="flex items-center space-x-2"><RadioGroupItem value="custom" id="thickness-custom" /><Label htmlFor="thickness-custom" className="font-normal">Specify Custom Thickness (mm)</Label></FormItem>
+                    </RadioGroup>
                     <FormMessage />
                 </FormItem>
                 )}
             />
-          </div>
-          
-          {renderFormulaSelect('Width', availableWidthFormulas, 'widthFormulaKey', 'customWidthFormula')}
-          {renderFormulaSelect('Height', availableHeightFormulas, 'heightFormulaKey', 'customHeightFormula')}
-
-
-          <FormField
-            control={form.control}
-            name="materialId"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Material*</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select material" /></SelectTrigger></FormControl>
-                  <SelectContent>{PREDEFINED_MATERIALS.map((material) => (<SelectItem key={material.id} value={material.id}>{material.name} {material.hasGrain ? "(Grain)" : ""}</SelectItem>))}</SelectContent>
-                </Select>
-                <FormMessage />
-              </FormItem>
+           </div>
+            {selectedThicknessChoice === "custom" && (
+                <FormField
+                    control={form.control}
+                    name="customThicknessValue"
+                    render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Custom Thickness Value (mm)*</FormLabel>
+                            <FormControl><Input type="number" placeholder="e.g., 19" {...field} value={field.value ?? ""} /></FormControl>
+                            <FormMessage />
+                        </FormItem>
+                    )}
+                />
             )}
-          />
           
           <FormField
             control={form.control}

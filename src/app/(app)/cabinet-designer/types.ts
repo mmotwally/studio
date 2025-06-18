@@ -135,12 +135,13 @@ export interface CabinetTemplateData {
     DG?: number; // DoorGap (overall)
     DCG?: number; // DoorCenterGap (between two doors)
     TRD?: number; // TopRailDepth
+    B?: number; // Back Panel Gap (user added)
     
     // Drawer Specific Parameters (can be part of a drawer sub-assembly type later)
     DW?: number; // Drawer Width (overall, often opening width)
     DD?: number; // Drawer Depth (overall, often slide length or side panel depth)
     DH?: number; // Drawer Height (often side panel height)
-    Clearance?: number; // Drawer slide clearance (per side)
+    Clearance?: number; // Drawer slide clearance (total)
     // TKH?: number; // Toe Kick Height (if applicable to the main cabinet type)
   };
   parts: PartDefinition[];
@@ -151,23 +152,22 @@ export interface CabinetTemplateData {
 }
 
 // Example of predefined materials (would come from DB)
-export const PREDEFINED_MATERIALS: MaterialDefinition[] = [
-    { id: "MDF_18MM", name: "18mm MDF", type: "panel", thickness: 18, costPerSqm: 20, hasGrain: false },
-    { id: "PLY_18MM_BIRCH", name: "18mm Birch Plywood", type: "panel", thickness: 18, costPerSqm: 35, hasGrain: true },
-    { id: "MDF_3MM_BACK", name: "3mm MDF Back Panel", type: "panel", thickness: 3, costPerSqm: 10, hasGrain: false },
-    { id: "EB_WHITE_PVC", name: "White PVC Edge Band", type: "edge_band", costPerMeter: 0.5 },
-    { id: "EB_BIRCH_VENEER", name: "Birch Veneer Edge Band", type: "edge_band", costPerMeter: 1.2, hasGrain: true },
-    { id: "Material1", name: "Generic Panel Material 1", type: "panel", thickness: 18, costPerSqm: 22, hasGrain: false},
-    { id: "Material2", name: "Generic Panel Material 2 (Oak)", type: "panel", thickness: 18, costPerSqm: 40, hasGrain: true},
-    { id: "Material3", name: "Generic Back Panel Material", type: "panel", thickness: 5, costPerSqm: 12, hasGrain: false},
+export const PREDEFINED_MATERIALS: Array<{id: string; name: string; hasGrain?: boolean}> = [
+    { id: "Material1", name: "Material 1" },
+    { id: "Material2", name: "Material 2" },
+    { id: "Material3", name: "Material 3" },
+    { id: "MaterialGrain1", name: "Material Grain 1", hasGrain: true },
+    { id: "MaterialGrain2", name: "Material Grain 2", hasGrain: true },
+    { id: "MaterialGrain3", name: "Material Grain 3", hasGrain: true },
 ];
+
 
 export interface PredefinedFormula {
   key: string;
   name: string; // User-friendly name for the dropdown
   description: string;
   example?: string;
-  partType: CabinetPartType | CabinetPartType[]; // Can apply to one or multiple part types
+  partType: CabinetPartType | CabinetPartType[] | []; // Can apply to one or multiple part types, or [] if general like QTY_1
   context: CabinetTypeContext[] | null; // Can apply to one or multiple contexts, or null if general
   dimension: 'Width' | 'Height' | 'Quantity' | 'Thickness'; // Which dimension this formula is for
   formula: string; // The actual formula string
