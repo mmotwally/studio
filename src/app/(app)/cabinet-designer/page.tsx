@@ -46,7 +46,7 @@ const initialNewTemplate: CabinetTemplateData = {
   id: `custom_${Date.now()}`,
   name: 'My New Custom Cabinet',
   type: 'custom',
-  previewImage: 'https://placehold.co/300x200/FADBD8/C0392B.png', // Updated preview image
+  previewImage: 'https://placehold.co/300x200/FADBD8/C0392B.png',
   defaultDimensions: { width: 600, height: 700, depth: 500 },
   parameters: {
     PT: 18, // Panel Thickness
@@ -68,36 +68,6 @@ const initialNewTemplate: CabinetTemplateData = {
   ],
   accessories: [],
 };
-
-interface FormulaHelpItem {
-  id: string;
-  label: string;
-  value: string;
-  description: string;
-  example: string;
-}
-
-const formulaHelpItems: FormulaHelpItem[] = [
-  { id: 'W', label: 'W', value: 'W', description: "Overall Cabinet Width.", example: "If cabinet width is 600mm, W = 600." },
-  { id: 'H', label: 'H', value: 'H', description: "Overall Cabinet Height.", example: "If cabinet height is 720mm, H = 720." },
-  { id: 'D', label: 'D', value: 'D', description: "Overall Cabinet Depth.", example: "If cabinet depth is 560mm, D = 560." },
-  { id: 'PT', label: 'PT', value: 'PT', description: "Panel Thickness (from global parameters).", example: "If Panel Thickness is 18mm, PT = 18." },
-  { id: 'BPT', label: 'BPT', value: 'BPT', description: "Back Panel Thickness (from global parameters).", example: "If Back Panel Thickness is 3mm, BPT = 3." },
-  { id: 'BPO', label: 'BPO', value: 'BPO', description: "Back Panel Offset/Gap (from global parameters).", example: "If Back Panel Offset is 10mm, BPO = 10." },
-  { id: 'B', label: 'B', value: 'B', description: "Back Panel Gap (from global parameters, generic).", example: "If Back Panel Gap is 10mm, B = 10." },
-  { id: 'DG', label: 'DG', value: 'DG', description: "Door Gap (total side or vertical, from global parameters).", example: "If Door Gap is 2mm, DG = 2." },
-  { id: 'DCG', label: 'DCG', value: 'DCG', description: "Door Center Gap (between two doors, from global parameters).", example: "If Door Center Gap is 3mm, DCG = 3." },
-  { id: 'TRD', label: 'TRD', value: 'TRD', description: "Top Rail Depth (from global parameters).", example: "If Top Rail Depth is 80mm, TRD = 80." },
-  { id: 'DW', label: 'DW', value: 'DW', description: "Drawer Width (overall opening for the drawer, from global parameters).", example: "DW = 500 for a drawer in a 600mm cabinet opening." },
-  { id: 'DD', label: 'DD', value: 'DD', description: "Drawer Depth (typically slide length or side panel depth, from global parameters).", example: "DD = 450 for a 450mm drawer slide." },
-  { id: 'DH', label: 'DH', value: 'DH', description: "Drawer Side Height (from global parameters).", example: "DH = 150 for a 150mm high drawer side." },
-  { id: 'Clearance', label: 'Clearance', value: 'Clearance', description: "Total side clearance for drawer slides (from global parameters, e.g. 13mm total for 6.5mm per side).", example: "Clearance = 13." },
-  { id: 'W_minus_2PT', label: 'W - 2*PT', value: 'W - 2*PT', description: "Common for internal width of carcass (e.g., bottom panel width).", example: "W=600, PT=18  =>  600 - 2*18 = 564." },
-  { id: 'D_minus_BPO_BPT', label: 'D - BPO - BPT', value: 'D - BPO - BPT', description: "Common for shelf depth, considering back panel placement.", example: "D=560, BPO=10, BPT=3  =>  560 - 10 - 3 = 547." },
-  { id: 'DOOR_W_SINGLE', label: 'W - DG', value: 'W - DG', description: "Example for a single full-width door, using the DG parameter.", example: "W=600, DG=2 => 600 - 2 = 598" },
-  { id: 'DOOR_W_PAIR', label: '(W - DG - DCG) / 2', value: '(W - DG - DCG) / 2', description: "Example for one door's width in a 2-door cabinet, using DG and DCG parameters.", example: "W=600, DG=2, DCG=3 => (600 - 2 - 3)/2 = 297.5" },
-  { id: 'DOOR_H', label: 'H - DG', value: 'H - DG', description: "Example for door height, using DG parameter.", example: "H=720, DG=2 => 720 - 2 = 718" },
-];
 
 interface GlobalParameterUIDefinition {
   key: keyof CabinetTemplateData['parameters'];
@@ -234,7 +204,7 @@ export default function CabinetDesignerPage() {
         case 'standard_base_2_door': return "https://placehold.co/300x200/EBF4FA/5DADE2.png";
         case 'wall_cabinet_1_door': return "https://placehold.co/300x200/D6EAF8/85C1E9.png";
         case 'tall_pantry_2_door': return "https://placehold.co/300x200/D1F2EB/76D7C4.png";
-        case 'base_cabinet_1_door_1_drawer': return "https://placehold.co/300x200/FEF9E7/F9E79F.png";
+        case 'base_cabinet_1_door_1_drawer': return "https://placehold.co/300x200/FADBD8/C0392B.png"; // Changed this line
         case 'corner_wall_cabinet': return "https://placehold.co/300x200/E8DAEF/C39BD3.png";
         case currentTemplate?.id: return currentTemplate.previewImage || "https://placehold.co/300x200/AEB6BF/566573.png";
         default: return "https://placehold.co/300x200/EEEEEE/BDBDBD.png";
@@ -248,7 +218,7 @@ export default function CabinetDesignerPage() {
         case 'tall_pantry_2_door': return "pantry cabinet";
         case 'base_cabinet_1_door_1_drawer': return "kitchen drawer";
         case 'corner_wall_cabinet': return "corner cabinet";
-        case currentTemplate?.id: return "drawer door"; // Updated hint for custom templates
+        case currentTemplate?.id: return "drawer door";
         default: return "cabinet furniture";
     }
   }
