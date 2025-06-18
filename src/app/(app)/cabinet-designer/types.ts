@@ -1,4 +1,5 @@
 
+
 export type CabinetPartType =
   | 'Side Panel'
   | 'Bottom Panel'
@@ -23,6 +24,8 @@ export type CabinetPartType =
   | 'Stretcher'
   | 'Toe Kick';
 
+export type CabinetTypeContext = 'Base' | 'Wall' | 'Drawer' | 'General';
+
 
 export interface CabinetPart {
   name: string; // This will be the nameLabel from PartDefinition
@@ -37,8 +40,8 @@ export interface CabinetPart {
   edgeBanding?: { // Calculated lengths of edge banding applied
     front?: number;
     back?: number;
-    top?: number; // formerly left
-    bottom?: number; // formerly right
+    top?: number; 
+    bottom?: number; 
   };
 }
 
@@ -66,7 +69,7 @@ export interface CabinetCalculationInput {
   width: number;
   height: number;
   depth: number;
-  customTemplate?: CabinetTemplateData; // Allow passing a full template for calculation
+  customTemplate?: CabinetTemplateData; 
 }
 
 
@@ -81,7 +84,7 @@ export interface MaterialDefinition {
   thickness?: number; // mm, for panels
   defaultSheetWidth?: number; 
   defaultSheetHeight?: number; 
-  hasGrain?: boolean; // New property
+  hasGrain?: boolean; 
 }
 
 export interface AccessoryDefinition {
@@ -91,31 +94,34 @@ export interface AccessoryDefinition {
   unitCost: number;
 }
 
-export interface EdgeBandingAssignment { // Defines which edges get banding
+export interface EdgeBandingAssignment { 
   front?: boolean; 
   back?: boolean;
-  top?: boolean;   // Represents one pair of opposite edges (e.g., top/bottom if part is laid flat)
-  bottom?: boolean; // Represents the other pair of opposite edges (e.g., left/right if part is laid flat)
+  top?: boolean;   
+  bottom?: boolean; 
 }
 
 export interface PartDefinition {
   partId: string; 
   nameLabel: string; 
-  partType: CabinetPartType; // New: Type of part
+  partType: CabinetPartType; 
+  cabinetContext?: CabinetTypeContext; // Context like Base, Wall, Drawer
   quantityFormula: string; 
   widthFormula: string; 
+  widthFormulaKey?: string; // Key if selected from predefined
   heightFormula: string; 
+  heightFormulaKey?: string; // Key if selected from predefined
   materialId: string; 
   thicknessFormula?: string; 
   edgeBanding?: EdgeBandingAssignment;
-  grainDirection?: 'with' | 'reverse' | 'none' | null; // New: Grain direction
+  grainDirection?: 'with' | 'reverse' | 'none' | null; 
   notes?: string;
 }
 
 export interface CabinetTemplateData {
   id: string; 
   name: string; 
-  type: "base" | "wall" | "tall" | "custom";
+  type: "base" | "wall" | "tall" | "custom"; // Main type of cabinet template
   previewImage?: string;
   defaultDimensions: {
     width: number;
@@ -125,13 +131,17 @@ export interface CabinetTemplateData {
   parameters: { 
     PT: number; // PanelThickness
     BPT?: number; // BackPanelThickness
-    BPO?: number; // BackPanelOffset / Back Panel Gap (B from user request)
-    DG?: number; // DoorGap
-    DCG?: number; // DoorCenterGap
+    BPO?: number; // BackPanelOffset / Back Panel Gap (from user as B)
+    DG?: number; // DoorGap (overall)
+    DCG?: number; // DoorCenterGap (between two doors)
     TRD?: number; // TopRailDepth
-    // Drawer specific parameters might go here or be part of a "DrawerBox" sub-template type
-    // Clearance?: number; // Drawer slide clearance
-    // TKH?: number; // Toe Kick Height
+    
+    // Drawer Specific Parameters (can be part of a drawer sub-assembly type later)
+    DW?: number; // Drawer Width (overall, often opening width)
+    DD?: number; // Drawer Depth (overall, often slide length or side panel depth)
+    DH?: number; // Drawer Height (often side panel height)
+    Clearance?: number; // Drawer slide clearance (per side)
+    // TKH?: number; // Toe Kick Height (if applicable to the main cabinet type)
   };
   parts: PartDefinition[];
   accessories?: Array<{
@@ -147,4 +157,18 @@ export const PREDEFINED_MATERIALS: MaterialDefinition[] = [
     { id: "MDF_3MM_BACK", name: "3mm MDF Back Panel", type: "panel", thickness: 3, costPerSqm: 10, hasGrain: false },
     { id: "EB_WHITE_PVC", name: "White PVC Edge Band", type: "edge_band", costPerMeter: 0.5 },
     { id: "EB_BIRCH_VENEER", name: "Birch Veneer Edge Band", type: "edge_band", costPerMeter: 1.2, hasGrain: true },
+    { id: "Material1", name: "Generic Panel Material 1", type: "panel", thickness: 18, costPerSqm: 22, hasGrain: false},
+    { id: "Material2", name: "Generic Panel Material 2 (Oak)", type: "panel", thickness: 18, costPerSqm: 40, hasGrain: true},
+    { id: "Material3", name: "Generic Back Panel Material", type: "panel", thickness: 5, costPerSqm: 12, hasGrain: false},
 ];
+
+export interface PredefinedFormula {
+  key: string;
+  name: string; // User-friendly name for the dropdown
+  description: string;
+  example?: string;
+  partType: CabinetPartType | CabinetPartType[]; // Can apply to one or multiple part types
+  context: CabinetTypeContext[] | null; // Can apply to one or multiple contexts, or null if general
+  dimension: 'Width' | 'Height' | 'Quantity' | 'Thickness'; // Which dimension this formula is for
+  formula: string; // The actual formula string
+}
