@@ -1,7 +1,7 @@
 
 'use server';
 
-import type { CalculatedCabinet, CabinetCalculationInput, CabinetPart, AccessoryItem, CabinetTemplateData, PartDefinition } from './types';
+import type { CalculatedCabinet, CabinetCalculationInput, CabinetPart, AccessoryItem, CabinetTemplateData, PartDefinition, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer, DrawerPartCalculation } from './types';
 
 // --- Configuration Constants (would ideally come from database/settings or template parameters) ---
 const PANEL_THICKNESS = 18; // mm -> PT
@@ -100,15 +100,16 @@ export async function calculateCabinetDetails(
 
   // 1. Side Panels (x2)
   const sidePanelQty = evaluateFormula("2", params);
-  const sidePanelWidth = evaluateFormula("D", params);
-  const sidePanelHeight = evaluateFormula("H", params);
-  const sidePanelThickness = evaluateFormula("PT", params); // PT is a parameter here
+  const sidePanelWidth = evaluateFormula("D", params); // This is the depth of the cabinet
+  const sidePanelHeight = evaluateFormula("H", params); // Height of the side panel
+  const sidePanelThickness = evaluateFormula("PT", params);
   parts.push({
     name: 'Side Panel',
+    partType: 'Side Panel',
     quantity: sidePanelQty,
-    width: sidePanelWidth,
-    height: sidePanelHeight,
-    thickness: sidePanelThickness, // Using the evaluated thickness
+    width: sidePanelWidth,    // In cutting list, "width" might refer to the D dimension for side panels
+    height: sidePanelHeight,  // and "height" is the H dimension
+    thickness: sidePanelThickness, 
     material: `${sidePanelThickness}mm Panel`,
     edgeBanding: { front: sidePanelHeight }
   });
@@ -122,9 +123,10 @@ export async function calculateCabinetDetails(
   const bottomPanelThickness = evaluateFormula("PT", params);
   parts.push({
     name: 'Bottom Panel',
+    partType: 'Bottom Panel',
     quantity: bottomPanelQty,
     width: bottomPanelWidth,
-    height: bottomPanelDepth,
+    height: bottomPanelDepth, // For bottom panel, height is depth dimension
     thickness: bottomPanelThickness,
     material: `${bottomPanelThickness}mm Panel`,
     edgeBanding: { front: bottomPanelWidth }
@@ -140,6 +142,7 @@ export async function calculateCabinetDetails(
 
   parts.push({
     name: 'Top Rail (Front)',
+    partType: 'Top Rail (Front)',
     quantity: topRailQty,
     width: topRailLength,
     height: topRailDepthVal,
@@ -150,6 +153,7 @@ export async function calculateCabinetDetails(
 
   parts.push({
     name: 'Top Rail (Back)',
+    partType: 'Top Rail (Back)',
     quantity: topRailQty,
     width: topRailLength,
     height: topRailDepthVal,
@@ -165,9 +169,10 @@ export async function calculateCabinetDetails(
   const shelfThickness = evaluateFormula("PT", params);
   parts.push({
     name: 'Shelf',
+    partType: 'Fixed Shelf',
     quantity: shelfQty,
     width: shelfWidth,
-    height: shelfDepth,
+    height: shelfDepth, // Shelf depth
     thickness: shelfThickness,
     material: `${shelfThickness}mm Panel`,
     notes: 'Adjust depth if back panel fitting differs',
@@ -178,34 +183,35 @@ export async function calculateCabinetDetails(
 
   // 5. Doors (x2) - Full overlay assumption
   const doorQty = evaluateFormula("2", params);
-  const doorHeight = evaluateFormula("H - DG", params); // Using unified DOOR_GAP for DG
-  const singleDoorWidth = evaluateFormula("(W - DG - DCG) / 2", params); // Using unified DOOR_GAP for DG
+  const doorHeight = evaluateFormula("H - DG", params); 
+  const singleDoorWidth = evaluateFormula("(W - DG - DCG) / 2", params); 
   const doorThickness = evaluateFormula("PT", params);
   parts.push({
     name: 'Door',
+    partType: 'Door',
     quantity: doorQty,
     width: singleDoorWidth,
     height: doorHeight,
     thickness: doorThickness,
     material: `${doorThickness}mm Panel (Door Grade)`,
     edgeBanding: {
-        front: singleDoorWidth,
+        front: singleDoorWidth, // Or all four edges, depending on style
         back: singleDoorWidth,
-        left: doorHeight,
-        right: doorHeight,
+        top: doorHeight,
+        bottom: doorHeight,
     }
   });
   totalPanelArea_sqmm += (doorQty * singleDoorWidth * doorHeight);
-  totalEdgeBandLength_mm += doorQty * (singleDoorWidth + singleDoorWidth + doorHeight + doorHeight); // For two doors, all 4 edges
+  totalEdgeBandLength_mm += doorQty * (singleDoorWidth * 2 + doorHeight * 2); 
 
   // 6. Back Panel (x1)
   const backPanelQty = evaluateFormula("1", params);
-  // Assumes back panel fits inside the carcass, recessed. Small tolerance (1mm each side => 2mm total)
-  const backPanelWidth = evaluateFormula("W - 2*PT - 2", params); // -2 for tolerance
-  const backPanelHeight = evaluateFormula("H - 2*PT - 2", params); // -2 for tolerance
+  const backPanelWidth = evaluateFormula("W - 2*PT - 2", params); 
+  const backPanelHeight = evaluateFormula("H - 2*PT - 2", params);
   const backPanelActualThickness = evaluateFormula("BPT", params);
   parts.push({
     name: 'Back Panel',
+    partType: 'Back Panel',
     quantity: backPanelQty,
     width: backPanelWidth,
     height: backPanelHeight,
@@ -218,19 +224,17 @@ export async function calculateCabinetDetails(
   // --- END LOGIC USING FORMULAS ---
 
   // --- Accessories ---
-  // Future: iterate through template.accessories, evaluate quantityFormula
   const accessories: AccessoryItem[] = [
-    { id: "HINGE_STD_FO", name: 'Hinges (pair)', quantity: 2, unitCost: COST_PER_HINGE * 2, totalCost: COST_PER_HINGE * 2 * 2 }, // 2 pairs = 4 hinges
+    { id: "HINGE_STD_FO", name: 'Hinges (pair)', quantity: 2, unitCost: COST_PER_HINGE * 2, totalCost: COST_PER_HINGE * 2 * 2 },
     { id: "HANDLE_STD_PULL", name: 'Handles', quantity: 2, unitCost: COST_PER_HANDLE, totalCost: COST_PER_HANDLE * 2 },
     { id: "SHELF_PIN_STD", name: 'Shelf Pins', quantity: 4, unitCost: COST_PER_SHELF_PIN, totalCost: COST_PER_SHELF_PIN * 4 },
   ];
   const totalAccessoryCost = accessories.reduce((sum, acc) => sum + acc.totalCost, 0);
 
   // --- Cost Estimation ---
-  // Future: iterate through parts, get materialId, fetch MaterialDefinition, use its cost.
   const estimatedPanelMaterialCost = totalPanelArea_sqmm * COST_PER_SQM_PANEL_MM;
   const estimatedBackPanelMaterialCost = totalBackPanelArea_sqmm * COST_PER_SQM_BACK_PANEL_MM;
-  const estimatedEdgeBandCost = (totalEdgeBandLength_mm / 1000) * COST_PER_METER_EDGE_BAND; // Convert mm to m
+  const estimatedEdgeBandCost = (totalEdgeBandLength_mm / 1000) * COST_PER_METER_EDGE_BAND;
 
   const estimatedMaterialCost = estimatedPanelMaterialCost + estimatedBackPanelMaterialCost + estimatedEdgeBandCost;
   const estimatedTotalCost = estimatedMaterialCost + totalAccessoryCost;
@@ -248,3 +252,147 @@ export async function calculateCabinetDetails(
   return { success: true, data: calculatedCabinet };
 }
 
+
+export async function calculateDrawerSet(input: DrawerSetCalculatorInput): Promise<DrawerSetCalculatorResult> {
+  const {
+    cabinetInternalHeight,
+    cabinetWidth,
+    numDrawers,
+    drawerReveal,
+    panelThickness: T,
+    drawerSlideClearanceTotal,
+    drawerBoxSideDepth,
+    drawerBoxSideHeight, // This is the height of the drawer box sides
+    customDrawerFrontHeights,
+  } = input;
+
+  if (numDrawers <= 0) {
+    return { success: false, message: "Number of drawers must be greater than 0.", calculatedDrawers: [] };
+  }
+  if (cabinetInternalHeight <= 0 || cabinetWidth <= 0 || T <= 0 || drawerBoxSideDepth <= 0 || drawerBoxSideHeight <= 0) {
+    return { success: false, message: "All dimensions and thicknesses must be positive values.", calculatedDrawers: [] };
+  }
+   if (drawerBoxSideHeight < 70) { // A reasonable minimum for box side height
+    return { success: false, message: "Drawer box side height is too small (min 70mm).", calculatedDrawers: [] };
+  }
+
+
+  let drawerFrontHeights: number[] = [];
+  const totalRevealSpace = (numDrawers > 1) ? (numDrawers - 1) * drawerReveal : 0;
+
+  if (customDrawerFrontHeights && customDrawerFrontHeights.length > 0) {
+    if (customDrawerFrontHeights.length !== numDrawers) {
+      return { success: false, message: "Number of custom drawer front heights must match the number of drawers.", calculatedDrawers: [] };
+    }
+    drawerFrontHeights = customDrawerFrontHeights;
+    const sumOfCustomFronts = customDrawerFrontHeights.reduce((sum, h) => sum + h, 0);
+    if (sumOfCustomFronts + totalRevealSpace > cabinetInternalHeight) {
+      return {
+        success: false,
+        message: `Custom drawer fronts and reveals (${(sumOfCustomFronts + totalRevealSpace).toFixed(1)}mm) exceed available internal cabinet height (${cabinetInternalHeight.toFixed(1)}mm).`,
+        calculatedDrawers: [],
+        totalFrontsHeightWithReveals: sumOfCustomFronts + totalRevealSpace,
+        cabinetInternalHeight: cabinetInternalHeight
+      };
+    }
+  } else {
+    if (totalRevealSpace >= cabinetInternalHeight && numDrawers > 1) {
+        return { success: false, message: "Total reveal space equals or exceeds internal cabinet height. Cannot calculate drawer fronts.", calculatedDrawers: [] };
+    }
+    const availableHeightForFronts = cabinetInternalHeight - totalRevealSpace;
+    if (availableHeightForFronts <= 0) {
+        return { success: false, message: "Not enough internal height for drawers and reveals.", calculatedDrawers: [] };
+    }
+    const equalDrawerFrontHeight = availableHeightForFronts / numDrawers;
+    if (equalDrawerFrontHeight <= 0) {
+        return { success: false, message: "Calculated drawer front height is not positive.", calculatedDrawers: [] };
+    }
+    drawerFrontHeights = Array(numDrawers).fill(equalDrawerFrontHeight);
+  }
+
+  const calculatedDrawers: CalculatedDrawer[] = [];
+
+  for (let i = 0; i < numDrawers; i++) {
+    const drawerNumber = i + 1;
+    const currentDrawerFrontHeight = drawerFrontHeights[i];
+
+    // Validate individual front height
+    if (currentDrawerFrontHeight <= 30) { // Drawer front must be > 30 to make a box part
+        return { success: false, message: `Drawer ${drawerNumber} front height (${currentDrawerFrontHeight.toFixed(1)}mm) is too small. Must allow for box construction.`, calculatedDrawers: [] };
+    }
+
+    // Drawer Box Side Panels (Height is drawerBoxSideHeight from input)
+    // Width of side panel is the depth of the drawer box
+    const sidePanel: DrawerPartCalculation = {
+      name: "Drawer Box Side",
+      quantity: 2,
+      width: drawerBoxSideDepth, // This is the depth of the drawer side
+      height: drawerBoxSideHeight,
+      thickness: T,
+    };
+
+    // Drawer Back Panel
+    // Width = Cabinet Width - (4T + 2 × Clearance)
+    // Clearance is total here
+    const drawerBackWidth = cabinetWidth - (4 * T + drawerSlideClearanceTotal);
+    if (drawerBackWidth <= 0) {
+        return { success: false, message: `Calculated drawer back width for drawer ${drawerNumber} is not positive. Check cabinet width, panel thickness, and slide clearance.`, calculatedDrawers: [] };
+    }
+    // Height = DrawerSideHeight - 30mm (using input drawerBoxSideHeight)
+    const drawerBackHeight = drawerBoxSideHeight - 30;
+     if (drawerBackHeight <= 0) {
+        return { success: false, message: `Calculated drawer back height for drawer ${drawerNumber} (Box Side Height - 30mm) is not positive.`, calculatedDrawers: [] };
+    }
+    const backPanel: DrawerPartCalculation = {
+      name: "Drawer Box Back",
+      quantity: 1,
+      width: drawerBackWidth,
+      height: drawerBackHeight,
+      thickness: T,
+    };
+    // Counter front would typically be the same dimensions if used.
+
+    // Drawer Bottom Panel
+    // Width = back panel width + 14mm
+    const drawerBottomWidth = drawerBackWidth + 14;
+    // Depth = drawer side panel depth
+    const drawerBottomDepth = drawerBoxSideDepth;
+    const bottomPanel: DrawerPartCalculation = {
+      name: "Drawer Box Bottom",
+      quantity: 1,
+      width: drawerBottomWidth,
+      height: drawerBottomDepth, // This is the depth of the bottom panel
+      thickness: T, // Or could be thinner, e.g., 6mm, but stick to T for now
+      notes: "Thickness could be less than T (e.g., 6mm)"
+    };
+
+    // Drawer Front Panel
+    // Width = Cabinet Width - 2mm
+    const drawerFrontPanelWidth = cabinetWidth - 2;
+    if (drawerFrontPanelWidth <= 0) {
+        return { success: false, message: `Calculated drawer front panel width for drawer ${drawerNumber} is not positive.`, calculatedDrawers: [] };
+    }
+    const frontPanel: DrawerPartCalculation = {
+      name: "Drawer Front Panel",
+      quantity: 1,
+      width: drawerFrontPanelWidth,
+      height: currentDrawerFrontHeight,
+      thickness: T,
+    };
+
+    calculatedDrawers.push({
+      drawerNumber,
+      overallFrontHeight: currentDrawerFrontHeight,
+      boxHeight: drawerBoxSideHeight, // This is the input side height
+      parts: [sidePanel, backPanel, bottomPanel, frontPanel],
+    });
+  }
+
+  return {
+    success: true,
+    calculatedDrawers,
+    totalFrontsHeightWithReveals: drawerFrontHeights.reduce((sum, h) => sum + h, 0) + totalRevealSpace,
+    cabinetInternalHeight: cabinetInternalHeight,
+    message: "Drawer set calculated successfully."
+  };
+}

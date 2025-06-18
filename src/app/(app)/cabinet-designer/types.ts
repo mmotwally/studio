@@ -172,3 +172,41 @@ export interface PredefinedFormula {
   dimension: 'Width' | 'Height' | 'Quantity' | 'Thickness'; // Which dimension this formula is for
   formula: string; // The actual formula string
 }
+
+
+// --- Drawer Set Calculator Types ---
+export interface DrawerPartCalculation {
+  name: string;         // "Side Panel", "Back Panel", "Bottom Panel", "Drawer Front"
+  quantity: number;
+  width: number;
+  height: number;       // For side panels, this is the 'depth' of the drawer box. For other panels, it's height.
+  thickness: number;    // Typically 'T'
+  notes?: string;
+}
+
+export interface CalculatedDrawer {
+  drawerNumber: number;
+  overallFrontHeight: number; // The height of the decorative drawer front
+  boxHeight: number;          // The height of the drawer box itself (sides, back) - This is drawerBoxSideHeight from input
+  parts: DrawerPartCalculation[];
+}
+
+export interface DrawerSetCalculatorInput {
+  cabinetInternalHeight: number;
+  cabinetWidth: number;
+  numDrawers: number;
+  drawerReveal: number;        // Gap between drawer fronts
+  panelThickness: number;      // T
+  drawerSlideClearanceTotal: number; // Total clearance for slides (e.g., 13mm for 6.5mm per side)
+  drawerBoxSideDepth: number;  // User-defined depth of the drawer box sides
+  drawerBoxSideHeight: number; // User-defined height of the drawer box sides (e.g., 100mm, 150mm)
+  customDrawerFrontHeights?: number[]; // Optional list of individual front heights
+}
+
+export interface DrawerSetCalculatorResult {
+  success: boolean;
+  message?: string;
+  calculatedDrawers: CalculatedDrawer[];
+  totalFrontsHeightWithReveals?: number; 
+  cabinetInternalHeight?: number; 
+}

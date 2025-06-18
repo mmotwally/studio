@@ -14,9 +14,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { Form, FormItem } from '@/components/ui/form'; 
 import { useToast } from "@/hooks/use-toast";
-import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen } from 'lucide-react';
-import { calculateCabinetDetails } from './actions';
-import type { CabinetCalculationInput, CalculatedCabinet, CabinetPart, CabinetTemplateData, PartDefinition, CabinetPartType, CabinetTypeContext } from './types';
+import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle } from 'lucide-react';
+import { calculateCabinetDetails, calculateDrawerSet } from './actions';
+import type { CabinetCalculationInput, CalculatedCabinet, CabinetPart, CabinetTemplateData, PartDefinition, CabinetPartType, CabinetTypeContext, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer as SingleCalculatedDrawer } from './types';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -47,15 +47,14 @@ const initialNewTemplate: CabinetTemplateData = {
   parameters: { 
     PT: 18, 
     BPT: 3,
-    BPO: 10, // Back Panel Offset (B)
+    BPO: 10, 
     DG: 2, 
     DCG: 3, 
     TRD: 80,
-    // Drawer Parameters
-    DW: 500, // Default Drawer Width (for a 600mm cabinet, this might be opening)
-    DD: 450, // Default Drawer Depth (slide length)
-    DH: 150, // Default Drawer Side Height
-    Clearance: 6 // Default total side clearance for drawer slides (3mm per side)
+    DW: 500, 
+    DD: 450, 
+    DH: 150, 
+    Clearance: 13 // Standard total clearance (e.g., 6.5mm per side)
   },
   parts: [
     { partId: 'side_panels_initial', nameLabel: 'Side Panels (Example)', partType: 'Side Panel', cabinetContext: 'Base', quantityFormula: '2', widthFormula: 'D', heightFormula: 'H - PT', materialId: 'PLY_18MM_BIRCH', thicknessFormula: 'PT', edgeBanding: { front: true }, grainDirection: 'with' },
@@ -78,14 +77,14 @@ const formulaHelpItems: FormulaHelpItem[] = [
   { id: 'D', label: 'D', value: 'D', description: "Overall Cabinet Depth.", example: "If cabinet depth is 560mm, D = 560." },
   { id: 'PT', label: 'PT', value: 'PT', description: "Panel Thickness (from global parameters).", example: "If Panel Thickness is 18mm, PT = 18." },
   { id: 'BPT', label: 'BPT', value: 'BPT', description: "Back Panel Thickness (from global parameters).", example: "If Back Panel Thickness is 3mm, BPT = 3." },
-  { id: 'BPO', label: 'BPO (or B)', value: 'BPO', description: "Back Panel Offset/Gap (from global parameters).", example: "If Back Panel Offset is 10mm, BPO = 10." },
+  { id: 'BPO', label: 'BPO', value: 'BPO', description: "Back Panel Offset/Gap (from global parameters).", example: "If Back Panel Offset is 10mm, BPO = 10." },
   { id: 'DG', label: 'DG', value: 'DG', description: "Door Gap (total side or vertical, from global parameters).", example: "If Door Gap is 2mm, DG = 2." },
   { id: 'DCG', label: 'DCG', value: 'DCG', description: "Door Center Gap (between two doors, from global parameters).", example: "If Door Center Gap is 3mm, DCG = 3." },
   { id: 'TRD', label: 'TRD', value: 'TRD', description: "Top Rail Depth (from global parameters).", example: "If Top Rail Depth is 80mm, TRD = 80." },
   { id: 'DW', label: 'DW', value: 'DW', description: "Drawer Width (overall opening for the drawer, from global parameters).", example: "DW = 500 for a drawer in a 600mm cabinet opening." },
   { id: 'DD', label: 'DD', value: 'DD', description: "Drawer Depth (typically slide length or side panel depth, from global parameters).", example: "DD = 450 for a 450mm drawer slide." },
   { id: 'DH', label: 'DH', value: 'DH', description: "Drawer Side Height (from global parameters).", example: "DH = 150 for a 150mm high drawer side." },
-  { id: 'Clearance', label: 'Clearance', value: 'Clearance', description: "Total side clearance for drawer slides (e.g., 3mm per side = 6mm total, from global parameters).", example: "Clearance = 6." },
+  { id: 'Clearance', label: 'Clearance', value: 'Clearance', description: "Total side clearance for drawer slides (from global parameters, e.g. 13mm total for 6.5mm per side).", example: "Clearance = 13." },
   { id: 'W_minus_2PT', label: 'W - 2*PT', value: 'W - 2*PT', description: "Common for internal width of carcass (e.g., bottom panel width).", example: "W=600, PT=18  =>  600 - 2*18 = 564." },
   { id: 'D_minus_BPO_BPT', label: 'D - BPO - BPT', value: 'D - BPO - BPT', description: "Common for shelf depth, considering back panel placement.", example: "D=560, BPO=10, BPT=3  =>  560 - 10 - 3 = 547." },
   { id: 'DOOR_W_SINGLE', label: 'W - 2', value: 'W - 2', description: "Example for a single full-width door, assuming 2mm total gap.", example: "W=600 => 600 - 2 = 598" },
@@ -109,6 +108,22 @@ export default function CabinetDesignerPage() {
   const [viewMode, setViewMode] = React.useState<'calculator' | 'templateDefinition'>('calculator');
   const [currentTemplate, setCurrentTemplate] = React.useState<CabinetTemplateData>(JSON.parse(JSON.stringify(initialNewTemplate))); 
   const [isAddPartDialogOpen, setIsAddPartDialogOpen] = React.useState(false);
+
+  // --- Drawer Set Calculator State ---
+  const [drawerSetInput, setDrawerSetInput] = React.useState<DrawerSetCalculatorInput>({
+    cabinetInternalHeight: 684, // Example: 720 (H) - 18 (Top) - 18 (Bottom) = 684
+    cabinetWidth: 564,          // Example: 600 (W) - 2*18 (Sides) = 564
+    numDrawers: 3,
+    drawerReveal: 3,
+    panelThickness: 18,
+    drawerSlideClearanceTotal: 13, // e.g., 6.5mm per side
+    drawerBoxSideDepth: 500,
+    drawerBoxSideHeight: 150,
+    customDrawerFrontHeights: [],
+  });
+  const [drawerSetResult, setDrawerSetResult] = React.useState<DrawerSetCalculatorResult | null>(null);
+  const [isCalculatingDrawers, setIsCalculatingDrawers] = React.useState(false);
+  const [drawerCalcError, setDrawerCalcError] = React.useState<string | null>(null);
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -143,11 +158,10 @@ export default function CabinetDesignerPage() {
     let result;
     
     if (calculationInput.cabinetType === currentTemplate.id && currentTemplate) { 
-        // This branch is for when a user-defined template (from template editor) is selected
         result = await calculateCabinetDetails({
-            ...calculationInput, // Contains W, H, D from user input for *this calculation instance*
-            cabinetType: currentTemplate.id, // Pass the ID of the custom template
-            customTemplate: currentTemplate // Pass the full template data object
+            ...calculationInput, 
+            cabinetType: currentTemplate.id, 
+            customTemplate: currentTemplate 
         });
          toast({
             title: "Calculation with Custom Template",
@@ -156,11 +170,9 @@ export default function CabinetDesignerPage() {
             duration: 10000,
         });
     } else if (calculationInput.cabinetType === 'standard_base_2_door') {
-        // This is for the predefined, hardcoded "standard_base_2_door"
         result = await calculateCabinetDetails(calculationInput);
     }
     else {
-      // For other predefined types that don't have backend logic yet
       toast({
         title: "Calculation Not Implemented",
         description: `Calculation logic for "${cabinetTypes.find(ct => ct.value === calculationInput.cabinetType)?.label}" is not yet implemented in this prototype. Only 'Standard Base Cabinet - 2 Door' (using formulas) or a basic custom template (conceptual evaluation) is currently supported.`,
@@ -193,11 +205,11 @@ export default function CabinetDesignerPage() {
   const getPreviewImageSrc = () => {
     switch(calculationInput.cabinetType) {
         case 'standard_base_2_door': return "https://placehold.co/300x200/EBF4FA/5DADE2.png";
-        case 'wall_cabinet_1_door': return "https://placehold.co/300x200/D6EAF8/85C1E9.png"; // Slightly different color for wall
-        case 'tall_pantry_2_door': return "https://placehold.co/300x200/D1F2EB/76D7C4.png"; // Tall pantry color
-        case 'base_cabinet_1_door_1_drawer': return "https://placehold.co/300x200/FEF9E7/F9E79F.png"; // Base with drawer color
-        case 'corner_wall_cabinet': return "https://placehold.co/300x200/E8DAEF/C39BD3.png"; // Corner color
-        case currentTemplate?.id: return currentTemplate.previewImage || "https://placehold.co/300x200/AEB6BF/566573.png"; // Custom template preview
+        case 'wall_cabinet_1_door': return "https://placehold.co/300x200/D6EAF8/85C1E9.png"; 
+        case 'tall_pantry_2_door': return "https://placehold.co/300x200/D1F2EB/76D7C4.png"; 
+        case 'base_cabinet_1_door_1_drawer': return "https://placehold.co/300x200/FEF9E7/F9E79F.png";
+        case 'corner_wall_cabinet': return "https://placehold.co/300x200/E8DAEF/C39BD3.png"; 
+        case currentTemplate?.id: return currentTemplate.previewImage || "https://placehold.co/300x200/AEB6BF/566573.png";
         default: return "https://placehold.co/300x200/EEEEEE/BDBDBD.png";
     }
   }
@@ -243,7 +255,7 @@ export default function CabinetDesignerPage() {
         const finalKey = pathArray[pathArray.length -1];
         if (partIndex !== undefined && path.startsWith('parts.') && field) {
              if (finalKey === 'edgeBanding' && typeof field === 'string' && (field === 'front' || field === 'back' || field === 'top' || field === 'bottom')) {
-                if (!target.edgeBanding) target.edgeBanding = {}; // Ensure edgeBanding object exists
+                if (!target.edgeBanding) target.edgeBanding = {};
                 target.edgeBanding = { ...target.edgeBanding, [field as keyof PartDefinition['edgeBanding']]: processedValue };
             } else if (target && finalKey !== 'edgeBanding') { 
                  target[finalKey as keyof PartDefinition] = processedValue as any;
@@ -308,6 +320,47 @@ export default function CabinetDesignerPage() {
     });
     setViewMode('calculator');
   };
+
+
+  const handleDrawerSetInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    if (name === "customDrawerFrontHeights") {
+      setDrawerSetInput(prev => ({ ...prev, [name]: value.split(',').map(s => parseFloat(s.trim())).filter(n => !isNaN(n)) }));
+    } else {
+      setDrawerSetInput(prev => ({ ...prev, [name]: parseFloat(value) || 0 }));
+    }
+  };
+
+  const handleCalculateDrawerSet = async () => {
+    setIsCalculatingDrawers(true);
+    setDrawerSetResult(null);
+    setDrawerCalcError(null);
+    try {
+      const result = await calculateDrawerSet(drawerSetInput);
+      setDrawerSetResult(result);
+      if (!result.success) {
+        setDrawerCalcError(result.message || "An unknown error occurred in drawer calculation.");
+        toast({
+          title: "Drawer Calculation Warning",
+          description: result.message || "Could not calculate drawer set components.",
+          variant: "default",
+        });
+      } else {
+         toast({
+          title: "Drawer Set Calculated",
+          description: "Drawer components have been calculated.",
+        });
+      }
+    } catch (error) {
+      console.error("Drawer calculation error:", error);
+      const msg = error instanceof Error ? error.message : "Failed to calculate drawer set.";
+      setDrawerCalcError(msg);
+      toast({ title: "Drawer Calculation Failed", description: msg, variant: "destructive" });
+    } finally {
+      setIsCalculatingDrawers(false);
+    }
+  };
+
 
   const FormulaInputWithHelper = ({ partIndex, formulaField, label, placeholder }: { partIndex: number, formulaField: keyof PartDefinition, label: string, placeholder: string }) => (
     <div className="flex items-end gap-2">
@@ -421,7 +474,7 @@ export default function CabinetDesignerPage() {
                       {calculatedData.parts.map((part, index) => (
                         <TableRow key={index}><TableCell>{part.name} ({part.partType})</TableCell><TableCell className="text-center">{part.quantity}</TableCell><TableCell className="text-right">{part.width.toFixed(0)}</TableCell><TableCell className="text-right">{part.height.toFixed(0)}</TableCell><TableCell className="text-center">{part.thickness}</TableCell><TableCell>{part.material}</TableCell>
                         <TableCell className="text-xs">
-                          {part.edgeBanding && Object.entries(part.edgeBanding).filter(([, length]) => length && length > 0).map(([edge, length]) => `${edge.charAt(0).toUpperCase()}${edge.slice(1)}: ${length?.toFixed(0)}mm`).join(', ')}
+                          {part.edgeBanding && Object.entries(part.edgeBanding).filter(([, value]) => typeof value === 'number' && value > 0).map(([edge, length]) => `${edge.charAt(0).toUpperCase()}${edge.slice(1)}: ${ (length as number).toFixed(0)}mm`).join(', ')}
                         </TableCell>
                         <TableCell className="text-xs capitalize">{part.grainDirection || '-'}</TableCell>
                         </TableRow>))}
@@ -445,6 +498,75 @@ export default function CabinetDesignerPage() {
           {!isLoading && !calculatedData && !calculationError && (<div className="text-center py-10 text-muted-foreground"><Library className="mx-auto h-12 w-12 mb-4" /><p>Select a cabinet type, enter dimensions, and click "Calculate" to see the results.</p></div>)}
         </CardContent>
       </Card>
+
+      {/* Drawer Set Calculator Card */}
+      <Card className="lg:col-span-3 shadow-lg">
+        <CardHeader>
+          <CardTitle className="flex items-center"><BoxSelect className="mr-2 h-5 w-5 text-primary" />Drawer Set Calculator</CardTitle>
+          <CardDescription>Calculate components for a set of drawers within a cabinet.</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div><Label htmlFor="ds_cabInternalHeight">Cabinet Internal Height (mm)</Label><Input id="ds_cabInternalHeight" name="cabinetInternalHeight" type="number" value={drawerSetInput.cabinetInternalHeight} onChange={handleDrawerSetInputChange} placeholder="e.g., 684"/></div>
+            <div><Label htmlFor="ds_cabWidth">Cabinet Width (mm)</Label><Input id="ds_cabWidth" name="cabinetWidth" type="number" value={drawerSetInput.cabinetWidth} onChange={handleDrawerSetInputChange} placeholder="e.g., 564"/></div>
+            <div><Label htmlFor="ds_numDrawers">Number of Drawers</Label><Input id="ds_numDrawers" name="numDrawers" type="number" value={drawerSetInput.numDrawers} onChange={handleDrawerSetInputChange} placeholder="e.g., 3"/></div>
+            <div><Label htmlFor="ds_drawerReveal">Drawer Reveal (mm)</Label><Input id="ds_drawerReveal" name="drawerReveal" type="number" value={drawerSetInput.drawerReveal} onChange={handleDrawerSetInputChange} placeholder="e.g., 3"/></div>
+            <div><Label htmlFor="ds_panelThickness">Panel Thickness (T, mm)</Label><Input id="ds_panelThickness" name="panelThickness" type="number" value={drawerSetInput.panelThickness} onChange={handleDrawerSetInputChange} placeholder="e.g., 18"/></div>
+            <div><Label htmlFor="ds_slideClearance">Total Slide Clearance (mm)</Label><Input id="ds_slideClearance" name="drawerSlideClearanceTotal" type="number" value={drawerSetInput.drawerSlideClearanceTotal} onChange={handleDrawerSetInputChange} placeholder="e.g., 13"/></div>
+            <div><Label htmlFor="ds_boxSideDepth">Drawer Box Side Depth (mm)</Label><Input id="ds_boxSideDepth" name="drawerBoxSideDepth" type="number" value={drawerSetInput.drawerBoxSideDepth} onChange={handleDrawerSetInputChange} placeholder="e.g., 500"/></div>
+            <div><Label htmlFor="ds_boxSideHeight">Drawer Box Side Height (mm)</Label><Input id="ds_boxSideHeight" name="drawerBoxSideHeight" type="number" value={drawerSetInput.drawerBoxSideHeight} onChange={handleDrawerSetInputChange} placeholder="e.g., 150"/></div>
+            <div className="lg:col-span-3"><Label htmlFor="ds_customFronts">Custom Drawer Front Heights (mm, comma-separated, optional)</Label><Input id="ds_customFronts" name="customDrawerFrontHeights" type="text" value={drawerSetInput.customDrawerFrontHeights?.join(', ') || ''} onChange={handleDrawerSetInputChange} placeholder="e.g., 100, 150, 200"/></div>
+          </div>
+          <Button onClick={handleCalculateDrawerSet} className="w-full md:w-auto" disabled={isCalculatingDrawers}>
+            {isCalculatingDrawers ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Calculator className="mr-2 h-4 w-4" />}
+            {isCalculatingDrawers ? "Calculating Drawers..." : "Calculate Drawer Set Components"}
+          </Button>
+          
+          {isCalculatingDrawers && (<div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2">Calculating drawer parts...</p></div>)}
+          {drawerCalcError && !isCalculatingDrawers && (
+            <div className="text-destructive bg-destructive/10 p-3 rounded-md text-sm flex items-center gap-2">
+              <AlertCircle className="h-4 w-4"/> {drawerCalcError}
+            </div>
+          )}
+          {drawerSetResult && drawerSetResult.success && drawerSetResult.calculatedDrawers.length > 0 && !isCalculatingDrawers && (
+            <div className="space-y-4 mt-4">
+              <h3 className="text-md font-semibold">Calculated Drawer Components:</h3>
+              {drawerSetResult.cabinetInternalHeight && drawerSetResult.totalFrontsHeightWithReveals && (
+                 <p className="text-xs text-muted-foreground">
+                    Total height used by fronts + reveals: {drawerSetResult.totalFrontsHeightWithReveals.toFixed(1)}mm (Cabinet internal height: {drawerSetResult.cabinetInternalHeight.toFixed(1)}mm)
+                 </p>
+              )}
+              {drawerSetResult.calculatedDrawers.map((drawer: SingleCalculatedDrawer) => (
+                <Card key={drawer.drawerNumber} className="bg-muted/30">
+                  <CardHeader className="pb-2 pt-3 px-4">
+                    <CardTitle className="text-base">Drawer {drawer.drawerNumber}</CardTitle>
+                    <CardDescription className="text-xs">Front Height: {drawer.overallFrontHeight.toFixed(1)}mm, Box Side Height: {drawer.boxHeight.toFixed(1)}mm</CardDescription>
+                  </CardHeader>
+                  <CardContent className="px-4 pb-3">
+                    <Table className="text-xs">
+                      <TableHeader><TableRow><TableHead>Part Name</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Width (mm)</TableHead><TableHead className="text-right">Height (mm)</TableHead><TableHead className="text-center">Thick (mm)</TableHead></TableRow></TableHeader>
+                      <TableBody>
+                        {drawer.parts.map(part => (
+                          <TableRow key={part.name}>
+                            <TableCell>{part.name}</TableCell>
+                            <TableCell className="text-center">{part.quantity}</TableCell>
+                            <TableCell className="text-right">{part.width.toFixed(1)}</TableCell>
+                            <TableCell className="text-right">{part.height.toFixed(1)}</TableCell>
+                            <TableCell className="text-center">{part.thickness.toFixed(0)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+          {!isCalculatingDrawers && !drawerSetResult && !drawerCalcError && (<div className="text-center py-6 text-muted-foreground text-sm">Enter drawer parameters and click "Calculate Drawer Set Components".</div>)}
+        </CardContent>
+      </Card>
+
+
     </div>
   );
 
@@ -621,12 +743,13 @@ export default function CabinetDesignerPage() {
   );
 
   return (
-    <>
+    <TooltipProvider> {/* Ensure TooltipProvider wraps the entire page if tooltips are used outside of specific views */}
       <PageHeader
         title="Cabinet Designer"
         description={viewMode === 'calculator' ? "Configure cabinet modules, calculate parts, and estimate costs." : "Define a new parametric cabinet template."}
       />
       {viewMode === 'calculator' ? renderCalculatorView() : renderTemplateDefinitionView()}
-    </>
+    </TooltipProvider>
   );
 }
+
