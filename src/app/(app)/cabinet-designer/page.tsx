@@ -12,9 +12,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Form, FormItem } from '@/components/ui/form'; // Added Form import
+import { Form, FormItem } from '@/components/ui/form';
 import { useToast } from "@/hooks/use-toast";
-import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown } from 'lucide-react';
+import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen } from 'lucide-react';
 import { calculateCabinetDetails } from './actions';
 import type { CabinetCalculationInput, CalculatedCabinet, CabinetPart, CabinetTemplateData, PartDefinition, CabinetPartType } from './types';
 import { Separator } from '@/components/ui/separator';
@@ -42,13 +42,13 @@ const defaultDims = {
 // Placeholder for a new template being defined
 const initialNewTemplate: CabinetTemplateData = {
   id: `custom_${Date.now()}`, // Temporary ID
-  name: 'My New Cabinet',
+  name: 'My New Custom Cabinet',
   type: 'custom',
   defaultDimensions: { width: 600, height: 700, depth: 500 },
-  parameters: { PT: 18, BPO: 10, DG: 2, DCG: 3, TRD: 80, BPT: 3 }, // Added BPT to align with actions.ts
+  parameters: { PT: 18, BPO: 10, DG: 2, DCG: 3, TRD: 80, BPT: 3 },
   parts: [
-    { partId: 'side_panels', nameLabel: 'Side Panels', partType: 'Side Panel', quantityFormula: '2', widthFormula: 'D', heightFormula: 'H', materialId: 'PLY_18MM_BIRCH', thicknessFormula: 'PT', edgeBanding: { front: true }, grainDirection: 'with' },
-    { partId: 'bottom_panel', nameLabel: 'Bottom Panel', partType: 'Bottom Panel', quantityFormula: '1', widthFormula: 'W - 2*PT', heightFormula: 'D', materialId: 'PLY_18MM_BIRCH', thicknessFormula: 'PT', edgeBanding: { front: true } },
+    { partId: 'side_panels_initial', nameLabel: 'Side Panels (Example)', partType: 'Side Panel', quantityFormula: '2', widthFormula: 'D', heightFormula: 'H', materialId: 'PLY_18MM_BIRCH', thicknessFormula: 'PT', edgeBanding: { front: true }, grainDirection: 'with' },
+    { partId: 'bottom_panel_initial', nameLabel: 'Bottom Panel (Example)', partType: 'Bottom Panel', quantityFormula: '1', widthFormula: 'W - 2*PT', heightFormula: 'D', materialId: 'PLY_18MM_BIRCH', thicknessFormula: 'PT', edgeBanding: { front: true } },
   ],
   accessories: [],
 };
@@ -73,8 +73,9 @@ const formulaHelpItems: FormulaHelpItem[] = [
   { id: 'TRD', label: 'TRD', value: 'TRD', description: "Top Rail Depth (from global parameters).", example: "If Top Rail Depth is 80mm, TRD = 80." },
   { id: 'W_minus_2PT', label: 'W - 2*PT', value: 'W - 2*PT', description: "Common for internal width of carcass (e.g., bottom panel width).", example: "W=600, PT=18  =>  600 - 2*18 = 564." },
   { id: 'D_minus_BPO_BPT', label: 'D - BPO - BPT', value: 'D - BPO - BPT', description: "Common for shelf depth, considering back panel placement.", example: "D=560, BPO=10, BPT=3  =>  560 - 10 - 3 = 547." },
-  { id: 'DOOR_W', label: '(W - DG - DCG) / 2', value: '(W - DG - DCG) / 2', description: "Example for one door's width in a 2-door cabinet. Adjust DG based on total vs per-side.", example: "W=600, DG=2 (side gap), DCG=3 (center) => (600 - 2 - 3)/2 = 297.5" },
-  { id: 'DOOR_H', label: 'H - DG', value: 'H - DG', description: "Example for door height. Adjust DG based on total vs per-side.", example: "H=720, DG=2 (vertical gap) => 720 - 2 = 718" },
+  { id: 'DOOR_W_SINGLE', label: 'W - DG', value: 'W - DG', description: "Example for a single full-width door. Adjust DG based on total vs per-side.", example: "W=600, DG=2 (total side gap) => 600 - 2 = 598" },
+  { id: 'DOOR_W_PAIR', label: '(W - DG - DCG) / 2', value: '(W - DG - DCG) / 2', description: "Example for one door's width in a 2-door cabinet. Adjust DG based on total vs per-side.", example: "W=600, DG=2 (each side of pair), DCG=3 (center) => (600 - 2 - 3)/2 = 297.5" },
+  { id: 'DOOR_H', label: 'H - DG', value: 'H - DG', description: "Example for door height. Adjust DG based on total vs per-side.", example: "H=720, DG=2 (total vertical gap) => 720 - 2 = 718" },
 ];
 
 
@@ -102,17 +103,8 @@ export default function CabinetDesignerPage() {
 
   const handleTypeChange = (value: string) => {
     setCalculationInput(prev => ({ ...prev, cabinetType: value }));
-    // For now, only the default type has hardcoded dimensions for auto-fill
     if (value === 'standard_base_2_door') {
         setCalculationInput(prev => ({ ...prev, width: defaultDims.width, height: defaultDims.height, depth: defaultDims.depth }));
-    } else {
-        // Placeholder for fetching default dims for other types or clearing them
-        // For now, we'll keep existing dimensions or let user input
-        // toast({
-        //     title: "Cabinet Type Changed",
-        //     description: `Calculations for this type may not be implemented yet.`,
-        //     variant: "default"
-        // })
     }
     setCalculatedData(null);
     setCalculationError(null);
@@ -134,15 +126,18 @@ export default function CabinetDesignerPage() {
     }
     
     let result;
-    if (calculationInput.cabinetType === 'custom_template_id_placeholder' && currentTemplate) { // Conceptual
+    // Conceptual check for custom template - this would be refined
+    if (calculationInput.cabinetType === currentTemplate.id && currentTemplate) { 
         result = await calculateCabinetDetails({
             ...calculationInput,
-            cabinetType: currentTemplate.id, // Use the template ID
-            customTemplate: currentTemplate // Pass the whole template
+            cabinetType: currentTemplate.id, 
+            customTemplate: currentTemplate 
         });
          toast({
             title: "Calculation with Custom Template (Conceptual)",
-            description: `Attempting to calculate using template: ${currentTemplate.name}. Full dynamic template calculation is not yet implemented.`,
+            description: `Attempting to calculate using template: ${currentTemplate.name}. This is a conceptual prototype. Full dynamic template calculation with user-defined formulas via UI requires a robust formula engine.`,
+            variant: "default",
+            duration: 7000,
         });
     } else if (calculationInput.cabinetType !== 'standard_base_2_door') {
       toast({
@@ -182,6 +177,7 @@ export default function CabinetDesignerPage() {
         case 'tall_pantry_2_door': return "https://placehold.co/300x200/D5F5E3/58D68D.png";
         case 'base_cabinet_1_door_1_drawer': return "https://placehold.co/300x200/FCF3CF/F7DC6F.png";
         case 'corner_wall_cabinet': return "https://placehold.co/300x200/E8DAEF/C39BD3.png";
+        case currentTemplate.id: return currentTemplate.previewImage || "https://placehold.co/300x200/AEB6BF/566573.png"; // Custom template preview
         default: return "https://placehold.co/300x200/EEEEEE/BDBDBD.png";
     }
   }
@@ -193,6 +189,7 @@ export default function CabinetDesignerPage() {
         case 'tall_pantry_2_door': return "pantry cabinet";
         case 'base_cabinet_1_door_1_drawer': return "kitchen drawer";
         case 'corner_wall_cabinet': return "corner cabinet";
+        case currentTemplate.id: return "custom cabinet";
         default: return "cabinet furniture";
     }
   }
@@ -201,10 +198,9 @@ export default function CabinetDesignerPage() {
     const { name, value, type } = e.target;
     let processedValue: string | number | boolean = value;
     if (type === 'number') processedValue = parseFloat(value) || 0;
-    if (type === 'checkbox' && field) { // Ensure field is provided for checkbox
+    if (type === 'checkbox' && field) {
         processedValue = (e.target as HTMLInputElement).checked;
     }
-
 
     setCurrentTemplate(prev => {
         const newTemplate = JSON.parse(JSON.stringify(prev)); 
@@ -212,11 +208,14 @@ export default function CabinetDesignerPage() {
         const pathArray = path.split('.');
 
         for (let i = 0; i < pathArray.length - 1; i++) {
-            target = target[pathArray[i]];
-            if (pathArray[i] === 'parts' && partIndex !== undefined && target[partIndex]) {
-                target = target[partIndex];
-            } else if (pathArray[i] === 'parts' && partIndex !== undefined && !target[partIndex]) {
-                console.error(`Part at index ${partIndex} not found in template path ${path}`);
+            const currentPathSegment = pathArray[i];
+            if (currentPathSegment === 'parts' && partIndex !== undefined) {
+                target = target[currentPathSegment][partIndex];
+            } else {
+                target = target[currentPathSegment];
+            }
+            if (!target) {
+                console.error(`Path segment ${currentPathSegment} (index ${i}) not found in template path ${path}. Target became undefined.`);
                 return prev; 
             }
         }
@@ -224,11 +223,12 @@ export default function CabinetDesignerPage() {
         const finalKey = pathArray[pathArray.length -1];
         if (partIndex !== undefined && path.startsWith('parts.') && field) {
              if (finalKey === 'edgeBanding' && typeof field === 'string' && (field === 'front' || field === 'back' || field === 'top' || field === 'bottom')) {
+                if (!target.edgeBanding) target.edgeBanding = {};
                 target.edgeBanding = { ...target.edgeBanding, [field as keyof PartDefinition['edgeBanding']]: processedValue };
-            } else if (finalKey !== 'edgeBanding') { // Handles other PartDefinition fields
+            } else if (target && finalKey !== 'edgeBanding') { 
                  target[finalKey as keyof PartDefinition] = processedValue as any;
             }
-        } else {
+        } else if (target) {
              target[finalKey] = processedValue;
         }
         return newTemplate;
@@ -266,15 +266,22 @@ export default function CabinetDesignerPage() {
   };
 
   const handleSaveTemplate = () => {
-    // In a real app, this would send `currentTemplate` to a backend to be saved in a database.
-    // The backend would assign a permanent ID.
     console.log("Saving Template (Conceptual):", currentTemplate);
     toast({
         title: "Template Saved (Conceptual)",
-        description: `Template "${currentTemplate.name}" definition logged. This is a prototype; no actual database saving or dynamic calculation with this template is implemented yet.`,
+        description: `Template "${currentTemplate.name}" definition logged. Full dynamic calculation with this template is conceptual.`,
     });
-    // Optionally, add the new template to a list of available templates in the calculator view
-    // For now, just switch back.
+    // Add to available types for calculator view
+    if (!cabinetTypes.find(ct => ct.value === currentTemplate.id)) {
+        cabinetTypes.push({value: currentTemplate.id, label: `${currentTemplate.name} (Custom)`});
+    }
+    // Set this new custom template as the selected one in the calculator
+    setCalculationInput({
+        cabinetType: currentTemplate.id,
+        width: currentTemplate.defaultDimensions.width,
+        height: currentTemplate.defaultDimensions.height,
+        depth: currentTemplate.defaultDimensions.depth,
+    });
     setViewMode('calculator');
   };
 
@@ -289,6 +296,7 @@ export default function CabinetDesignerPage() {
               value={(currentTemplate.parts[partIndex] as any)[formulaField] || ''}
               onChange={(e) => handleTemplateInputChange(e, `parts.${formulaField}`, partIndex, formulaField as keyof PartDefinition)}
               placeholder={placeholder}
+              className="text-sm"
             />
         ) : (
              <Input
@@ -296,26 +304,27 @@ export default function CabinetDesignerPage() {
                 value={(currentTemplate.parts[partIndex] as any)[formulaField] || ''}
                 onChange={(e) => handleTemplateInputChange(e, `parts.${formulaField}`, partIndex, formulaField as keyof PartDefinition)}
                 placeholder={placeholder}
+                className="text-sm"
              />
         )}
       </div>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" className="whitespace-nowrap px-2">
-            <ChevronDown className="h-4 w-4" /> <span className="ml-1">Ins</span>
+            <ChevronDown className="h-4 w-4" /> <span className="ml-1 text-xs">Ins</span>
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64 max-h-80 overflow-y-auto">
           {formulaHelpItems.map((item) => (
             <DropdownMenuItem key={item.id} onSelect={() => handleFormulaSelect(partIndex, formulaField, item.value)} className="flex justify-between items-center">
-              <span>{item.label}</span>
+              <span className="text-xs">{item.label}</span>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-6 w-6 opacity-50 hover:opacity-100">
-                    <HelpCircle className="h-4 w-4" />
+                    <HelpCircle className="h-3 w-3" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="left" className="max-w-xs text-sm p-2">
+                <TooltipContent side="left" className="max-w-xs text-xs p-2 bg-popover text-popover-foreground">
                   <p className="font-semibold">{item.description}</p>
                   <p className="text-xs text-muted-foreground">{item.example}</p>
                 </TooltipContent>
@@ -363,7 +372,7 @@ export default function CabinetDesignerPage() {
       <Card className="lg:col-span-2 shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center"><Palette className="mr-2 h-5 w-5 text-primary" />Calculation Results</CardTitle>
-          <CardDescription>Estimated parts, materials, and costs. (Currently for 'Standard Base 2 Door' only or basic custom template)</CardDescription>
+          <CardDescription>Estimated parts, materials, and costs. (Currently for 'Standard Base 2 Door' or basic custom template)</CardDescription>
         </CardHeader>
         <CardContent>
           {isLoading && (<div className="flex items-center justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Calculating...</p></div>)}
@@ -386,7 +395,7 @@ export default function CabinetDesignerPage() {
                   <Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Part</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Width</TableHead><TableHead className="text-right">Height</TableHead><TableHead className="text-center">Thick</TableHead><TableHead>Material</TableHead><TableHead>Edge Banding</TableHead><TableHead>Grain</TableHead></TableRow></TableHeader>
                     <TableBody>
                       {calculatedData.parts.map((part, index) => (
-                        <TableRow key={index}><TableCell>{part.name}</TableCell><TableCell className="text-center">{part.quantity}</TableCell><TableCell className="text-right">{part.width.toFixed(0)}</TableCell><TableCell className="text-right">{part.height.toFixed(0)}</TableCell><TableCell className="text-center">{part.thickness}</TableCell><TableCell>{part.material}</TableCell>
+                        <TableRow key={index}><TableCell>{part.name} ({part.partType})</TableCell><TableCell className="text-center">{part.quantity}</TableCell><TableCell className="text-right">{part.width.toFixed(0)}</TableCell><TableCell className="text-right">{part.height.toFixed(0)}</TableCell><TableCell className="text-center">{part.thickness}</TableCell><TableCell>{part.material}</TableCell>
                         <TableCell className="text-xs">
                           {part.edgeBanding && Object.entries(part.edgeBanding).filter(([, length]) => length && length > 0).map(([edge, length]) => `${edge.charAt(0).toUpperCase()}${edge.slice(1)}: ${length?.toFixed(0)}mm`).join(', ')}
                         </TableCell>
@@ -454,8 +463,33 @@ export default function CabinetDesignerPage() {
                 {Object.entries(currentTemplate.parameters).map(([key, value]) => (
                     <div key={key}><Label htmlFor={`param_${key}`}>{key}</Label><Input id={`param_${key}`} name={key} type="number" value={value as number} onChange={(e) => handleTemplateInputChange(e, `parameters.${key}`)} /></div>
                 ))}
-                {/* TODO: Add button to add more custom parameters */}
             </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg flex items-center"><BookOpen className="mr-2 h-5 w-5 text-muted-foreground" />Formula & Parameter Reference</CardTitle>
+            <CardDescription>Use these in your part dimension formulas. Hover for details.</CardDescription>
+          </CardHeader>
+          <CardContent className="max-h-60 overflow-y-auto text-xs space-y-2">
+            {formulaHelpItems.map(item => (
+              <div key={item.id} className="p-2 border rounded-md bg-muted/50">
+                <div className="flex justify-between items-center">
+                    <code className="font-semibold text-primary">{item.value}</code>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <HelpCircle className="h-4 w-4 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-xs text-xs p-2 bg-popover text-popover-foreground">
+                            <p className="font-medium">{item.description}</p>
+                            <p className="text-xs text-muted-foreground mt-1">Example: {item.example}</p>
+                        </TooltipContent>
+                    </Tooltip>
+                </div>
+                <p className="text-muted-foreground text-xs mt-0.5">{item.description}</p>
+              </div>
+            ))}
+          </CardContent>
         </Card>
 
         <Card>
@@ -474,11 +508,11 @@ export default function CabinetDesignerPage() {
             </CardHeader>
             <CardContent className="space-y-4">
                 {currentTemplate.parts.map((part, index) => (
-                    <Card key={part.partId || index} className="p-4 relative">
+                    <Card key={part.partId || index} className="p-4 relative bg-card/80">
                          <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 items-start">
-                            <div><Label>Part Type</Label><Input disabled value={part.partType} /> </div>
-                            <div><Label>Part Name Label</Label><Input value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} placeholder="e.g., Side Panel"/></div>
+                            <div><Label>Part Type</Label><Input disabled value={part.partType} className="text-sm" /> </div>
+                            <div><Label>Part Name Label</Label><Input value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} placeholder="e.g., Side Panel" className="text-sm"/></div>
                             <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula" placeholder="e.g., 2"/>
                             
                             <FormulaInputWithHelper partIndex={index} formulaField="widthFormula" label="Width Formula" placeholder="e.g., D or W - 2*PT"/>
@@ -490,6 +524,7 @@ export default function CabinetDesignerPage() {
                                     value={part.materialId} 
                                     onChange={(e) => handleTemplateInputChange(e, 'parts.materialId', index, 'materialId')} 
                                     placeholder="e.g., MDF_18MM"
+                                    className="text-sm"
                                 />
                             </div>
                             <FormulaInputWithHelper partIndex={index} formulaField="thicknessFormula" label="Thickness Formula" placeholder="e.g., PT or BPT"/>
@@ -500,7 +535,7 @@ export default function CabinetDesignerPage() {
                                     value={part.grainDirection || 'none'}
                                     onValueChange={(value) => handleTemplateInputChange({ target: { name: 'grainDirection', value: value === 'none' ? null : value }} as any, 'parts.grainDirection', index, 'grainDirection')}
                                 >
-                                    <SelectTrigger><SelectValue /></SelectTrigger>
+                                    <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="none">None</SelectItem>
                                         <SelectItem value="with">With Grain (Height)</SelectItem>
@@ -525,14 +560,13 @@ export default function CabinetDesignerPage() {
                                 ))}
                             </div>
                              <p className="text-xs text-muted-foreground mt-1">
-                                "Top" and "Bottom" refer to the edges along the part's Width dimension. "Front" and "Back" refer to edges along the part's Height dimension.
-                                This assumes parts are typically oriented with their 'height' dimension vertically.
+                                "Top" & "Bottom" refer to edges along Width. "Front" & "Back" refer to edges along Height. (Assumes typical orientation).
                             </p>
                         </div>
                          {part.notes && (
                             <div className="mt-3">
                                 <Label className="font-medium">Part Notes:</Label>
-                                <Textarea value={part.notes} onChange={(e) => handleTemplateInputChange(e, 'parts.notes', index, 'notes')} rows={2} />
+                                <Textarea value={part.notes} onChange={(e) => handleTemplateInputChange(e, 'parts.notes', index, 'notes')} rows={2} className="text-sm"/>
                             </div>
                         )}
                     </Card>
