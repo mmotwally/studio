@@ -611,15 +611,31 @@ export default function CabinetDesignerPage() {
                         </Dialog>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                        {currentTemplate.parts.map((part, index) => (
+                        {currentTemplate.parts.map((part, index) => {
+                            const materialInfo = PREDEFINED_MATERIALS.find(m => m.id === part.materialId);
+                            const grainText = part.grainDirection === 'with' ? 'With Grain' : part.grainDirection === 'reverse' ? 'Reverse Grain' : 'None';
+                            return (
                             <Card key={part.partId || index} className="p-4 relative bg-card/80">
                                 <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
                                 
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 items-start">
-                                    <div><Label>Part Type</Label><Input disabled value={part.partType} className="text-sm" /> </div>
-                                    <div><Label>Part Name Label</Label><Input value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} placeholder="e.g., Side Panel" className="text-sm"/></div>
-                                    <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula" placeholder="e.g., 2"/>
+                                <div className="mb-3">
+                                    <Label>Part Name Label</Label>
+                                    <Input value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} placeholder="e.g., Side Panel" className="text-sm font-medium"/>
+                                </div>
+                                <div className="mb-3 p-2 border rounded-md bg-muted/30 text-xs space-y-0.5">
+                                    <p><span className="font-medium">Type:</span> {part.partType} ({part.cabinetContext || 'General'})</p>
+                                    <p><span className="font-medium">Dimensions (H x W x T):</span> ({part.heightFormula}) x ({part.widthFormula}) x ({part.thicknessFormula || 'PT'})</p>
+                                    <p><span className="font-medium">Quantity:</span> {part.quantityFormula}</p>
+                                    <p><span className="font-medium">Material:</span> {materialInfo?.name || part.materialId}{materialInfo?.hasGrain ? " (Grain)" : ""}</p>
+                                    <p><span className="font-medium">Grain:</span> {grainText}</p>
+                                </div>
 
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 items-start">
+                                    {/* Part Type and Context are now mostly for display in summary, but can be kept if direct editing is desired later */}
+                                    {/* <div><Label>Part Type</Label><Input disabled value={part.partType} className="text-sm" /> </div> */}
+                                    {/* <div><Label>Cabinet Context</Label><Input disabled value={part.cabinetContext || 'General'} className="text-sm" /></div> */}
+                                    
+                                    <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula" placeholder="e.g., 2"/>
                                     <FormulaInputWithHelper partIndex={index} formulaField="widthFormula" label="Width Formula" placeholder="e.g., D or W - 2*PT"/>
                                     <FormulaInputWithHelper partIndex={index} formulaField="heightFormula" label="Height Formula" placeholder="e.g., H or D - BPO"/>
 
@@ -655,11 +671,6 @@ export default function CabinetDesignerPage() {
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    <div>
-                                        <Label>Cabinet Context</Label>
-                                        <Input disabled value={part.cabinetContext || 'General'} className="text-sm" />
-                                    </div>
-
                                 </div>
                                 <div className="mt-3">
                                     <Label className="font-medium">Edge Banding (Applied to this part's edges):</Label>
@@ -691,7 +702,7 @@ export default function CabinetDesignerPage() {
                                     />
                                 </div>
                             </Card>
-                        ))}
+                        )})}
                         {currentTemplate.parts.length === 0 && <p className="text-muted-foreground text-center py-4">No parts defined yet. Click "Add Part" to begin.</p>}
                     </CardContent>
                 </Card>
