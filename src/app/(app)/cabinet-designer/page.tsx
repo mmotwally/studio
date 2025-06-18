@@ -15,7 +15,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { FormItem, FormLabel, FormControl } from '@/components/ui/form'; // Form is not directly used here, FormItem for Checkbox layout
 import { useToast } from "@/hooks/use-toast";
 import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2 } from 'lucide-react';
-import { calculateCabinetDetails, calculateDrawerSet } from './actions';
+import { calculateCabinetDetails, calculateDrawerSet, saveCabinetTemplateAction, getCabinetTemplatesAction, getCabinetTemplateByIdAction, deleteCabinetTemplateAction } from './actions';
 import type { CabinetCalculationInput, CalculatedCabinet, CabinetPart, CabinetTemplateData, PartDefinition, CabinetPartType, CabinetTypeContext, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer as SingleCalculatedDrawer } from './types';
 import { PREDEFINED_MATERIALS } from './types';
 import { Separator } from '@/components/ui/separator';
@@ -27,8 +27,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { PREDEFINED_FORMULAS } from './predefined-formulas';
 
 
-// Initial predefined cabinet types
-const initialSelectableCabinetTypes = [
+// Initial predefined cabinet types (hardcoded)
+const initialHardcodedCabinetTypes = [
   { value: 'standard_base_2_door', label: 'Standard Base Cabinet - 2 Door (600x720x560mm default)' },
   { value: 'wall_cabinet_1_door', label: 'Wall Cabinet - 1 Door' },
   { value: 'tall_pantry_2_door', label: 'Tall Pantry - 2 Door' },
@@ -42,32 +42,22 @@ const defaultDims = {
     depth: 560,
 };
 
-const initialNewTemplate: CabinetTemplateData = {
-  id: `custom_${Date.now()}`,
+const generateNewTemplatePlaceholder = (): CabinetTemplateData => ({
+  id: crypto.randomUUID(), // Generate a new UUID for each new template
   name: 'My New Custom Cabinet',
   type: 'custom',
-  previewImage: 'https://placehold.co/300x200/FADBD8/C0392B.png', // Placeholder for 1-drawer, 1-door with top rail
+  previewImage: 'https://placehold.co/300x200/FADBD8/C0392B.png',
   defaultDimensions: { width: 600, height: 700, depth: 500 },
   parameters: {
-    PT: 18, // Panel Thickness
-    BPT: 3, // Back Panel Thickness
-    BPO: 10, // Back Panel Offset
-    DG: 2,  // Door Gap (overall)
-    DCG: 3, // Door Center Gap
-    TRD: 80, // Top Rail Depth
-    B: 10, // Back Panel Gap
-    // Drawer Specific Parameters
-    DW: 500, // Drawer Width (overall opening)
-    DD: 450, // Drawer Depth (slide length/box depth)
-    DH: 150, // Drawer Side Height (box side height)
-    Clearance: 13 // Total side clearance for drawer slides
+    PT: 18, BPT: 3, BPO: 10, DG: 2, DCG: 3, TRD: 80, B: 10,
+    DW: 500, DD: 450, DH: 150, Clearance: 13
   },
   parts: [
     { partId: 'side_panels_initial', nameLabel: 'Side Panels (Example)', partType: 'Side Panel', cabinetContext: 'Base', quantityFormula: '2', widthFormula: 'D', heightFormula: 'H - PT', materialId: 'Material1', thicknessFormula: 'PT', edgeBanding: { front: true }, grainDirection: 'with' },
     { partId: 'bottom_panel_initial', nameLabel: 'Bottom Panel (Example)', partType: 'Bottom Panel', cabinetContext: 'Base', quantityFormula: '1', widthFormula: 'W - 2*PT', heightFormula: 'D', materialId: 'Material1', thicknessFormula: 'PT', edgeBanding: { front: true } },
   ],
   accessories: [],
-};
+});
 
 interface GlobalParameterUIDefinition {
   key: keyof CabinetTemplateData['parameters'];
@@ -89,10 +79,7 @@ const globalParameterUIDefinitions: GlobalParameterUIDefinition[] = [
   { key: 'Clearance', displayName: 'Drawer Slide Clearance (Total)', tooltip: 'Total side clearance for drawer slides (Clearance)' },
 ];
 
-/**
- * VERY basic client-side formula evaluator for display purposes.
- * UNSAFE for complex user-defined formulas.
- */
+
 function evaluateFormulaClientSide(
   formula: string | undefined,
   params: { W: number; H: number; D: number; [key: string]: number | undefined }
@@ -102,43 +89,27 @@ function evaluateFormulaClientSide(
   }
   try {
     const { W, H, D, PT, BPT, BPO, TRD, DCG, DG, B, DW, DD, DH, Clearance } = params;
-    
-    // Create a scope with only known parameters
-    const scope: Record<string, number | undefined> = { W, H, D, PT, BPT, BPO, TRD, DCG, DG, B, DW, DD, DH, Clearance };
-    
-    // Replace parameter names in formula with their values
-    // This is a naive replacement and only works for simple cases.
+    const scope: Record<string, number | undefined> = { W, H, D, PT, BPT, BPO, TRD, DCG, DG, B, DW, DD, DH, Clearance, ...params };
     let formulaToEvaluate = formula;
     for (const key in scope) {
       if (scope[key] !== undefined) {
-        // Regex to replace whole words only to avoid partial replacements (e.g., D in TRD)
         const regex = new RegExp(`\\b${key}\\b`, 'g');
         formulaToEvaluate = formulaToEvaluate.replace(regex, String(scope[key]));
       }
     }
-
-    // Check if any known parameter placeholders are still in the formula
-    // If so, it means a parameter wasn't available or the formula is too complex for this simple eval.
     const knownParamsRegex = /\b(W|H|D|PT|BPT|BPO|TRD|DCG|DG|B|DW|DD|DH|Clearance)\b/g;
     if (knownParamsRegex.test(formulaToEvaluate)) {
-      return formula; // Fallback to showing the formula string if it still contains unresolved params
+      return formula; 
     }
-
-    // Remove any non-numeric or non-operator characters that might remain
-    // This is a very basic sanitization for eval.
     const sanitizedForEval = formulaToEvaluate.replace(/[^-()\d/*+.]/g, '');
-
     // eslint-disable-next-line no-eval
     const result = eval(sanitizedForEval);
-
     if (typeof result === 'number' && !isNaN(result)) {
-      // Round to 1 decimal place for display
       return String(parseFloat(result.toFixed(1)));
     }
-    return formula; // Fallback if evaluation didn't yield a clean number
+    return formula; 
   } catch (e) {
-    // console.warn(`Client-side eval error for "${formula}":`, e);
-    return formula; // Fallback to showing the formula string on any error
+    return formula;
   }
 }
 
@@ -156,39 +127,52 @@ interface ProjectCabinetItem {
 export default function CabinetDesignerPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = React.useState(false);
-  const [selectableCabinetTypes, setSelectableCabinetTypes] = React.useState(initialSelectableCabinetTypes);
+  const [dbTemplates, setDbTemplates] = React.useState<CabinetTemplateData[]>([]);
+  const [selectableCabinetTypes, setSelectableCabinetTypes] = React.useState(initialHardcodedCabinetTypes);
+  
   const [calculationInput, setCalculationInput] = React.useState<CabinetCalculationInput>({
     cabinetType: 'standard_base_2_door',
     width: defaultDims.width,
     height: defaultDims.height,
     depth: defaultDims.depth,
-    customTemplate: undefined, // Initialize customTemplate
+    customTemplate: undefined,
   });
   const [calculatedData, setCalculatedData] = React.useState<CalculatedCabinet | null>(null);
   const [calculationError, setCalculationError] = React.useState<string | null>(null);
 
   const [viewMode, setViewMode] = React.useState<'calculator' | 'templateDefinition'>('calculator');
-  const [currentTemplate, setCurrentTemplate] = React.useState<CabinetTemplateData>(JSON.parse(JSON.stringify(initialNewTemplate)));
+  const [currentTemplate, setCurrentTemplate] = React.useState<CabinetTemplateData>(generateNewTemplatePlaceholder());
   const [isAddPartDialogOpen, setIsAddPartDialogOpen] = React.useState(false);
 
-  // --- Drawer Set Calculator State ---
   const [drawerSetInput, setDrawerSetInput] = React.useState<DrawerSetCalculatorInput>({
-    cabinetInternalHeight: 684, // Example: 720 (H) - 18 (Top) - 18 (Bottom) = 684
-    cabinetWidth: 564,          // Example: 600 (W) - 2*18 (Sides) = 564
-    numDrawers: 3,
-    drawerReveal: 3,
-    panelThickness: 18,
-    drawerSlideClearanceTotal: 13, // e.g., 6.5mm per side
-    drawerBoxSideDepth: 500,
-    drawerBoxSideHeight: 150,
-    customDrawerFrontHeights: [],
+    cabinetInternalHeight: 684, cabinetWidth: 564, numDrawers: 3, drawerReveal: 3,
+    panelThickness: 18, drawerSlideClearanceTotal: 13, drawerBoxSideDepth: 500,
+    drawerBoxSideHeight: 150, customDrawerFrontHeights: [],
   });
   const [drawerSetResult, setDrawerSetResult] = React.useState<DrawerSetCalculatorResult | null>(null);
   const [isCalculatingDrawers, setIsCalculatingDrawers] = React.useState(false);
   const [drawerCalcError, setDrawerCalcError] = React.useState<string | null>(null);
   
-  // --- Project Planner State ---
   const [projectCabinetItems, setProjectCabinetItems] = React.useState<ProjectCabinetItem[]>([]);
+
+  const fetchAndSetTemplates = React.useCallback(async () => {
+    try {
+      const templatesFromDb = await getCabinetTemplatesAction();
+      setDbTemplates(templatesFromDb);
+      const combinedTypes = [
+        ...initialHardcodedCabinetTypes,
+        ...templatesFromDb.map(t => ({ value: t.id, label: `${t.name} (Custom DB)` }))
+      ];
+      setSelectableCabinetTypes(combinedTypes);
+    } catch (error) {
+      console.error("Failed to fetch cabinet templates:", error);
+      toast({ title: "Error", description: "Could not load custom templates.", variant: "destructive" });
+    }
+  }, [toast]);
+
+  React.useEffect(() => {
+    fetchAndSetTemplates();
+  }, [fetchAndSetTemplates]);
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -196,28 +180,29 @@ export default function CabinetDesignerPage() {
     setCalculationInput(prev => ({ ...prev, [name]: parseInt(value, 10) || 0 }));
   };
 
-  const handleTypeChange = (value: string) => {
+  const handleTypeChange = async (value: string) => {
     setCalculationInput(prev => {
-        const newCalcInput: CabinetCalculationInput = {
-            ...prev,
-            cabinetType: value,
-            customTemplate: value === currentTemplate.id ? currentTemplate : undefined,
-        };
-        // Set default dimensions based on selected type
-        if (value === 'standard_base_2_door') {
-            newCalcInput.width = defaultDims.width;
-            newCalcInput.height = defaultDims.height;
-            newCalcInput.depth = defaultDims.depth;
-        } else if (value === 'base_cabinet_1_door_1_drawer') {
-            newCalcInput.width = 600;
-            newCalcInput.height = 720;
-            newCalcInput.depth = 560;
-        } else if (value === currentTemplate.id && currentTemplate) {
-            newCalcInput.width = currentTemplate.defaultDimensions.width;
-            newCalcInput.height = currentTemplate.defaultDimensions.height;
-            newCalcInput.depth = currentTemplate.defaultDimensions.depth;
+        const newCalcInput: CabinetCalculationInput = { ...prev, cabinetType: value, customTemplate: undefined };
+        const hardcodedType = initialHardcodedCabinetTypes.find(hct => hct.value === value);
+        const dbType = dbTemplates.find(dbt => dbt.id === value);
+
+        if (hardcodedType) {
+            if (value === 'standard_base_2_door') {
+                newCalcInput.width = defaultDims.width;
+                newCalcInput.height = defaultDims.height;
+                newCalcInput.depth = defaultDims.depth;
+            } else if (value === 'base_cabinet_1_door_1_drawer') {
+                newCalcInput.width = 600;
+                newCalcInput.height = 720;
+                newCalcInput.depth = 560;
+                 newCalcInput.previewImage = "https://placehold.co/300x200/FADBD8/C0392B.png";
+            } // Add other hardcoded defaults here
+        } else if (dbType) { // This means it's a custom template from DB
+            newCalcInput.customTemplate = dbType;
+            newCalcInput.width = dbType.defaultDimensions.width;
+            newCalcInput.height = dbType.defaultDimensions.height;
+            newCalcInput.depth = dbType.defaultDimensions.depth;
         }
-        // Add more else if blocks here for other predefined types if they have specific defaults
         return newCalcInput;
     });
     setCalculatedData(null);
@@ -230,83 +215,94 @@ export default function CabinetDesignerPage() {
     setCalculationError(null);
 
     if (calculationInput.width <= 0 || calculationInput.height <= 0 || calculationInput.depth <= 0) {
-      toast({
-        title: "Invalid Dimensions",
-        description: "Width, Height, and Depth must be positive numbers.",
-        variant: "destructive",
-      });
+      toast({ title: "Invalid Dimensions", description: "Width, Height, and Depth must be positive numbers.", variant: "destructive" });
       setIsLoading(false);
       return;
     }
 
     let result;
+    let templateToCalculateWith = calculationInput.customTemplate;
 
-    // If the selected type is the current custom template, ensure customTemplate is passed
-    const activeCustomTemplate = calculationInput.cabinetType === currentTemplate.id ? currentTemplate : undefined;
-
-    if (activeCustomTemplate) {
-        result = await calculateCabinetDetails({
-            ...calculationInput,
-            customTemplate: activeCustomTemplate // Ensure the action gets the custom template data
-        });
-    } else if (calculationInput.cabinetType === 'standard_base_2_door') {
-        result = await calculateCabinetDetails(calculationInput); // No custom template for this one
+    // If customTemplate isn't set directly, try to load it from dbTemplates if it's a custom ID
+    if (!templateToCalculateWith && !initialHardcodedCabinetTypes.some(hct => hct.value === calculationInput.cabinetType)) {
+        const foundDbTemplate = dbTemplates.find(dbt => dbt.id === calculationInput.cabinetType);
+        if (foundDbTemplate) {
+            templateToCalculateWith = foundDbTemplate;
+        } else { // Try fetching from DB directly if not in local state (e.g., after save and re-select)
+            const fetchedFromDb = await getCabinetTemplateByIdAction(calculationInput.cabinetType);
+            if (fetchedFromDb) templateToCalculateWith = fetchedFromDb;
+        }
     }
-    else {
+    
+    if (templateToCalculateWith) {
+        result = await calculateCabinetDetails({ ...calculationInput, customTemplate: templateToCalculateWith });
+    } else if (initialHardcodedCabinetTypes.some(hct => hct.value === calculationInput.cabinetType)) {
+        // For hardcoded types, ensure customTemplate is undefined
+        result = await calculateCabinetDetails({ ...calculationInput, customTemplate: undefined });
+    } else {
       toast({
         title: "Calculation Not Implemented",
-        description: `Calculation logic for "${selectableCabinetTypes.find(ct => ct.value === calculationInput.cabinetType)?.label}" is not yet implemented in this prototype. Only 'Standard Base Cabinet - 2 Door' or a defined custom template is currently supported.`,
+        description: `Calculation logic for "${calculationInput.cabinetType}" is not yet fully implemented or the template could not be loaded.`,
         variant: "default",
         duration: 7000,
       });
-      setCalculationError(`Calculation logic for "${calculationInput.cabinetType}" is not available yet.`);
+      setCalculationError(`Calculation logic for "${calculationInput.cabinetType}" is not available or template missing.`);
       setIsLoading(false);
       return;
     }
 
-
     if (result.success && result.data) {
       setCalculatedData(result.data);
-      toast({
-        title: "Calculation Successful",
-        description: "Cabinet parts and cost estimated.",
-      });
+      toast({ title: "Calculation Successful", description: "Cabinet parts and cost estimated." });
     } else {
       setCalculationError(result.error || "An unknown error occurred during calculation.");
-      toast({
-        title: "Calculation Failed",
-        description: result.error || "Could not calculate cabinet details.",
-        variant: "destructive",
-      });
+      toast({ title: "Calculation Failed", description: result.error || "Could not calculate cabinet details.", variant: "destructive" });
     }
     setIsLoading(false);
   };
-
+  
   const getPreviewImageSrc = () => {
-    switch(calculationInput.cabinetType) {
-        case 'standard_base_2_door': return "https://placehold.co/300x200/EBF4FA/5DADE2.png";
-        case 'wall_cabinet_1_door': return "https://placehold.co/300x200/D6EAF8/85C1E9.png";
-        case 'tall_pantry_2_door': return "https://placehold.co/300x200/D1F2EB/76D7C4.png";
-        case 'base_cabinet_1_door_1_drawer': return "https://placehold.co/300x200/FADBD8/C0392B.png";
-        case 'corner_wall_cabinet': return "https://placehold.co/300x200/E8DAEF/C39BD3.png";
-        // Check if the current calculationInput's cabinetType matches the currentTemplate's id
-        // and if so, use the currentTemplate's previewImage.
-        case currentTemplate?.id: return currentTemplate.previewImage || "https://placehold.co/300x200/AEB6BF/566573.png";
-        default: return "https://placehold.co/300x200/EEEEEE/BDBDBD.png";
+    const selectedIsHardcoded = initialHardcodedCabinetTypes.some(hct => hct.value === calculationInput.cabinetType);
+    const selectedIsDbType = dbTemplates.some(dbt => dbt.id === calculationInput.cabinetType);
+
+    if (selectedIsHardcoded) {
+        switch(calculationInput.cabinetType) {
+            case 'standard_base_2_door': return "https://placehold.co/300x200/EBF4FA/5DADE2.png";
+            case 'wall_cabinet_1_door': return "https://placehold.co/300x200/D6EAF8/85C1E9.png";
+            case 'tall_pantry_2_door': return "https://placehold.co/300x200/D1F2EB/76D7C4.png";
+            case 'base_cabinet_1_door_1_drawer': return "https://placehold.co/300x200/FADBD8/C0392B.png";
+            case 'corner_wall_cabinet': return "https://placehold.co/300x200/E8DAEF/C39BD3.png";
+            default: return "https://placehold.co/300x200/EEEEEE/BDBDBD.png";
+        }
+    } else if (selectedIsDbType) {
+        const template = dbTemplates.find(dbt => dbt.id === calculationInput.cabinetType);
+        return template?.previewImage || "https://placehold.co/300x200/AEB6BF/566573.png";
+    } else if (calculationInput.customTemplate?.previewImage) { // For a template being actively defined
+        return calculationInput.customTemplate.previewImage;
     }
+    return "https://placehold.co/300x200/EEEEEE/BDBDBD.png";
   }
 
   const getImageAiHint = () => {
-    switch(calculationInput.cabinetType) {
-        case 'standard_base_2_door': return "base cabinet";
-        case 'wall_cabinet_1_door': return "wall cabinet";
-        case 'tall_pantry_2_door': return "pantry cabinet";
-        case 'base_cabinet_1_door_1_drawer': return "drawer door";
-        case 'corner_wall_cabinet': return "corner cabinet";
-        case currentTemplate?.id: return "drawer door";
-        default: return "cabinet furniture";
+    const selectedIsHardcoded = initialHardcodedCabinetTypes.some(hct => hct.value === calculationInput.cabinetType);
+    const selectedIsDbType = dbTemplates.some(dbt => dbt.id === calculationInput.cabinetType);
+
+    if (selectedIsHardcoded) {
+        switch(calculationInput.cabinetType) {
+            case 'standard_base_2_door': return "base cabinet";
+            case 'wall_cabinet_1_door': return "wall cabinet";
+            case 'tall_pantry_2_door': return "pantry cabinet";
+            case 'base_cabinet_1_door_1_drawer': return "drawer door";
+            case 'corner_wall_cabinet': return "corner cabinet";
+            default: return "cabinet furniture";
+        }
+    } else if (selectedIsDbType || calculationInput.customTemplate) {
+        // Generic hint for custom templates, often drawer/door combos
+        return "drawer door"; 
     }
+    return "cabinet furniture";
   }
+
 
   const handleTemplateInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>, path: string, partIndex?: number, field?: keyof PartDefinition | keyof PartDefinition['edgeBanding']) => {
     const { name, value, type } = e.target;
@@ -353,9 +349,9 @@ export default function CabinetDesignerPage() {
     setCurrentTemplate(prev => {
         const newTemplate = JSON.parse(JSON.stringify(prev));
         if (newTemplate.parts && newTemplate.parts[partIndex]) {
-            if (selectedFormulaValue === PREDEFINED_FORMULAS.find(f => f.key === 'CUSTOM')?.formula) { // Assuming CUSTOM formula has empty string value
+            if (selectedFormulaValue === PREDEFINED_FORMULAS.find(f => f.key === 'CUSTOM')?.formula) { 
                 (newTemplate.parts[partIndex] as any)[`${formulaField}Key`] = 'CUSTOM';
-                (newTemplate.parts[partIndex] as any)[formulaField] = ""; // Clear the formula for custom input
+                (newTemplate.parts[partIndex] as any)[formulaField] = ""; 
             } else {
                 const selectedFormula = PREDEFINED_FORMULAS.find(f => f.formula === selectedFormulaValue);
                 (newTemplate.parts[partIndex] as any)[`${formulaField}Key`] = selectedFormula?.key;
@@ -386,34 +382,38 @@ export default function CabinetDesignerPage() {
     }));
   };
 
-  const handleSaveTemplate = () => {
-    const templateName = currentTemplate.name || "Unnamed Template";
-    toast({
-        title: "Template Added (This Session)",
-        description: `Template "${templateName}" is ready for calculation. The backend will attempt dynamic calculation with its formulas. (Note: Complex formulas may have limitations.)`,
-        duration: 8000,
-    });
-
-    setSelectableCabinetTypes(prevTypes => {
-        const newTypes = [...prevTypes];
-        const existingTypeIndex = newTypes.findIndex(ct => ct.value === currentTemplate.id);
-        const newEntry = { value: currentTemplate.id, label: `${templateName} (Custom)` };
-        if (existingTypeIndex > -1) {
-            newTypes[existingTypeIndex] = newEntry;
+  const handleSaveTemplate = async () => {
+    setIsLoading(true);
+    try {
+        const result = await saveCabinetTemplateAction(currentTemplate);
+        if (result.success && result.id) {
+            toast({
+                title: "Template Saved to Database",
+                description: `Template "${currentTemplate.name}" has been saved.`,
+                duration: 5000,
+            });
+            await fetchAndSetTemplates(); // Refresh the list of templates from DB
+            setCalculationInput({ // Pre-select the newly saved template for calculation
+                cabinetType: result.id,
+                width: currentTemplate.defaultDimensions.width,
+                height: currentTemplate.defaultDimensions.height,
+                depth: currentTemplate.defaultDimensions.depth,
+                customTemplate: currentTemplate, // Pass the full template data
+            });
+            setViewMode('calculator');
         } else {
-            newTypes.push(newEntry);
+            throw new Error(result.error || "Failed to save template to database.");
         }
-        return newTypes;
-    });
-
-    setCalculationInput({
-        cabinetType: currentTemplate.id,
-        width: currentTemplate.defaultDimensions.width,
-        height: currentTemplate.defaultDimensions.height,
-        depth: currentTemplate.defaultDimensions.depth,
-        customTemplate: currentTemplate, // Important: pass the template data
-    });
-    setViewMode('calculator');
+    } catch (error) {
+        console.error("Failed to save template:", error);
+        toast({
+            title: "Error Saving Template",
+            description: (error instanceof Error ? error.message : "An unknown error occurred."),
+            variant: "destructive",
+        });
+    } finally {
+        setIsLoading(false);
+    }
   };
 
 
@@ -435,16 +435,9 @@ export default function CabinetDesignerPage() {
       setDrawerSetResult(result);
       if (!result.success) {
         setDrawerCalcError(result.message || "An unknown error occurred in drawer calculation.");
-        toast({
-          title: "Drawer Calculation Warning",
-          description: result.message || "Could not calculate drawer set components.",
-          variant: "default",
-        });
+        toast({ title: "Drawer Calculation Warning", description: result.message || "Could not calculate drawer set components.", variant: "default" });
       } else {
-         toast({
-          title: "Drawer Set Calculated",
-          description: "Drawer components have been calculated.",
-        });
+         toast({ title: "Drawer Set Calculated", description: "Drawer components have been calculated." });
       }
     } catch (error) {
       console.error("Drawer calculation error:", error);
@@ -532,28 +525,31 @@ export default function CabinetDesignerPage() {
       );
   };
 
-  // --- Project Planner Handlers ---
   const handleAddProjectItem = () => {
-    const firstTemplate = selectableCabinetTypes[0];
+    const firstTemplateSelectable = selectableCabinetTypes[0];
     let initialWidth = defaultDims.width;
     let initialHeight = defaultDims.height;
     let initialDepth = defaultDims.depth;
 
-    if (firstTemplate.value === currentTemplate?.id && currentTemplate) {
-        initialWidth = currentTemplate.defaultDimensions.width;
-        initialHeight = currentTemplate.defaultDimensions.height;
-        initialDepth = currentTemplate.defaultDimensions.depth;
-    } else if (firstTemplate.value === 'standard_base_2_door') {
-        // defaultDims is already set for this
+    const firstTemplateData = dbTemplates.find(t => t.id === firstTemplateSelectable.value) || 
+                             (firstTemplateSelectable.value === currentTemplate?.id ? currentTemplate : undefined);
+    
+    if (firstTemplateData) {
+        initialWidth = firstTemplateData.defaultDimensions.width;
+        initialHeight = firstTemplateData.defaultDimensions.height;
+        initialDepth = firstTemplateData.defaultDimensions.depth;
+    } else if (firstTemplateSelectable.value === 'standard_base_2_door') {
+        // Default dims already set for this one
+    } else if (firstTemplateSelectable.value === 'base_cabinet_1_door_1_drawer') {
+        initialWidth = 600; initialHeight = 720; initialDepth = 560;
     }
-    // For other predefined types, we might need a lookup or use generic defaults
     
     setProjectCabinetItems(prev => [
       ...prev,
       {
         id: `proj_item_${Date.now()}`,
-        templateId: firstTemplate.value,
-        templateName: firstTemplate.label,
+        templateId: firstTemplateSelectable.value,
+        templateName: firstTemplateSelectable.label,
         quantity: 1,
         width: initialWidth,
         height: initialHeight,
@@ -575,25 +571,21 @@ export default function CabinetDesignerPage() {
             const selectedTemplateInfo = selectableCabinetTypes.find(ct => ct.value === value);
             updatedItem.templateName = selectedTemplateInfo?.label || "Unknown Template";
             
-            // Update dimensions based on new template
-            if (selectedTemplateInfo?.value === currentTemplate?.id && currentTemplate) {
-                updatedItem.width = currentTemplate.defaultDimensions.width;
-                updatedItem.height = currentTemplate.defaultDimensions.height;
-                updatedItem.depth = currentTemplate.defaultDimensions.depth;
+            const newTemplateData = dbTemplates.find(t => t.id === value) || 
+                                    (value === currentTemplate?.id ? currentTemplate : undefined);
+
+            if (newTemplateData) {
+                updatedItem.width = newTemplateData.defaultDimensions.width;
+                updatedItem.height = newTemplateData.defaultDimensions.height;
+                updatedItem.depth = newTemplateData.defaultDimensions.depth;
             } else if (selectedTemplateInfo?.value === 'standard_base_2_door') {
                 updatedItem.width = defaultDims.width;
                 updatedItem.height = defaultDims.height;
                 updatedItem.depth = defaultDims.depth;
             } else if (selectedTemplateInfo?.value === 'base_cabinet_1_door_1_drawer') {
-                updatedItem.width = 600;
-                updatedItem.height = 720;
-                updatedItem.depth = 560;
+                updatedItem.width = 600; updatedItem.height = 720; updatedItem.depth = 560;
             } else {
-                // Fallback for other predefined types if their specific defaults aren't handy
-                // You might want to define these in the selectableCabinetTypes array or a separate lookup
-                updatedItem.width = 600; 
-                updatedItem.height = 700;
-                updatedItem.depth = 500;
+                updatedItem.width = 600; updatedItem.height = 700; updatedItem.depth = 500;
             }
           }
           return updatedItem;
@@ -613,8 +605,7 @@ export default function CabinetDesignerPage() {
         </CardHeader>
         <CardContent className="space-y-6">
           <Button onClick={() => { 
-              const newId = `custom_${Date.now()}`;
-              setCurrentTemplate({...JSON.parse(JSON.stringify(initialNewTemplate)), id: newId }); 
+              setCurrentTemplate(generateNewTemplatePlaceholder()); 
               setViewMode('templateDefinition'); 
             }} 
             variant="outline" className="w-full"
@@ -884,8 +875,7 @@ export default function CabinetDesignerPage() {
                             return (
                             <Card key={part.partId || index} className="p-4 relative bg-card/80">
                                 <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
-                                
-                                <div className="mb-3">
+                                <div className="mb-2">
                                   <Input 
                                       id={`partName_${index}`} 
                                       value={part.nameLabel} 
@@ -989,12 +979,14 @@ export default function CabinetDesignerPage() {
             </CardContent>
             <CardFooter className="flex justify-end space-x-3">
                 <Button variant="outline" onClick={() => setViewMode('calculator')}>Cancel</Button>
-                <Button onClick={handleSaveTemplate}><Save className="mr-2 h-4 w-4" /> Save Template</Button>
+                <Button onClick={handleSaveTemplate} disabled={isLoading}>
+                    {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                    Save Template to Database
+                </Button>
             </CardFooter>
             </Card>
         </TooltipProvider>
 
-        {/* Drawer Set Calculator - Conditionally rendered if template type might involve drawers */}
         {(currentTemplate.type === 'base' || currentTemplate.type === 'tall' || currentTemplate.type === 'custom') && (
             <Card className="shadow-lg">
                 <CardHeader>
@@ -1076,7 +1068,4 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
-
-      
-
     
