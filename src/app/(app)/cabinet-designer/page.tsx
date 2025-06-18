@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Form, FormItem } from '@/components/ui/form';
+import { FormItem } from '@/components/ui/form'; // Form is not directly used here, FormItem for Checkbox layout
 import { useToast } from "@/hooks/use-toast";
 import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle } from 'lucide-react';
 import { calculateCabinetDetails, calculateDrawerSet } from './actions';
@@ -88,6 +88,59 @@ const globalParameterUIDefinitions: GlobalParameterUIDefinition[] = [
   { key: 'DH', displayName: 'Drawer Side Height', tooltip: 'Height of the drawer box sides (DH)' },
   { key: 'Clearance', displayName: 'Drawer Slide Clearance (Total)', tooltip: 'Total side clearance for drawer slides (Clearance)' },
 ];
+
+/**
+ * VERY basic client-side formula evaluator for display purposes.
+ * UNSAFE for complex user-defined formulas.
+ */
+function evaluateFormulaClientSide(
+  formula: string | undefined,
+  params: { W: number; H: number; D: number; [key: string]: number | undefined }
+): string {
+  if (typeof formula !== 'string' || !formula.trim()) {
+    return 'N/A';
+  }
+  try {
+    const { W, H, D, PT, BPT, BPO, TRD, DCG, DG, B, DW, DD, DH, Clearance } = params;
+    
+    // Create a scope with only known parameters
+    const scope: Record<string, number | undefined> = { W, H, D, PT, BPT, BPO, TRD, DCG, DG, B, DW, DD, DH, Clearance };
+    
+    // Replace parameter names in formula with their values
+    // This is a very naive replacement and only works for simple cases.
+    let formulaToEvaluate = formula;
+    for (const key in scope) {
+      if (scope[key] !== undefined) {
+        // Regex to replace whole words only to avoid partial replacements (e.g., D in TRD)
+        const regex = new RegExp(`\\b${key}\\b`, 'g');
+        formulaToEvaluate = formulaToEvaluate.replace(regex, String(scope[key]));
+      }
+    }
+
+    // Check if any known parameter placeholders are still in the formula
+    // If so, it means a parameter wasn't available or the formula is too complex for this simple eval.
+    const knownParamsRegex = /\b(W|H|D|PT|BPT|BPO|TRD|DCG|DG|B|DW|DD|DH|Clearance)\b/g;
+    if (knownParamsRegex.test(formulaToEvaluate)) {
+      return formula; // Fallback to showing the formula string if it still contains unresolved params
+    }
+
+    // Remove any non-numeric or non-operator characters that might remain
+    // This is a very basic sanitization for eval.
+    const sanitizedForEval = formulaToEvaluate.replace(/[^-()\d/*+.]/g, '');
+
+    // eslint-disable-next-line no-eval
+    const result = eval(sanitizedForEval);
+
+    if (typeof result === 'number' && !isNaN(result)) {
+      // Round to 1 decimal place for display
+      return String(parseFloat(result.toFixed(1)));
+    }
+    return formula; // Fallback if evaluation didn't yield a clean number
+  } catch (e) {
+    // console.warn(`Client-side eval error for "${formula}":`, e);
+    return formula; // Fallback to showing the formula string on any error
+  }
+}
 
 
 export default function CabinetDesignerPage() {
@@ -531,7 +584,15 @@ export default function CabinetDesignerPage() {
     </div>
   );
 
- const renderTemplateDefinitionView = () => (
+ const renderTemplateDefinitionView = () => {
+    const evalParams = {
+        W: currentTemplate.defaultDimensions.width,
+        H: currentTemplate.defaultDimensions.height,
+        D: currentTemplate.defaultDimensions.depth,
+        ...currentTemplate.parameters
+    };
+
+    return (
     <div className="space-y-6">
         <TooltipProvider>
             <Card className="shadow-lg">
@@ -559,9 +620,9 @@ export default function CabinetDesignerPage() {
                 <Card>
                     <CardHeader><CardTitle className="text-lg">Default Dimensions (mm)</CardTitle></CardHeader>
                     <CardContent className="grid grid-cols-3 gap-4">
-                        <div><Label htmlFor="defaultWidth">Width</Label><Input id="defaultWidth" name="width" type="number" value={currentTemplate.defaultDimensions.width} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.width')} /></div>
-                        <div><Label htmlFor="defaultHeight">Height</Label><Input id="defaultHeight" name="height" type="number" value={currentTemplate.defaultDimensions.height} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.height')} /></div>
-                        <div><Label htmlFor="defaultDepth">Depth</Label><Input id="defaultDepth" name="depth" type="number" value={currentTemplate.defaultDimensions.depth} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.depth')} /></div>
+                        <div><Label htmlFor="defaultWidth">Width (W)</Label><Input id="defaultWidth" name="width" type="number" value={currentTemplate.defaultDimensions.width} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.width')} /></div>
+                        <div><Label htmlFor="defaultHeight">Height (H)</Label><Input id="defaultHeight" name="height" type="number" value={currentTemplate.defaultDimensions.height} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.height')} /></div>
+                        <div><Label htmlFor="defaultDepth">Depth (D)</Label><Input id="defaultDepth" name="depth" type="number" value={currentTemplate.defaultDimensions.depth} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.depth')} /></div>
                     </CardContent>
                 </Card>
 
@@ -614,27 +675,35 @@ export default function CabinetDesignerPage() {
                         {currentTemplate.parts.map((part, index) => {
                             const materialInfo = PREDEFINED_MATERIALS.find(m => m.id === part.materialId);
                             const grainText = part.grainDirection === 'with' ? 'With Grain' : part.grainDirection === 'reverse' ? 'Reverse Grain' : 'None';
+                            
+                            const calculatedHeight = evaluateFormulaClientSide(part.heightFormula, evalParams);
+                            const calculatedWidth = evaluateFormulaClientSide(part.widthFormula, evalParams);
+                            const calculatedThickness = evaluateFormulaClientSide(part.thicknessFormula, evalParams);
+                            const calculatedQty = evaluateFormulaClientSide(part.quantityFormula, evalParams);
+
                             return (
                             <Card key={part.partId || index} className="p-4 relative bg-card/80">
                                 <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
                                 
                                 <div className="mb-3">
-                                    <Label>Part Name Label</Label>
-                                    <Input value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} placeholder="e.g., Side Panel" className="text-sm font-medium"/>
+                                    <Label htmlFor={`partName_${index}`} className="sr-only">Part Name Label</Label>
+                                    <Input id={`partName_${index}`} value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} placeholder="e.g., Side Panel" className="text-base font-medium"/>
                                 </div>
                                 <div className="mb-3 p-2 border rounded-md bg-muted/30 text-xs space-y-0.5">
                                     <p><span className="font-medium">Type:</span> {part.partType} ({part.cabinetContext || 'General'})</p>
-                                    <p><span className="font-medium">Dimensions (H x W x T):</span> ({part.heightFormula}) x ({part.widthFormula}) x ({part.thicknessFormula || 'PT'})</p>
-                                    <p><span className="font-medium">Quantity:</span> {part.quantityFormula}</p>
+                                    <p>
+                                        <span className="font-medium">Calculated Dim. (H x W x T):</span> 
+                                        {` ${calculatedHeight}${isNaN(Number(calculatedHeight)) ? '' : 'mm'} x ${calculatedWidth}${isNaN(Number(calculatedWidth)) ? '' : 'mm'} x ${calculatedThickness}${isNaN(Number(calculatedThickness)) ? '' : 'mm'}`}
+                                        <span className="text-muted-foreground text-[10px] block">
+                                          (Formulas: {part.heightFormula || 'N/A'} x {part.widthFormula || 'N/A'} x {part.thicknessFormula || 'N/A'})
+                                        </span>
+                                    </p>
+                                    <p><span className="font-medium">Calculated Qty:</span> {calculatedQty} <span className="text-muted-foreground text-[10px]">(Formula: {part.quantityFormula})</span></p>
                                     <p><span className="font-medium">Material:</span> {materialInfo?.name || part.materialId}{materialInfo?.hasGrain ? " (Grain)" : ""}</p>
                                     <p><span className="font-medium">Grain:</span> {grainText}</p>
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 items-start">
-                                    {/* Part Type and Context are now mostly for display in summary, but can be kept if direct editing is desired later */}
-                                    {/* <div><Label>Part Type</Label><Input disabled value={part.partType} className="text-sm" /> </div> */}
-                                    {/* <div><Label>Cabinet Context</Label><Input disabled value={part.cabinetContext || 'General'} className="text-sm" /></div> */}
-                                    
                                     <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula" placeholder="e.g., 2"/>
                                     <FormulaInputWithHelper partIndex={index} formulaField="widthFormula" label="Width Formula" placeholder="e.g., D or W - 2*PT"/>
                                     <FormulaInputWithHelper partIndex={index} formulaField="heightFormula" label="Height Formula" placeholder="e.g., H or D - BPO"/>
@@ -789,7 +858,8 @@ export default function CabinetDesignerPage() {
             </Card>
         )}
     </div>
-  );
+    );
+  }
 
   return (
     <TooltipProvider> 
@@ -801,4 +871,5 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
+
 
