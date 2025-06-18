@@ -1,4 +1,3 @@
-
 "use client";
 
 import * as React from 'react';
@@ -12,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Form, FormItem } from '@/components/ui/form';
+import { Form, FormItem } from '@/components/ui/form'; // Added FormItem import
 import { useToast } from "@/hooks/use-toast";
 import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle } from 'lucide-react';
 import { calculateCabinetDetails, calculateDrawerSet } from './actions';
@@ -45,16 +44,17 @@ const initialNewTemplate: CabinetTemplateData = {
   type: 'custom',
   defaultDimensions: { width: 600, height: 700, depth: 500 },
   parameters: {
-    PT: 18,
-    BPT: 3,
-    BPO: 10,
-    DG: 2,
-    DCG: 3,
-    TRD: 80,
-    DW: 500,
-    DD: 450,
-    DH: 150,
-    Clearance: 13 // Standard total clearance (e.g., 6.5mm per side)
+    PT: 18, // Panel Thickness
+    BPT: 3, // Back Panel Thickness
+    BPO: 10, // Back Panel Offset
+    DG: 2,  // Door Gap (overall)
+    DCG: 3, // Door Center Gap
+    TRD: 80, // Top Rail Depth
+    // Drawer Specific Parameters
+    DW: 500, // Drawer Width (overall opening)
+    DD: 450, // Drawer Depth (slide length/box depth)
+    DH: 150, // Drawer Side Height (box side height)
+    Clearance: 13 // Total side clearance for drawer slides
   },
   parts: [
     { partId: 'side_panels_initial', nameLabel: 'Side Panels (Example)', partType: 'Side Panel', cabinetContext: 'Base', quantityFormula: '2', widthFormula: 'D', heightFormula: 'H - PT', materialId: 'PLY_18MM_BIRCH', thicknessFormula: 'PT', edgeBanding: { front: true }, grainDirection: 'with' },
@@ -656,26 +656,17 @@ export default function CabinetDesignerPage() {
         <Card>
           <CardHeader>
             <CardTitle className="text-lg flex items-center"><BookOpen className="mr-2 h-5 w-5 text-muted-foreground" />Formula & Parameter Reference</CardTitle>
-            <CardDescription>Use these in your part dimension formulas. Hover for details.</CardDescription>
+            <CardDescription>Use these in your part dimension formulas.</CardDescription>
           </CardHeader>
           <CardContent className="max-h-60 overflow-y-auto text-xs space-y-2 p-4 bg-muted/30 rounded-md">
             {formulaHelpItems.map(item => (
               <div key={item.id} className="p-2 border rounded-md bg-background shadow-sm">
                 <div className="flex justify-between items-center">
                     <code className="font-semibold text-primary">{item.value}</code>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                             <Button variant="ghost" size="icon" className="h-5 w-5 opacity-60 hover:opacity-100 p-0">
-                                <HelpCircle className="h-3.5 w-3.5" />
-                             </Button>
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-xs text-xs p-2 bg-popover text-popover-foreground">
-                            <p className="font-medium">{item.description}</p>
-                            <p className="text-xs text-muted-foreground mt-1">Example: {item.example}</p>
-                        </TooltipContent>
-                    </Tooltip>
+                    {/* Tooltip removed here as requested */}
                 </div>
                 <p className="text-muted-foreground text-[11px] mt-0.5">{item.description}</p>
+                 <p className="text-[10px] text-muted-foreground/70 mt-0.5">Example: {item.example}</p>
               </div>
             ))}
           </CardContent>
@@ -793,4 +784,3 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
-
