@@ -204,7 +204,7 @@ export default function CabinetDesignerPage() {
         case 'standard_base_2_door': return "https://placehold.co/300x200/EBF4FA/5DADE2.png";
         case 'wall_cabinet_1_door': return "https://placehold.co/300x200/D6EAF8/85C1E9.png";
         case 'tall_pantry_2_door': return "https://placehold.co/300x200/D1F2EB/76D7C4.png";
-        case 'base_cabinet_1_door_1_drawer': return "https://placehold.co/300x200/FADBD8/C0392B.png"; // Changed this line
+        case 'base_cabinet_1_door_1_drawer': return "https://placehold.co/300x200/FADBD8/C0392B.png";
         case 'corner_wall_cabinet': return "https://placehold.co/300x200/E8DAEF/C39BD3.png";
         case currentTemplate?.id: return currentTemplate.previewImage || "https://placehold.co/300x200/AEB6BF/566573.png";
         default: return "https://placehold.co/300x200/EEEEEE/BDBDBD.png";
@@ -612,6 +612,7 @@ export default function CabinetDesignerPage() {
                         {currentTemplate.parts.map((part, index) => (
                             <Card key={part.partId || index} className="p-4 relative bg-card/80">
                                 <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
+                                
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-4 gap-y-3 items-start">
                                     <div><Label>Part Type</Label><Input disabled value={part.partType} className="text-sm" /> </div>
                                     <div><Label>Part Name Label</Label><Input value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} placeholder="e.g., Side Panel" className="text-sm"/></div>
@@ -676,12 +677,17 @@ export default function CabinetDesignerPage() {
                                         For typical panels: "Top" & "Bottom" refer to edges along Width dimension. "Front" & "Back" refer to edges along Height dimension. Adjust interpretation based on part type.
                                     </p>
                                 </div>
-                                {part.notes && (
-                                    <div className="mt-3">
-                                        <Label className="font-medium">Part Notes:</Label>
-                                        <Textarea value={part.notes} onChange={(e) => handleTemplateInputChange(e, 'parts.notes', index, 'notes')} rows={2} className="text-sm"/>
-                                    </div>
-                                )}
+                                
+                                <div className="mt-3">
+                                    <Label className="font-medium">Part Notes:</Label>
+                                    <Textarea 
+                                        value={part.notes || ''} 
+                                        onChange={(e) => handleTemplateInputChange(e, 'parts.notes', index, 'notes')} 
+                                        rows={2} 
+                                        className="text-sm"
+                                        placeholder="Optional notes specific to this part in the template..."
+                                    />
+                                </div>
                             </Card>
                         ))}
                         {currentTemplate.parts.length === 0 && <p className="text-muted-foreground text-center py-4">No parts defined yet. Click "Add Part" to begin.</p>}
@@ -782,4 +788,3 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
-
