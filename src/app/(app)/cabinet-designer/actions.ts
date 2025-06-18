@@ -7,8 +7,7 @@ import type { CalculatedCabinet, CabinetCalculationInput, CabinetPart, Accessory
 const PANEL_THICKNESS = 18; // mm -> PT
 const BACK_PANEL_THICKNESS = 3; // mm -> BPT
 const BACK_PANEL_OFFSET = 10; // mm inset from back edge of carcass -> BPO
-const DOOR_GAP_SIDE = 2; // mm total side gap for a door (e.g., 1mm each side) -> DG
-const DOOR_GAP_VERTICAL = 2; // mm total top/bottom gap for a door -> DG
+const DOOR_GAP = 2; // mm total side/vertical gap for a door (e.g., 1mm each side/top/bottom) -> DG
 const DOOR_GAP_CENTER = 3; // mm gap between two doors -> DCG
 const TOP_RAIL_DEPTH = 80; // mm width of top rails -> TRD
 
@@ -53,9 +52,9 @@ function evaluateFormula(formula: string, params: { W: number, H: number, D: num
  */
 export async function calculateCabinetDetails(
   input: CabinetCalculationInput
-  // FUTURE: customTemplate?: CabinetTemplateData 
+  // FUTURE: customTemplate?: CabinetTemplateData
 ): Promise<{ success: boolean; data?: CalculatedCabinet; error?: string }> {
-  
+
   // FUTURE: If input.cabinetType is an ID, fetch the CabinetTemplateData from a database.
   // For now, we only handle the hardcoded 'standard_base_2_door'.
   // If `customTemplate` was passed, use that instead of hardcoded logic.
@@ -77,8 +76,17 @@ export async function calculateCabinetDetails(
   const W = input.width;
   const H = input.height;
   const D = input.depth;
-  // Parameters for formulas (matching the current hardcoded constants)
-  const params = { W, H, D, PT: PANEL_THICKNESS, BPT: BACK_PANEL_THICKNESS, BPO: BACK_PANEL_OFFSET, TRD: TOP_RAIL_DEPTH, DCG: DOOR_GAP_CENTER, DG: DOOR_GAP_SIDE };
+
+  // Parameters for formulas
+  const params = {
+    W, H, D,
+    PT: PANEL_THICKNESS,
+    BPT: BACK_PANEL_THICKNESS,
+    BPO: BACK_PANEL_OFFSET,
+    TRD: TOP_RAIL_DEPTH,
+    DCG: DOOR_GAP_CENTER,
+    DG: DOOR_GAP
+  };
 
   const parts: CabinetPart[] = [];
   let totalPanelArea_sqmm = 0;
@@ -86,125 +94,128 @@ export async function calculateCabinetDetails(
   let totalEdgeBandLength_mm = 0;
 
 
-  // --- BEGIN HARDCODED LOGIC FOR 'standard_base_2_door' ---
-  // This section would be replaced by iterating through a CabinetTemplateData.parts array
-  // and evaluating their formulas.
+  // --- BEGIN LOGIC FOR 'standard_base_2_door' USING FORMULAS ---
+  // This section demonstrates using evaluateFormula. In a full system, these formulas
+  // would come from a CabinetTemplateData object.
 
-  // 1. Side Panels (x2) - Example of how it might work with formulas
-  // From a template: { partId: "side", nameLabel: "Side Panel", quantityFormula: "2", widthFormula: "D", heightFormula: "H", materialId: "...", thicknessFormula: "PT", edgeBanding: { front: true } }
-  const sidePanelQty = 2; // evaluateFormula("2", params)
-  const sidePanelWidth = D; // evaluateFormula("D", params)
-  const sidePanelHeight = H; // evaluateFormula("H", params)
-  const sidePanelThickness = PANEL_THICKNESS; // evaluateFormula("PT", params)
+  // 1. Side Panels (x2)
+  const sidePanelQty = evaluateFormula("2", params);
+  const sidePanelWidth = evaluateFormula("D", params);
+  const sidePanelHeight = evaluateFormula("H", params);
+  const sidePanelThickness = evaluateFormula("PT", params); // PT is a parameter here
   parts.push({
     name: 'Side Panel',
     quantity: sidePanelQty,
     width: sidePanelWidth,
     height: sidePanelHeight,
-    thickness: sidePanelThickness,
+    thickness: sidePanelThickness, // Using the evaluated thickness
     material: `${sidePanelThickness}mm Panel`,
-    edgeBanding: { front: sidePanelHeight } // Edge banding on front edge of height H
+    edgeBanding: { front: sidePanelHeight }
   });
   totalPanelArea_sqmm += (sidePanelQty * sidePanelWidth * sidePanelHeight);
-  totalEdgeBandLength_mm += sidePanelQty * sidePanelHeight; // Assuming front edge banded
+  totalEdgeBandLength_mm += sidePanelQty * sidePanelHeight;
 
   // 2. Bottom Panel (x1)
-  // From a template: { partId: "bottom", nameLabel: "Bottom Panel", quantityFormula: "1", widthFormula: "W - 2*PT", heightFormula: "D", materialId: "...", thicknessFormula: "PT", edgeBanding: { front: true } }
-  const bottomPanelWidth = W - 2 * PANEL_THICKNESS; // evaluateFormula("W - 2*PT", params)
-  const bottomPanelDepth = D; // evaluateFormula("D", params)
+  const bottomPanelQty = evaluateFormula("1", params);
+  const bottomPanelWidth = evaluateFormula("W - 2*PT", params);
+  const bottomPanelDepth = evaluateFormula("D", params);
+  const bottomPanelThickness = evaluateFormula("PT", params);
   parts.push({
     name: 'Bottom Panel',
-    quantity: 1,
+    quantity: bottomPanelQty,
     width: bottomPanelWidth,
     height: bottomPanelDepth,
-    thickness: PANEL_THICKNESS,
-    material: `${PANEL_THICKNESS}mm Panel`,
+    thickness: bottomPanelThickness,
+    material: `${bottomPanelThickness}mm Panel`,
     edgeBanding: { front: bottomPanelWidth }
   });
-  totalPanelArea_sqmm += (bottomPanelWidth * bottomPanelDepth);
-  totalEdgeBandLength_mm += bottomPanelWidth;
+  totalPanelArea_sqmm += (bottomPanelQty * bottomPanelWidth * bottomPanelDepth);
+  totalEdgeBandLength_mm += bottomPanelQty * bottomPanelWidth;
 
   // 3. Top Rails (Front & Back, x2 total)
-  const topRailLength = W - 2 * PANEL_THICKNESS; // evaluateFormula("W - 2*PT", params)
-  const topRailDepthVal = TOP_RAIL_DEPTH; // evaluateFormula("TRD", params)
+  const topRailQty = evaluateFormula("1", params); // Per rail
+  const topRailLength = evaluateFormula("W - 2*PT", params);
+  const topRailDepthVal = evaluateFormula("TRD", params);
+  const topRailThickness = evaluateFormula("PT", params);
+
   parts.push({
     name: 'Top Rail (Front)',
-    quantity: 1,
+    quantity: topRailQty,
     width: topRailLength,
     height: topRailDepthVal,
-    thickness: PANEL_THICKNESS,
-    material: `${PANEL_THICKNESS}mm Panel`,
-    // No edge banding typically on internal rails if hidden
+    thickness: topRailThickness,
+    material: `${topRailThickness}mm Panel`,
   });
-  totalPanelArea_sqmm += (topRailLength * topRailDepthVal);
+  totalPanelArea_sqmm += (topRailQty * topRailLength * topRailDepthVal);
+
   parts.push({
     name: 'Top Rail (Back)',
-    quantity: 1,
+    quantity: topRailQty,
     width: topRailLength,
     height: topRailDepthVal,
-    thickness: PANEL_THICKNESS,
-    material: `${PANEL_THICKNESS}mm Panel`,
+    thickness: topRailThickness,
+    material: `${topRailThickness}mm Panel`,
   });
-  totalPanelArea_sqmm += (topRailLength * topRailDepthVal);
-  
+  totalPanelArea_sqmm += (topRailQty * topRailLength * topRailDepthVal);
+
   // 4. Shelf (x1, simple fixed shelf for this example)
-  // From a template: { partId: "shelf", nameLabel: "Shelf", quantityFormula: "1", widthFormula: "W - 2*PT", heightFormula: "D - BPO - BPT", materialId: "...", thicknessFormula: "PT", edgeBanding: { front: true } }
-  const shelfWidth = W - 2 * PANEL_THICKNESS; // evaluateFormula("W - 2*PT", params)
-  const shelfDepth = D - BACK_PANEL_OFFSET - BACK_PANEL_THICKNESS; // evaluateFormula("D - BPO - BPT", params)
+  const shelfQty = evaluateFormula("1", params);
+  const shelfWidth = evaluateFormula("W - 2*PT", params);
+  const shelfDepth = evaluateFormula("D - BPO - BPT", params);
+  const shelfThickness = evaluateFormula("PT", params);
   parts.push({
     name: 'Shelf',
-    quantity: 1,
+    quantity: shelfQty,
     width: shelfWidth,
     height: shelfDepth,
-    thickness: PANEL_THICKNESS,
-    material: `${PANEL_THICKNESS}mm Panel`,
+    thickness: shelfThickness,
+    material: `${shelfThickness}mm Panel`,
     notes: 'Adjust depth if back panel fitting differs',
     edgeBanding: { front: shelfWidth }
   });
-  totalPanelArea_sqmm += (shelfWidth * shelfDepth);
-  totalEdgeBandLength_mm += shelfWidth;
+  totalPanelArea_sqmm += (shelfQty * shelfWidth * shelfDepth);
+  totalEdgeBandLength_mm += shelfQty * shelfWidth;
 
   // 5. Doors (x2) - Full overlay assumption
-  // From template: { partId: "door", nameLabel: "Door", quantityFormula: "2", widthFormula: "(W - DG*2 - DCG) / 2", heightFormula: "H - DG*2", materialId: "...", thicknessFormula: "PT", edgeBanding: { front: true, back: true, top: true, bottom: true } }
-  // Note: DOOR_GAP_SIDE is total, DOOR_GAP_VERTICAL is total. Formulas in template should account for this.
-  // Current hardcode uses DG for side gap (split to each actual side of door)
-  // and DCG for center gap. DGV for vertical.
-  const doorHeight = H - DOOR_GAP_VERTICAL; // evaluateFormula("H - DG_VERTICAL", params)
-  const singleDoorWidth = (W - (DOOR_GAP_SIDE) - DOOR_GAP_CENTER) / 2; // evaluateFormula("(W - DG_SIDE_TOTAL - DCG) / 2", params)
+  const doorQty = evaluateFormula("2", params);
+  const doorHeight = evaluateFormula("H - DG", params); // Using unified DOOR_GAP for DG
+  const singleDoorWidth = evaluateFormula("(W - DG - DCG) / 2", params); // Using unified DOOR_GAP for DG
+  const doorThickness = evaluateFormula("PT", params);
   parts.push({
     name: 'Door',
-    quantity: 2,
+    quantity: doorQty,
     width: singleDoorWidth,
     height: doorHeight,
-    thickness: PANEL_THICKNESS,
-    material: `${PANEL_THICKNESS}mm Panel (Door Grade)`,
-    edgeBanding: { // All edges typically banded for doors
-        front: singleDoorWidth, // This interpretation is simplified. Edge banding is on the 'thickness' side.
-        back: singleDoorWidth,  // So for a door, it's 2*width + 2*height per door.
+    thickness: doorThickness,
+    material: `${doorThickness}mm Panel (Door Grade)`,
+    edgeBanding: {
+        front: singleDoorWidth,
+        back: singleDoorWidth,
         left: doorHeight,
         right: doorHeight,
     }
   });
-  totalPanelArea_sqmm += (2 * singleDoorWidth * doorHeight);
-  totalEdgeBandLength_mm += 2 * (2 * singleDoorWidth + 2 * doorHeight); // For two doors, all 4 edges
+  totalPanelArea_sqmm += (doorQty * singleDoorWidth * doorHeight);
+  totalEdgeBandLength_mm += doorQty * (singleDoorWidth + singleDoorWidth + doorHeight + doorHeight); // For two doors, all 4 edges
 
   // 6. Back Panel (x1)
-  // From a template: { partId: "back_panel", nameLabel: "Back Panel", quantityFormula: "1", widthFormula: "W - 2*PT - 2", heightFormula: "H - 2*PT - 2", materialId: "...", thicknessFormula: "BPT" }
-  // Assumes back panel fits inside the carcass, recessed. Small tolerance (1mm each side)
-  const backPanelWidth = W - 2 * PANEL_THICKNESS - (2 * 1); // evaluateFormula("W - 2*PT - 2", params)
-  const backPanelHeight = H - 2 * PANEL_THICKNESS - (2* 1); // evaluateFormula("H - 2*PT - 2", params)
+  const backPanelQty = evaluateFormula("1", params);
+  // Assumes back panel fits inside the carcass, recessed. Small tolerance (1mm each side => 2mm total)
+  const backPanelWidth = evaluateFormula("W - 2*PT - 2", params); // -2 for tolerance
+  const backPanelHeight = evaluateFormula("H - 2*PT - 2", params); // -2 for tolerance
+  const backPanelActualThickness = evaluateFormula("BPT", params);
   parts.push({
     name: 'Back Panel',
-    quantity: 1,
+    quantity: backPanelQty,
     width: backPanelWidth,
     height: backPanelHeight,
-    thickness: BACK_PANEL_THICKNESS,
-    material: `${BACK_PANEL_THICKNESS}mm HDF/Plywood`,
+    thickness: backPanelActualThickness,
+    material: `${backPanelActualThickness}mm HDF/Plywood`,
     notes: `Fits into a groove or is offset by ${BACK_PANEL_OFFSET}mm`
   });
-  totalBackPanelArea_sqmm += (backPanelWidth * backPanelHeight);
+  totalBackPanelArea_sqmm += (backPanelQty * backPanelWidth * backPanelHeight);
 
-  // --- END HARDCODED LOGIC ---
+  // --- END LOGIC USING FORMULAS ---
 
   // --- Accessories ---
   // Future: iterate through template.accessories, evaluate quantityFormula
@@ -234,10 +245,6 @@ export async function calculateCabinetDetails(
     totalBackPanelAreaMM: totalBackPanelArea_sqmm,
   };
 
-  // console.log("Total Edge Banding Length (mm):", totalEdgeBandLength_mm);
-  // In a real system, this part list would be sent to a nesting engine.
-  // console.log("Parts to nest:", parts.filter(p => p.thickness === PANEL_THICKNESS));
-  // console.log("Back panels to nest:", parts.filter(p => p.thickness === BACK_PANEL_THICKNESS));
-
   return { success: true, data: calculatedCabinet };
 }
+
