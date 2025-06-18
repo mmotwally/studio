@@ -1,17 +1,44 @@
 
+export type CabinetPartType =
+  | 'Side Panel'
+  | 'Bottom Panel'
+  | 'Top Panel' // Could be full top or top rails
+  | 'Back Panel'
+  | 'Double Back Panel'
+  | 'Door' // Single or one of a pair
+  | 'Doors' // Represents a pair, often calculated together
+  | 'Drawer Front'
+  | 'Drawer Back'
+  | 'Drawer Side'
+  | 'Drawer Counter Front' // For inset drawers
+  | 'Drawer Bottom'
+  | 'Mobile Shelf' // Adjustable shelf
+  | 'Fixed Shelf' // Fixed shelf
+  | 'Upright' // Vertical divider
+  | 'Front Panel' // e.g., fixed panel on a sink base
+  | 'Top Rail (Front)'
+  | 'Top Rail (Back)'
+  | 'Bottom Rail (Front)'
+  | 'Bottom Rail (Back)'
+  | 'Stretcher'
+  | 'Toe Kick';
+
+
 export interface CabinetPart {
-  name: string;
+  name: string; // This will be the nameLabel from PartDefinition
+  partType: CabinetPartType;
   quantity: number;
   width: number; // mm
   height: number; // or length for rails
   thickness: number; // mm
-  material: string; // e.g., "18mm MDF", "3mm HDF", "Oak Edge Band"
+  material: string; // e.g., "18mm MDF", "3mm HDF" (derived from materialId + template params)
+  grainDirection?: 'with' | 'reverse' | 'none' | null;
   notes?: string;
-  edgeBanding?: {
-    front?: number; // length of edge banding on front edge
+  edgeBanding?: { // Calculated lengths of edge banding applied
+    front?: number;
     back?: number;
-    left?: number;
-    right?: number;
+    top?: number; // formerly left
+    bottom?: number; // formerly right
   };
 }
 
@@ -30,63 +57,64 @@ export interface CalculatedCabinet {
   estimatedMaterialCost: number;
   estimatedAccessoryCost: number;
   estimatedTotalCost: number;
-  totalPanelAreaMM: number; // 18mm or primary panel material area in sq mm
-  totalBackPanelAreaMM: number; // 3mm or secondary panel material area in sq mm
-  // Add other material totals as needed, e.g., totalEdgeBandLengthMeters
+  totalPanelAreaMM: number; 
+  totalBackPanelAreaMM: number; 
 }
 
 export interface CabinetCalculationInput {
-  cabinetType: string; // e.g., "standard_base_2_door" or ID of a CabinetTemplate
+  cabinetType: string; 
   width: number;
   height: number;
   depth: number;
-  // Potentially, pass a full CabinetTemplate object if 'cabinetType' refers to a custom one
-  // customTemplate?: CabinetTemplateData;
+  customTemplate?: CabinetTemplateData; // Allow passing a full template for calculation
 }
 
 
-// --- Conceptual Structures for Database-Driven Cabinet Templates ---
+// --- Structures for Database-Driven Cabinet Templates ---
 
 export interface MaterialDefinition {
-  id: string; // e.g., "MDF_18MM", "PLY_3MM_BACK", "OAK_EDGE_BAND_22MM"
-  name: string; // "18mm MDF Sheet"
+  id: string; 
+  name: string; 
   type: "panel" | "edge_band" | "other";
-  costPerSqm?: number; // For panels
-  costPerMeter?: number; // For edge bands
+  costPerSqm?: number; 
+  costPerMeter?: number; 
   thickness?: number; // mm, for panels
-  defaultSheetWidth?: number; // mm, for panel nesting
-  defaultSheetHeight?: number; // mm, for panel nesting
+  defaultSheetWidth?: number; 
+  defaultSheetHeight?: number; 
+  hasGrain?: boolean; // New property
 }
 
 export interface AccessoryDefinition {
-  id: string; // e.g., "HINGE_SOFT_CLOSE_FO", "HANDLE_PULL_128MM"
+  id: string; 
   name: string;
   type: "hinge" | "drawer_slide" | "handle" | "shelf_pin" | "leg" | "screw";
   unitCost: number;
 }
 
-export interface EdgeBandingAssignment {
-  front?: boolean | string; // boolean or materialId for specific edge banding
-  back?: boolean | string;
-  top?: boolean | string;   // Renamed from left/right for clarity if part is laid flat
-  bottom?: boolean | string; // Renamed from left/right
+export interface EdgeBandingAssignment { // Defines which edges get banding
+  front?: boolean; 
+  back?: boolean;
+  top?: boolean;   // Represents one pair of opposite edges (e.g., top/bottom if part is laid flat)
+  bottom?: boolean; // Represents the other pair of opposite edges (e.g., left/right if part is laid flat)
 }
 
 export interface PartDefinition {
-  partId: string; // e.g., "side_panel", "bottom_panel", "door"
-  nameLabel: string; // "Side Panel", "Bottom Panel"
-  quantityFormula: string; // "2", "1" (can be dynamic e.g. "NumberOfShelves")
-  widthFormula: string; // e.g., "D - BackPanelOffset", "W - 2*PT"
-  heightFormula: string; // e.g., "H", "D"
-  materialId: string; // References MaterialDefinition.id for primary material
-  thicknessFormula?: string; // e.g., "PT", "BPT" (PanelThickness, BackPanelThickness)
+  partId: string; 
+  nameLabel: string; 
+  partType: CabinetPartType; // New: Type of part
+  quantityFormula: string; 
+  widthFormula: string; 
+  heightFormula: string; 
+  materialId: string; 
+  thicknessFormula?: string; 
   edgeBanding?: EdgeBandingAssignment;
+  grainDirection?: 'with' | 'reverse' | 'none' | null; // New: Grain direction
   notes?: string;
 }
 
 export interface CabinetTemplateData {
-  id: string; // e.g., "base_cabinet_2_door_parametric"
-  name: string; // "Base Cabinet - 2 Door (Parametric)"
+  id: string; 
+  name: string; 
   type: "base" | "wall" | "tall" | "custom";
   previewImage?: string;
   defaultDimensions: {
@@ -94,41 +122,29 @@ export interface CabinetTemplateData {
     height: number;
     depth: number;
   };
-  parameters: { // Global parameters for this template's formulas
+  parameters: { 
     PT: number; // PanelThickness
     BPT?: number; // BackPanelThickness
-    BPO?: number; // BackPanelOffset
+    BPO?: number; // BackPanelOffset / Back Panel Gap (B from user request)
     DG?: number; // DoorGap
     DCG?: number; // DoorCenterGap
     TRD?: number; // TopRailDepth
-    // ... other parameters like toe kick height, shelf count etc.
+    // Drawer specific parameters might go here or be part of a "DrawerBox" sub-template type
+    // Clearance?: number; // Drawer slide clearance
+    // TKH?: number; // Toe Kick Height
   };
   parts: PartDefinition[];
   accessories?: Array<{
-    accessoryId: string; // References AccessoryDefinition.id
-    quantityFormula: string; // e.g., "4" (for 2 doors x 2 hinges), "NumberOfShelves * 4"
+    accessoryId: string; 
+    quantityFormula: string; 
   }>;
 }
 
-// Example:
-// const exampleTemplate: CabinetTemplateData = {
-//   id: "base_cabinet_2_door_parametric_example",
-//   name: "Base Cabinet - 2 Door (Parametric Example)",
-//   type: "base",
-//   defaultDimensions: { width: 600, height: 720, depth: 560 },
-//   parameters: { PT: 18, BPT: 3, BPO: 10, DG: 2, DCG: 3, TRD: 80 },
-//   parts: [
-//     { partId: "side", nameLabel: "Side Panel", quantityFormula: "2", widthFormula: "D", heightFormula: "H", materialId: "MDF_18MM_CARCASS", thicknessFormula: "PT", edgeBanding: { front: true } },
-//     { partId: "bottom", nameLabel: "Bottom Panel", quantityFormula: "1", widthFormula: "W - 2*PT", heightFormula: "D", materialId: "MDF_18MM_CARCASS", thicknessFormula: "PT", edgeBanding: { front: true } },
-//     { partId: "top_rail_front", nameLabel: "Top Rail (Front)", quantityFormula: "1", widthFormula: "W - 2*PT", heightFormula: "TRD", materialId: "MDF_18MM_CARCASS", thicknessFormula: "PT" },
-//     { partId: "top_rail_back", nameLabel: "Top Rail (Back)", quantityFormula: "1", widthFormula: "W - 2*PT", heightFormula: "TRD", materialId: "MDF_18MM_CARCASS", thicknessFormula: "PT" },
-//     { partId: "shelf", nameLabel: "Shelf", quantityFormula: "1", widthFormula: "W - 2*PT", heightFormula: "D - BPO - BPT", materialId: "MDF_18MM_CARCASS", thicknessFormula: "PT", edgeBanding: { front: true } },
-//     { partId: "door", nameLabel: "Door", quantityFormula: "2", widthFormula: "(W - DG*2 - DCG) / 2", heightFormula: "H - DG*2", materialId: "MDF_18MM_DOOR", thicknessFormula: "PT", edgeBanding: { front: true, back: true, top: true, bottom: true } },
-//     { partId: "back_panel", nameLabel: "Back Panel", quantityFormula: "1", widthFormula: "W - 2*PT - 2", heightFormula: "H - 2*PT - 2", materialId: "HDF_3MM_BACK", thicknessFormula: "BPT" }
-//   ],
-//   accessories: [
-//     { accessoryId: "HINGE_SOFT_CLOSE_FO", quantityFormula: "4" }, // 2 per door
-//     { accessoryId: "HANDLE_PULL_128MM", quantityFormula: "2" },
-//     { accessoryId: "SHELF_PINS_STD", quantityFormula: "4" }
-//   ]
-// };
+// Example of predefined materials (would come from DB)
+export const PREDEFINED_MATERIALS: MaterialDefinition[] = [
+    { id: "MDF_18MM", name: "18mm MDF", type: "panel", thickness: 18, costPerSqm: 20, hasGrain: false },
+    { id: "PLY_18MM_BIRCH", name: "18mm Birch Plywood", type: "panel", thickness: 18, costPerSqm: 35, hasGrain: true },
+    { id: "MDF_3MM_BACK", name: "3mm MDF Back Panel", type: "panel", thickness: 3, costPerSqm: 10, hasGrain: false },
+    { id: "EB_WHITE_PVC", name: "White PVC Edge Band", type: "edge_band", costPerMeter: 0.5 },
+    { id: "EB_BIRCH_VENEER", name: "Birch Veneer Edge Band", type: "edge_band", costPerMeter: 1.2, hasGrain: true },
+];
