@@ -25,10 +25,11 @@ import {
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label"; // Added import
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import type { PartDefinition, CabinetPartType, EdgeBandingAssignment } from "@/app/(app)/cabinet-designer/types";
-import { PREDEFINED_MATERIALS } from "@/app/(app)/cabinet-designer/types"; // Assuming materials are exported
+import { PREDEFINED_MATERIALS } from "@/app/(app)/cabinet-designer/types";
 
 const cabinetPartTypes: CabinetPartType[] = [
   'Side Panel', 'Bottom Panel', 'Top Panel', 'Back Panel', 'Double Back Panel', 
@@ -276,7 +277,7 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount }: AddPart
                           onCheckedChange={field.onChange}
                         />
                       </FormControl>
-                      <FormLabel className="font-normal capitalize">{edge}</FormLabel>
+                      <Label htmlFor={`edgeBanding_${edge}_${field.name}`} className="font-normal capitalize">{edge}</Label>
                     </FormItem>
                   )}
                 />
