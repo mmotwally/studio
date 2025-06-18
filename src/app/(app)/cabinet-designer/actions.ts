@@ -1,7 +1,8 @@
 
 'use server';
 
-import type { CalculatedCabinet, CabinetCalculationInput, CabinetPart, AccessoryItem, CabinetTemplateData, PartDefinition, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer, DrawerPartCalculation, CustomFormulaEntry, FormulaDimensionType } from './types';
+import type { CalculatedCabinet, CabinetCalculationInput, CabinetPart, AccessoryItem, CabinetTemplateData, PartDefinition, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer, DrawerPartCalculation, CustomFormulaEntry, FormulaDimensionType, AccessoryDefinition, TemplateAccessoryEntry } from './types';
+import { PREDEFINED_ACCESSORIES } from './types';
 import { openDb } from '@/lib/database';
 import { revalidatePath } from 'next/cache';
 
@@ -18,10 +19,10 @@ const COST_PER_SQM_PANEL_MM = 25.0 / (1000*1000); // e.g., $25 per square meter 
 const COST_PER_SQM_BACK_PANEL_MM = 10.0 / (1000*1000); // e.g., $10 per square meter for 3mm HDF
 const COST_PER_METER_EDGE_BAND = 0.5;
 
-// Accessory Costs (placeholders, would come from AccessoryDefinition database)
-const COST_PER_HINGE = 1.5;
-const COST_PER_HANDLE = 3.0;
-const COST_PER_SHELF_PIN = 0.1;
+// Create a map for quick lookup of predefined accessory costs and names
+const PREDEFINED_ACCESSORIES_MAP: Map<string, AccessoryDefinition> = new Map(
+  PREDEFINED_ACCESSORIES.map(acc => [acc.id, acc])
+);
 
 
 /**
@@ -165,30 +166,51 @@ export async function calculateCabinetDetails(
     }
     
     const accessories: AccessoryItem[] = [];
-    if (template.parts.some(p => p.partType === 'Door' || p.partType === 'Doors')) {
-        const doorCount = template.parts.reduce((sum, p) => (p.partType === 'Door' || p.partType === 'Doors') ? sum + evaluateFormula(p.quantityFormula, formulaParams) : sum, 0);
-        accessories.push({ id: "HINGE_STD_FO", name: 'Hinges (pair)', quantity: doorCount, unitCost: COST_PER_HINGE * 2, totalCost: COST_PER_HINGE * 2 * doorCount });
-        accessories.push({ id: "HANDLE_STD_PULL", name: 'Handles', quantity: doorCount, unitCost: COST_PER_HANDLE, totalCost: COST_PER_HANDLE * doorCount });
-    }
-    if (template.parts.some(p => p.partType === 'Fixed Shelf' || p.partType === 'Mobile Shelf')) {
-        const shelfCount = template.parts.reduce((sum, p) => (p.partType === 'Fixed Shelf' || p.partType === 'Mobile Shelf') ? sum + evaluateFormula(p.quantityFormula, formulaParams) : sum, 0);
-        accessories.push({ id: "SHELF_PIN_STD", name: 'Shelf Pins', quantity: shelfCount * 4, unitCost: COST_PER_SHELF_PIN, totalCost: COST_PER_SHELF_PIN * shelfCount * 4 });
-    }
     // Add accessories defined in template.accessories
     if (template.accessories && Array.isArray(template.accessories)) {
         for (const accDef of template.accessories) {
-            const accQty = evaluateFormula(accDef.quantityFormula, formulaParams);
-            // Placeholder for fetching accessory definition from DB by accDef.accessoryId
-            const accUnitCost = 2.0; // Example, replace with actual cost
-            accessories.push({
-                id: accDef.accessoryId,
-                name: accDef.accessoryId.replace(/_/g, ' ').split('-').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' '), // Placeholder name
-                quantity: accQty,
-                unitCost: accUnitCost,
-                totalCost: accQty * accUnitCost,
-            });
+            const accQty = Math.round(evaluateFormula(accDef.quantityFormula, formulaParams));
+            if (accQty <= 0) continue;
+
+            const predefinedAcc = PREDEFINED_ACCESSORIES_MAP.get(accDef.accessoryId);
+            if (predefinedAcc) {
+                accessories.push({
+                    id: accDef.accessoryId,
+                    name: predefinedAcc.name,
+                    quantity: accQty,
+                    unitCost: predefinedAcc.unitCost,
+                    totalCost: accQty * predefinedAcc.unitCost,
+                    notes: accDef.notes,
+                });
+            } else {
+                console.warn(`Accessory with ID "${accDef.accessoryId}" not found in predefined list. Skipping.`);
+                // Fallback: add with placeholder cost/name if you want to still include it
+                // accessories.push({
+                //     id: accDef.accessoryId,
+                //     name: accDef.accessoryId.replace(/_/g, ' ').split('-').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ') + " (Custom)",
+                //     quantity: accQty,
+                //     unitCost: 0.01, // Placeholder cost
+                //     totalCost: accQty * 0.01,
+                //     notes: accDef.notes,
+                // });
+            }
+        }
+    } else {
+        // Fallback for older templates or if accessories block is missing - basic door/shelf hardware
+        if (template.parts.some(p => p.partType === 'Door' || p.partType === 'Doors')) {
+            const doorCount = template.parts.reduce((sum, p) => (p.partType === 'Door' || p.partType === 'Doors') ? sum + evaluateFormula(p.quantityFormula, formulaParams) : sum, 0);
+            const hingeAcc = PREDEFINED_ACCESSORIES_MAP.get("HINGE_STD_FO");
+            const handleAcc = PREDEFINED_ACCESSORIES_MAP.get("HANDLE_STD_PULL");
+            if(hingeAcc) accessories.push({ id: hingeAcc.id, name: hingeAcc.name, quantity: doorCount, unitCost: hingeAcc.unitCost, totalCost: hingeAcc.unitCost * doorCount });
+            if(handleAcc) accessories.push({ id: handleAcc.id, name: handleAcc.name, quantity: doorCount, unitCost: handleAcc.unitCost, totalCost: handleAcc.unitCost * doorCount });
+        }
+        if (template.parts.some(p => p.partType === 'Fixed Shelf' || p.partType === 'Mobile Shelf')) {
+            const shelfCount = template.parts.reduce((sum, p) => (p.partType === 'Fixed Shelf' || p.partType === 'Mobile Shelf') ? sum + evaluateFormula(p.quantityFormula, formulaParams) : sum, 0);
+             const shelfPinAcc = PREDEFINED_ACCESSORIES_MAP.get("SHELF_PIN_STD");
+            if(shelfPinAcc) accessories.push({ id: shelfPinAcc.id, name: shelfPinAcc.name, quantity: shelfCount * 4, unitCost: shelfPinAcc.unitCost, totalCost: shelfPinAcc.unitCost * shelfCount * 4 });
         }
     }
+
 
     const totalAccessoryCost = accessories.reduce((sum, acc) => sum + acc.totalCost, 0);
     const estimatedPanelMaterialCost = totalPanelArea_sqmm * (COST_PER_SQM_PANEL_MM / currentPanelThickness * currentPanelThickness); 
@@ -288,11 +310,15 @@ export async function calculateCabinetDetails(
     });
     totalBackPanelArea_sqmm += (backPanelQty * backPanelWidth * backPanelHeight);
     
-    const accessoriesStd: AccessoryItem[] = [
-        { id: "HINGE_STD_FO", name: 'Hinges (pair)', quantity: 2, unitCost: COST_PER_HINGE * 2, totalCost: COST_PER_HINGE * 2 * 2 },
-        { id: "HANDLE_STD_PULL", name: 'Handles', quantity: 2, unitCost: COST_PER_HANDLE, totalCost: COST_PER_HANDLE * 2 },
-        { id: "SHELF_PIN_STD", name: 'Shelf Pins', quantity: 4, unitCost: COST_PER_SHELF_PIN, totalCost: COST_PER_SHELF_PIN * 4 },
-    ];
+    const accessoriesStd: AccessoryItem[] = [];
+    const hingeAcc = PREDEFINED_ACCESSORIES_MAP.get("HINGE_STD_FO");
+    const handleAcc = PREDEFINED_ACCESSORIES_MAP.get("HANDLE_STD_PULL");
+    const shelfPinAcc = PREDEFINED_ACCESSORIES_MAP.get("SHELF_PIN_STD");
+
+    if(hingeAcc) accessoriesStd.push({ id: hingeAcc.id, name: hingeAcc.name, quantity: 2, unitCost: hingeAcc.unitCost, totalCost: hingeAcc.unitCost * 2 });
+    if(handleAcc) accessoriesStd.push({ id: handleAcc.id, name: handleAcc.name, quantity: 2, unitCost: handleAcc.unitCost, totalCost: handleAcc.unitCost * 2 });
+    if(shelfPinAcc) accessoriesStd.push({ id: shelfPinAcc.id, name: shelfPinAcc.name, quantity: 4, unitCost: shelfPinAcc.unitCost, totalCost: shelfPinAcc.unitCost * 4 });
+
     const totalAccessoryCostStd = accessoriesStd.reduce((sum, acc) => sum + acc.totalCost, 0);
 
     const estimatedPanelMaterialCostStd = totalPanelArea_sqmm * COST_PER_SQM_PANEL_MM;
@@ -594,3 +620,4 @@ export async function deleteCustomFormulaAction(id: string): Promise<{ success: 
     return { success: false, error: (error as Error).message };
   }
 }
+

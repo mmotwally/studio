@@ -88,12 +88,24 @@ export interface MaterialDefinition {
   hasGrain?: boolean; 
 }
 
+// Updated AccessoryDefinition for predefined accessories with costs
 export interface AccessoryDefinition {
   id: string; 
   name: string;
-  type: "hinge" | "drawer_slide" | "handle" | "shelf_pin" | "leg" | "screw";
+  type: "hinge" | "drawer_slide" | "handle" | "shelf_pin" | "leg" | "screw" | "other";
   unitCost: number;
+  description?: string;
 }
+
+export const PREDEFINED_ACCESSORIES: AccessoryDefinition[] = [
+  { id: "HINGE_STD_FO", name: "Hinge, Standard Full Overlay (Pair)", type: "hinge", unitCost: 1.5 * 2, description: "Standard cabinet hinge for full overlay doors, sold as a pair." },
+  { id: "HANDLE_STD_PULL", name: "Handle, Standard Pull (128mm)", type: "handle", unitCost: 3.0, description: "Common metal pull handle, 128mm hole spacing." },
+  { id: "SHELF_PIN_STD", name: "Shelf Pin, Standard 5mm (Each)", type: "shelf_pin", unitCost: 0.1, description: "Standard 5mm metal shelf support pin." },
+  { id: "DRAWER_SLIDE_BLUM_STD", name: "Drawer Slide, Blum Standard (Pair, 500mm)", type: "drawer_slide", unitCost: 12.0, description: "Blum standard full extension drawer slide, 500mm." },
+  { id: "LEG_ADJUSTABLE_PLASTIC", name: "Leg, Adjustable Plastic (100-150mm)", type: "leg", unitCost: 1.2, description: "Adjustable plastic cabinet leg." },
+  { id: "SCREW_CONFIRMAT_7X50", name: "Screw, Confirmat 7x50mm (Each)", type: "screw", unitCost: 0.05, description: "Confirmat screw for strong cabinet joinery." },
+];
+
 
 export interface EdgeBandingAssignment { 
   front?: boolean; 
@@ -120,6 +132,14 @@ export interface PartDefinition {
   grainDirection?: 'with' | 'reverse' | 'none' | null; 
   notes?: string;
 }
+
+export interface TemplateAccessoryEntry {
+  id: string; // Unique ID for this entry in the list
+  accessoryId: string; // Reference to PREDEFINED_ACCESSORIES.id
+  quantityFormula: string;
+  notes?: string;
+}
+
 
 export interface CabinetTemplateData {
   id: string; 
@@ -148,10 +168,7 @@ export interface CabinetTemplateData {
     // TKH?: number; // Toe Kick Height (if applicable to the main cabinet type)
   };
   parts: PartDefinition[];
-  accessories?: Array<{
-    accessoryId: string; 
-    quantityFormula: string; 
-  }>;
+  accessories?: TemplateAccessoryEntry[];
 }
 
 // Example of predefined materials (would come from DB)
