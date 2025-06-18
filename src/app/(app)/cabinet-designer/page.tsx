@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { FormItem } from '@/components/ui/form'; // Form is not directly used here, FormItem for Checkbox layout
+import { FormItem, FormLabel, FormControl } from '@/components/ui/form'; // Form is not directly used here, FormItem for Checkbox layout
 import { useToast } from "@/hooks/use-toast";
 import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2 } from 'lucide-react';
 import { calculateCabinetDetails, calculateDrawerSet } from './actions';
@@ -27,8 +27,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { PREDEFINED_FORMULAS } from './predefined-formulas';
 
 
-// Available cabinet types for selection
-const cabinetTypes = [
+// Initial predefined cabinet types
+const initialSelectableCabinetTypes = [
   { value: 'standard_base_2_door', label: 'Standard Base Cabinet - 2 Door (600x720x560mm default)' },
   { value: 'wall_cabinet_1_door', label: 'Wall Cabinet - 1 Door' },
   { value: 'tall_pantry_2_door', label: 'Tall Pantry - 2 Door' },
@@ -46,7 +46,7 @@ const initialNewTemplate: CabinetTemplateData = {
   id: `custom_${Date.now()}`,
   name: 'My New Custom Cabinet',
   type: 'custom',
-  previewImage: 'https://placehold.co/300x200/FADBD8/C0392B.png',
+  previewImage: 'https://placehold.co/300x200/FADBD8/C0392B.png', // Placeholder for 1-drawer, 1-door with top rail
   defaultDimensions: { width: 600, height: 700, depth: 500 },
   parameters: {
     PT: 18, // Panel Thickness
@@ -156,11 +156,13 @@ interface ProjectCabinetItem {
 export default function CabinetDesignerPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = React.useState(false);
+  const [selectableCabinetTypes, setSelectableCabinetTypes] = React.useState(initialSelectableCabinetTypes);
   const [calculationInput, setCalculationInput] = React.useState<CabinetCalculationInput>({
     cabinetType: 'standard_base_2_door',
     width: defaultDims.width,
     height: defaultDims.height,
     depth: defaultDims.depth,
+    customTemplate: undefined, // Initialize customTemplate
   });
   const [calculatedData, setCalculatedData] = React.useState<CalculatedCabinet | null>(null);
   const [calculationError, setCalculationError] = React.useState<string | null>(null);
@@ -195,12 +197,29 @@ export default function CabinetDesignerPage() {
   };
 
   const handleTypeChange = (value: string) => {
-    setCalculationInput(prev => ({ ...prev, cabinetType: value }));
-    if (value === 'standard_base_2_door') {
-        setCalculationInput(prev => ({ ...prev, width: defaultDims.width, height: defaultDims.height, depth: defaultDims.depth }));
-    } else if (value === 'base_cabinet_1_door_1_drawer') {
-        setCalculationInput(prev => ({ ...prev, width: 600, height: 720, depth: 560 })); // Example specific dims
-    }
+    setCalculationInput(prev => {
+        const newCalcInput: CabinetCalculationInput = {
+            ...prev,
+            cabinetType: value,
+            customTemplate: value === currentTemplate.id ? currentTemplate : undefined,
+        };
+        // Set default dimensions based on selected type
+        if (value === 'standard_base_2_door') {
+            newCalcInput.width = defaultDims.width;
+            newCalcInput.height = defaultDims.height;
+            newCalcInput.depth = defaultDims.depth;
+        } else if (value === 'base_cabinet_1_door_1_drawer') {
+            newCalcInput.width = 600;
+            newCalcInput.height = 720;
+            newCalcInput.depth = 560;
+        } else if (value === currentTemplate.id && currentTemplate) {
+            newCalcInput.width = currentTemplate.defaultDimensions.width;
+            newCalcInput.height = currentTemplate.defaultDimensions.height;
+            newCalcInput.depth = currentTemplate.defaultDimensions.depth;
+        }
+        // Add more else if blocks here for other predefined types if they have specific defaults
+        return newCalcInput;
+    });
     setCalculatedData(null);
     setCalculationError(null);
   };
@@ -222,19 +241,21 @@ export default function CabinetDesignerPage() {
 
     let result;
 
-    if (calculationInput.cabinetType === currentTemplate.id && currentTemplate) {
+    // If the selected type is the current custom template, ensure customTemplate is passed
+    const activeCustomTemplate = calculationInput.cabinetType === currentTemplate.id ? currentTemplate : undefined;
+
+    if (activeCustomTemplate) {
         result = await calculateCabinetDetails({
             ...calculationInput,
-            cabinetType: currentTemplate.id,
-            customTemplate: currentTemplate
+            customTemplate: activeCustomTemplate // Ensure the action gets the custom template data
         });
     } else if (calculationInput.cabinetType === 'standard_base_2_door') {
-        result = await calculateCabinetDetails(calculationInput);
+        result = await calculateCabinetDetails(calculationInput); // No custom template for this one
     }
     else {
       toast({
         title: "Calculation Not Implemented",
-        description: `Calculation logic for "${cabinetTypes.find(ct => ct.value === calculationInput.cabinetType)?.label}" is not yet implemented in this prototype. Only 'Standard Base Cabinet - 2 Door' or a defined custom template is currently supported.`,
+        description: `Calculation logic for "${selectableCabinetTypes.find(ct => ct.value === calculationInput.cabinetType)?.label}" is not yet implemented in this prototype. Only 'Standard Base Cabinet - 2 Door' or a defined custom template is currently supported.`,
         variant: "default",
         duration: 7000,
       });
@@ -268,6 +289,8 @@ export default function CabinetDesignerPage() {
         case 'tall_pantry_2_door': return "https://placehold.co/300x200/D1F2EB/76D7C4.png";
         case 'base_cabinet_1_door_1_drawer': return "https://placehold.co/300x200/FADBD8/C0392B.png";
         case 'corner_wall_cabinet': return "https://placehold.co/300x200/E8DAEF/C39BD3.png";
+        // Check if the current calculationInput's cabinetType matches the currentTemplate's id
+        // and if so, use the currentTemplate's previewImage.
         case currentTemplate?.id: return currentTemplate.previewImage || "https://placehold.co/300x200/AEB6BF/566573.png";
         default: return "https://placehold.co/300x200/EEEEEE/BDBDBD.png";
     }
@@ -371,18 +394,24 @@ export default function CabinetDesignerPage() {
         duration: 8000,
     });
 
-    const existingTypeIndex = cabinetTypes.findIndex(ct => ct.value === currentTemplate.id);
-    if (existingTypeIndex > -1) {
-        cabinetTypes[existingTypeIndex] = { value: currentTemplate.id, label: `${templateName} (Custom)` };
-    } else {
-        cabinetTypes.push({value: currentTemplate.id, label: `${templateName} (Custom)`});
-    }
+    setSelectableCabinetTypes(prevTypes => {
+        const newTypes = [...prevTypes];
+        const existingTypeIndex = newTypes.findIndex(ct => ct.value === currentTemplate.id);
+        const newEntry = { value: currentTemplate.id, label: `${templateName} (Custom)` };
+        if (existingTypeIndex > -1) {
+            newTypes[existingTypeIndex] = newEntry;
+        } else {
+            newTypes.push(newEntry);
+        }
+        return newTypes;
+    });
 
     setCalculationInput({
         cabinetType: currentTemplate.id,
         width: currentTemplate.defaultDimensions.width,
         height: currentTemplate.defaultDimensions.height,
         depth: currentTemplate.defaultDimensions.depth,
+        customTemplate: currentTemplate, // Important: pass the template data
     });
     setViewMode('calculator');
   };
@@ -505,7 +534,7 @@ export default function CabinetDesignerPage() {
 
   // --- Project Planner Handlers ---
   const handleAddProjectItem = () => {
-    const firstTemplate = cabinetTypes[0];
+    const firstTemplate = selectableCabinetTypes[0];
     let initialWidth = defaultDims.width;
     let initialHeight = defaultDims.height;
     let initialDepth = defaultDims.depth;
@@ -543,7 +572,7 @@ export default function CabinetDesignerPage() {
         if (item.id === itemId) {
           const updatedItem = { ...item, [field]: value };
           if (field === 'templateId') {
-            const selectedTemplateInfo = cabinetTypes.find(ct => ct.value === value);
+            const selectedTemplateInfo = selectableCabinetTypes.find(ct => ct.value === value);
             updatedItem.templateName = selectedTemplateInfo?.label || "Unknown Template";
             
             // Update dimensions based on new template
@@ -561,7 +590,7 @@ export default function CabinetDesignerPage() {
                 updatedItem.depth = 560;
             } else {
                 // Fallback for other predefined types if their specific defaults aren't handy
-                // You might want to define these in the cabinetTypes array or a separate lookup
+                // You might want to define these in the selectableCabinetTypes array or a separate lookup
                 updatedItem.width = 600; 
                 updatedItem.height = 700;
                 updatedItem.depth = 500;
@@ -583,7 +612,13 @@ export default function CabinetDesignerPage() {
           <CardDescription>Select type and customize dimensions for individual calculation.</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <Button onClick={() => { setCurrentTemplate(JSON.parse(JSON.stringify(initialNewTemplate))); setViewMode('templateDefinition'); }} variant="outline" className="w-full">
+          <Button onClick={() => { 
+              const newId = `custom_${Date.now()}`;
+              setCurrentTemplate({...JSON.parse(JSON.stringify(initialNewTemplate)), id: newId }); 
+              setViewMode('templateDefinition'); 
+            }} 
+            variant="outline" className="w-full"
+          >
             <PlusCircle className="mr-2 h-4 w-4" /> Define New Cabinet Template
           </Button>
           <Separator />
@@ -591,7 +626,7 @@ export default function CabinetDesignerPage() {
             <Label htmlFor="cabinetType">Cabinet Type</Label>
             <Select value={calculationInput.cabinetType} onValueChange={handleTypeChange}>
               <SelectTrigger id="cabinetType"><SelectValue placeholder="Select a cabinet type" /></SelectTrigger>
-              <SelectContent>{cabinetTypes.map(type => (<SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>))}</SelectContent>
+              <SelectContent>{selectableCabinetTypes.map(type => (<SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>))}</SelectContent>
             </Select>
           </div>
           <div className="aspect-video bg-muted rounded-md flex items-center justify-center">
@@ -682,7 +717,7 @@ export default function CabinetDesignerPage() {
                       <SelectValue placeholder="Select template" />
                     </SelectTrigger>
                     <SelectContent>
-                      {cabinetTypes.map(type => (
+                      {selectableCabinetTypes.map(type => (
                         <SelectItem key={type.value} value={type.value} className="text-xs">{type.label}</SelectItem>
                       ))}
                     </SelectContent>
@@ -851,24 +886,13 @@ export default function CabinetDesignerPage() {
                                 <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
                                 
                                 <div className="mb-3">
-                                     <FormField
-                                        control={{} as any} // RHF not used here, direct state update
-                                        name={`parts.${index}.nameLabel`}
-                                        render={() => (
-                                            <FormItem>
-                                                <FormLabel htmlFor={`partName_${index}`} className="sr-only">Part Name Label</FormLabel>
-                                                <FormControl>
-                                                <Input 
-                                                    id={`partName_${index}`} 
-                                                    value={part.nameLabel} 
-                                                    onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} 
-                                                    placeholder="e.g., Side Panel" 
-                                                    className="text-base font-medium"
-                                                />
-                                                </FormControl>
-                                            </FormItem>
-                                        )}
-                                    />
+                                  <Input 
+                                      id={`partName_${index}`} 
+                                      value={part.nameLabel} 
+                                      onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} 
+                                      placeholder="e.g., Side Panel" 
+                                      className="text-base font-medium"
+                                  />
                                 </div>
                                 <div className="mb-3 p-2 border rounded-md bg-muted/30 text-xs space-y-0.5">
                                     <p><span className="font-medium">Type:</span> {part.partType} ({part.cabinetContext || 'General'})</p>
@@ -1054,3 +1078,5 @@ export default function CabinetDesignerPage() {
 }
 
       
+
+    
