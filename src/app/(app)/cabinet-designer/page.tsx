@@ -14,10 +14,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { FormItem, FormLabel, FormControl } from '@/components/ui/form'; // Form is not directly used here, FormItem for Checkbox layout
 import { useToast } from "@/hooks/use-toast";
-import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2 } from 'lucide-react';
+import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench } from 'lucide-react';
 import { calculateCabinetDetails, calculateDrawerSet, saveCabinetTemplateAction, getCabinetTemplatesAction, getCabinetTemplateByIdAction, deleteCabinetTemplateAction } from './actions';
-import type { CabinetCalculationInput, CalculatedCabinet, CabinetPart, CabinetTemplateData, PartDefinition, CabinetPartType, CabinetTypeContext, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer as SingleCalculatedDrawer } from './types';
-import { PREDEFINED_MATERIALS } from './types';
+import type { CabinetCalculationInput, CalculatedCabinet, CabinetPart, CabinetTemplateData, PartDefinition, CabinetPartType, CabinetTypeContext, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer as SingleCalculatedDrawer, TemplateAccessoryEntry } from './types';
+import { PREDEFINED_MATERIALS, PREDEFINED_ACCESSORIES } from './types';
 import { Separator } from '@/components/ui/separator';
 import { Dialog, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -88,28 +88,57 @@ function evaluateFormulaClientSide(
     return 'N/A';
   }
   try {
-    const { W, H, D, PT, BPT, BPO, TRD, DCG, DG, B, DW, DD, DH, Clearance } = params;
-    const scope: Record<string, number | undefined> = { W, H, D, PT, BPT, BPO, TRD, DCG, DG, B, DW, DD, DH, Clearance, ...params };
+    // Make parameters available in the eval scope.
+    const { W, H, D, ...templateParams } = params;
+    const evalScope = { W, H, D, ...templateParams };
+
     let formulaToEvaluate = formula;
-    for (const key in scope) {
-      if (scope[key] !== undefined) {
+    
+    // First, replace all known parameters in the formula string
+    for (const key in evalScope) {
+      if (evalScope[key] !== undefined && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
+        // Regex to match whole word parameters to avoid partial replacements (e.g., 'D' in 'TRD')
         const regex = new RegExp(`\\b${key}\\b`, 'g');
-        formulaToEvaluate = formulaToEvaluate.replace(regex, String(scope[key]));
+        formulaToEvaluate = formulaToEvaluate.replace(regex, String(evalScope[key]));
       }
     }
-    const knownParamsRegex = /\b(W|H|D|PT|BPT|BPO|TRD|DCG|DG|B|DW|DD|DH|Clearance)\b/g;
-    if (knownParamsRegex.test(formulaToEvaluate)) {
-      return formula; 
+    
+    // Check if any unresolved template parameters (like PT, BPT, etc.) remain
+    // This regex looks for words that are not numbers or basic math operators.
+    const unresolvedParamsRegex = /[a-zA-Z_][a-zA-Z0-9_]*/g; 
+    let match;
+    let hasUnresolved = false;
+    // Iterate over matches to see if any are actual parameter names and not just parts of functions or numbers
+    while ((match = unresolvedParamsRegex.exec(formulaToEvaluate)) !== null) {
+        // A very naive check: if it's not a math function and not a number, assume it MIGHT be an unresolved param.
+        // This is imperfect. E.g. `Math.sqrt` would be caught. This needs a proper parser for robustness.
+        if (!/^(?:Math|abs|acos|asin|atan|atan2|ceil|cos|exp|floor|log|max|min|pow|random|round|sin|sqrt|tan)$/i.test(match[0]) && isNaN(Number(match[0]))) {
+             // Further check if this "unresolved" word is actually one of the known parameters from the template
+            // that just wasn't replaced because it wasn't in `evalScope` (e.g. if a param was defined in template but not provided a value in `params`)
+            if (Object.keys(templateParams).includes(match[0])) {
+                 hasUnresolved = true;
+                 break;
+            }
+        }
     }
-    const sanitizedForEval = formulaToEvaluate.replace(/[^-()\d/*+.]/g, '');
+
+    if (hasUnresolved) {
+       return formula; // Return original formula if unresolved parameters specific to the template are found
+    }
+
+    // Basic sanitization for eval - DANGEROUS for general input
+    // Allow: numbers, ., +, -, *, /, (, ), and spaces.
+    // This is still highly simplified and unsafe for user-defined formulas from a DB without a proper parser.
+    const sanitizedForEval = formulaToEvaluate.replace(/[^0-9.+\-*/\s()]/g, '');
+
     // eslint-disable-next-line no-eval
     const result = eval(sanitizedForEval);
     if (typeof result === 'number' && !isNaN(result)) {
       return String(parseFloat(result.toFixed(1)));
     }
-    return formula; 
+    return formula; // Fallback to original formula if eval fails or result is not a number
   } catch (e) {
-    return formula;
+    return formula; // Fallback on error
   }
 }
 
@@ -195,7 +224,6 @@ export default function CabinetDesignerPage() {
                 newCalcInput.width = 600;
                 newCalcInput.height = 720;
                 newCalcInput.depth = 560;
-                 newCalcInput.previewImage = "https://placehold.co/300x200/FADBD8/C0392B.png";
             } // Add other hardcoded defaults here
         } else if (dbType) { // This means it's a custom template from DB
             newCalcInput.customTemplate = dbType;
@@ -223,21 +251,23 @@ export default function CabinetDesignerPage() {
     let result;
     let templateToCalculateWith = calculationInput.customTemplate;
 
-    // If customTemplate isn't set directly, try to load it from dbTemplates if it's a custom ID
     if (!templateToCalculateWith && !initialHardcodedCabinetTypes.some(hct => hct.value === calculationInput.cabinetType)) {
         const foundDbTemplate = dbTemplates.find(dbt => dbt.id === calculationInput.cabinetType);
         if (foundDbTemplate) {
             templateToCalculateWith = foundDbTemplate;
-        } else { // Try fetching from DB directly if not in local state (e.g., after save and re-select)
+        } else { 
             const fetchedFromDb = await getCabinetTemplateByIdAction(calculationInput.cabinetType);
-            if (fetchedFromDb) templateToCalculateWith = fetchedFromDb;
+            if (fetchedFromDb) {
+                 templateToCalculateWith = fetchedFromDb;
+                 // Optionally update calculationInput.customTemplate if it was stale
+                 setCalculationInput(prev => ({...prev, customTemplate: fetchedFromDb}));
+            }
         }
     }
     
     if (templateToCalculateWith) {
         result = await calculateCabinetDetails({ ...calculationInput, customTemplate: templateToCalculateWith });
     } else if (initialHardcodedCabinetTypes.some(hct => hct.value === calculationInput.cabinetType)) {
-        // For hardcoded types, ensure customTemplate is undefined
         result = await calculateCabinetDetails({ ...calculationInput, customTemplate: undefined });
     } else {
       toast({
@@ -263,7 +293,15 @@ export default function CabinetDesignerPage() {
   
   const getPreviewImageSrc = () => {
     const selectedIsHardcoded = initialHardcodedCabinetTypes.some(hct => hct.value === calculationInput.cabinetType);
-    const selectedIsDbType = dbTemplates.some(dbt => dbt.id === calculationInput.cabinetType);
+    
+    if (calculationInput.customTemplate?.previewImage) { 
+        return calculationInput.customTemplate.previewImage;
+    }
+    
+    const dbTemplate = dbTemplates.find(dbt => dbt.id === calculationInput.cabinetType);
+    if (dbTemplate?.previewImage) {
+        return dbTemplate.previewImage;
+    }
 
     if (selectedIsHardcoded) {
         switch(calculationInput.cabinetType) {
@@ -274,18 +312,18 @@ export default function CabinetDesignerPage() {
             case 'corner_wall_cabinet': return "https://placehold.co/300x200/E8DAEF/C39BD3.png";
             default: return "https://placehold.co/300x200/EEEEEE/BDBDBD.png";
         }
-    } else if (selectedIsDbType) {
-        const template = dbTemplates.find(dbt => dbt.id === calculationInput.cabinetType);
-        return template?.previewImage || "https://placehold.co/300x200/AEB6BF/566573.png";
-    } else if (calculationInput.customTemplate?.previewImage) { // For a template being actively defined
-        return calculationInput.customTemplate.previewImage;
     }
     return "https://placehold.co/300x200/EEEEEE/BDBDBD.png";
   }
 
   const getImageAiHint = () => {
     const selectedIsHardcoded = initialHardcodedCabinetTypes.some(hct => hct.value === calculationInput.cabinetType);
-    const selectedIsDbType = dbTemplates.some(dbt => dbt.id === calculationInput.cabinetType);
+    
+    if (calculationInput.customTemplate) { return "custom cabinet"; }
+    
+    const dbTemplate = dbTemplates.find(dbt => dbt.id === calculationInput.cabinetType);
+    if (dbTemplate) { return "custom cabinet"; }
+
 
     if (selectedIsHardcoded) {
         switch(calculationInput.cabinetType) {
@@ -296,9 +334,6 @@ export default function CabinetDesignerPage() {
             case 'corner_wall_cabinet': return "corner cabinet";
             default: return "cabinet furniture";
         }
-    } else if (selectedIsDbType || calculationInput.customTemplate) {
-        // Generic hint for custom templates, often drawer/door combos
-        return "drawer door"; 
     }
     return "cabinet furniture";
   }
@@ -308,9 +343,20 @@ export default function CabinetDesignerPage() {
     const { name, value, type } = e.target;
     let processedValue: string | number | boolean = value;
     if (type === 'number') processedValue = parseFloat(value) || 0;
-    if (type === 'checkbox' && field) {
+    
+    if (type === 'checkbox' && field) { // This specific handling for checkbox within parts.edgeBanding
         processedValue = (e.target as HTMLInputElement).checked;
+         setCurrentTemplate(prev => {
+            const newTemplate = JSON.parse(JSON.stringify(prev));
+            if (partIndex !== undefined && newTemplate.parts[partIndex]) {
+                if (!newTemplate.parts[partIndex].edgeBanding) newTemplate.parts[partIndex].edgeBanding = {};
+                (newTemplate.parts[partIndex].edgeBanding as any)[field as keyof PartDefinition['edgeBanding']] = processedValue;
+            }
+            return newTemplate;
+        });
+        return;
     }
+
 
     setCurrentTemplate(prev => {
         const newTemplate = JSON.parse(JSON.stringify(prev));
@@ -321,25 +367,24 @@ export default function CabinetDesignerPage() {
             const currentPathSegment = pathArray[i];
             if (currentPathSegment === 'parts' && partIndex !== undefined) {
                 target = target[currentPathSegment][partIndex];
-            } else {
+            } else if (currentPathSegment.match(/^accessories\[(\d+)\]$/)) { // e.g. accessories[0]
+                 const arrIndex = parseInt(currentPathSegment.match(/^accessories\[(\d+)\]$/)![1], 10);
+                 target = target.accessories[arrIndex];
+            }
+            else {
                 target = target[currentPathSegment];
             }
-            if (!target) {
+            if (!target && i < pathArray.length -1) { // Check if target is undefined before the last segment
                 console.error(`Path segment ${currentPathSegment} (index ${i}) not found in template path ${path}. Target became undefined.`);
-                return prev;
+                return prev; // Return previous state to avoid error
             }
         }
-
+        
         const finalKey = pathArray[pathArray.length -1];
-        if (partIndex !== undefined && path.startsWith('parts.') && field) {
-             if (finalKey === 'edgeBanding' && typeof field === 'string' && (field === 'front' || field === 'back' || field === 'top' || field === 'bottom')) {
-                if (!target.edgeBanding) target.edgeBanding = {};
-                target.edgeBanding = { ...target.edgeBanding, [field as keyof PartDefinition['edgeBanding']]: processedValue };
-            } else if (target && finalKey !== 'edgeBanding') {
-                 target[finalKey as keyof PartDefinition] = processedValue as any;
-            }
-        } else if (target) {
-             target[finalKey] = processedValue;
+        if(target) { // Ensure target is not undefined before assigning
+            target[finalKey] = processedValue;
+        } else {
+            console.error(`Final target for path ${path} is undefined. Cannot set key ${finalKey}.`);
         }
         return newTemplate;
     });
@@ -392,13 +437,13 @@ export default function CabinetDesignerPage() {
                 description: `Template "${currentTemplate.name}" has been saved.`,
                 duration: 5000,
             });
-            await fetchAndSetTemplates(); // Refresh the list of templates from DB
-            setCalculationInput({ // Pre-select the newly saved template for calculation
+            await fetchAndSetTemplates(); 
+            setCalculationInput({ 
                 cabinetType: result.id,
                 width: currentTemplate.defaultDimensions.width,
                 height: currentTemplate.defaultDimensions.height,
                 depth: currentTemplate.defaultDimensions.depth,
-                customTemplate: currentTemplate, // Pass the full template data
+                customTemplate: currentTemplate, 
             });
             setViewMode('calculator');
         } else {
@@ -414,6 +459,46 @@ export default function CabinetDesignerPage() {
     } finally {
         setIsLoading(false);
     }
+  };
+
+  const handleAddAccessoryToTemplate = () => {
+    setCurrentTemplate(prev => {
+      const newAccessory: TemplateAccessoryEntry = {
+        id: `acc_${Date.now()}`, // Unique ID for React key
+        accessoryId: PREDEFINED_ACCESSORIES[0]?.id || '', // Default to the first predefined accessory
+        quantityFormula: "1",
+        notes: "",
+      };
+      return {
+        ...prev,
+        accessories: [...(prev.accessories || []), newAccessory],
+      };
+    });
+  };
+
+  const handleRemoveAccessoryFromTemplate = (accessoryEntryId: string) => {
+    setCurrentTemplate(prev => ({
+      ...prev,
+      accessories: (prev.accessories || []).filter(acc => acc.id !== accessoryEntryId),
+    }));
+  };
+
+  const handleAccessoryInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement> | string, // string for Select change
+    accessoryIndex: number,
+    field: keyof TemplateAccessoryEntry
+  ) => {
+    setCurrentTemplate(prev => {
+      const newTemplate = JSON.parse(JSON.stringify(prev));
+      if (newTemplate.accessories && newTemplate.accessories[accessoryIndex]) {
+        if (typeof e === 'string') { // For Select component
+          (newTemplate.accessories[accessoryIndex] as any)[field] = e;
+        } else { // For Input/Textarea
+          (newTemplate.accessories[accessoryIndex] as any)[field] = e.target.value;
+        }
+      }
+      return newTemplate;
+    });
   };
 
 
@@ -475,7 +560,7 @@ export default function CabinetDesignerPage() {
                   id={`part_${partIndex}_${formulaField}`}
                   rows={1}
                   value={(currentTemplate.parts[partIndex] as any)[formulaField] || ''}
-                  onChange={(e) => handleTemplateInputChange(e, `parts.${formulaField}`, partIndex, formulaField as keyof PartDefinition)}
+                  onChange={(e) => handleTemplateInputChange(e, `parts.${partIndex}.${formulaField}`)}
                   placeholder={placeholder}
                   className="text-sm"
                   readOnly={!isCustom && formulaField !== 'quantityFormula' && formulaField !== 'thicknessFormula'}
@@ -484,7 +569,7 @@ export default function CabinetDesignerPage() {
                  <Input
                     id={`part_${partIndex}_${formulaField}`}
                     value={(currentTemplate.parts[partIndex] as any)[formulaField] || ''}
-                    onChange={(e) => handleTemplateInputChange(e, `parts.${formulaField}`, partIndex, formulaField as keyof PartDefinition)}
+                    onChange={(e) => handleTemplateInputChange(e, `parts.${partIndex}.${formulaField}`)}
                     placeholder={placeholder}
                     className="text-sm"
                     readOnly={!isCustom}
@@ -671,10 +756,10 @@ export default function CabinetDesignerPage() {
                 <p className="text-xs text-muted-foreground mt-2">Note: This is a raw cutting list. For material optimization (nesting), these parts would be processed by a nesting engine.</p>
               </div>
               <div>
-                <h3 className="text-lg font-semibold mb-2">Accessories</h3>
+                <h3 className="text-lg font-semibold mb-2 flex items-center"><Wrench className="mr-2 h-5 w-5"/>Accessories</h3>
                 <div className="max-h-[200px] overflow-y-auto border rounded-md">
-                  <Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Accessory</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Unit Cost</TableHead><TableHead className="text-right">Total Cost</TableHead></TableRow></TableHeader>
-                    <TableBody>{calculatedData.accessories.map((acc, index) => (<TableRow key={index}><TableCell>{acc.name}</TableCell><TableCell className="text-center">{acc.quantity}</TableCell><TableCell className="text-right">${acc.unitCost.toFixed(2)}</TableCell><TableCell className="text-right">${acc.totalCost.toFixed(2)}</TableCell></TableRow>))}</TableBody>
+                  <Table><TableHeader className="sticky top-0 bg-background z-10"><TableRow><TableHead>Accessory</TableHead><TableHead className="text-center">Qty</TableHead><TableHead className="text-right">Unit Cost</TableHead><TableHead className="text-right">Total Cost</TableHead><TableHead>Notes</TableHead></TableRow></TableHeader>
+                    <TableBody>{calculatedData.accessories.map((acc, index) => (<TableRow key={index}><TableCell>{acc.name}</TableCell><TableCell className="text-center">{acc.quantity}</TableCell><TableCell className="text-right">${acc.unitCost.toFixed(2)}</TableCell><TableCell className="text-right">${acc.totalCost.toFixed(2)}</TableCell><TableCell className="text-xs">{acc.notes || '-'}</TableCell></TableRow>))}</TableBody>
                   </Table>
                 </div>
               </div>
@@ -875,25 +960,23 @@ export default function CabinetDesignerPage() {
                             return (
                             <Card key={part.partId || index} className="p-4 relative bg-card/80">
                                 <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
-                                <div className="mb-2">
-                                  <Input 
-                                      id={`partName_${index}`} 
-                                      value={part.nameLabel} 
-                                      onChange={(e) => handleTemplateInputChange(e, 'parts.nameLabel', index, 'nameLabel')} 
-                                      placeholder="e.g., Side Panel" 
-                                      className="text-base font-medium"
-                                  />
-                                </div>
-                                <div className="mb-3 p-2 border rounded-md bg-muted/30 text-xs space-y-0.5">
+                                <div className="mb-3 p-2 border rounded-md bg-muted/30 text-sm space-y-1">
+                                    <Input 
+                                        id={`partName_${index}`} 
+                                        value={part.nameLabel} 
+                                        onChange={(e) => handleTemplateInputChange(e, `parts.${index}.nameLabel`)}
+                                        placeholder="e.g., Side Panel" 
+                                        className="text-base font-medium mb-1"
+                                    />
                                     <p><span className="font-medium">Type:</span> {part.partType} ({part.cabinetContext || 'General'})</p>
                                     <p>
-                                        <span className="font-medium">Calculated Dim. (H x W x T):</span> 
+                                        <span className="font-medium">Calc. Dim (H x W x T):</span> 
                                         {` ${calculatedHeight}${isNaN(Number(calculatedHeight)) ? '' : 'mm'} x ${calculatedWidth}${isNaN(Number(calculatedWidth)) ? '' : 'mm'} x ${calculatedThickness}${isNaN(Number(calculatedThickness)) ? '' : 'mm'}`}
                                         <span className="text-muted-foreground text-[10px] block">
                                           (Formulas: {part.heightFormula || 'N/A'} x {part.widthFormula || 'N/A'} x {part.thicknessFormula || 'N/A'})
                                         </span>
                                     </p>
-                                    <p><span className="font-medium">Calculated Qty:</span> {calculatedQty} <span className="text-muted-foreground text-[10px]">(Formula: {part.quantityFormula})</span></p>
+                                    <p><span className="font-medium">Calc. Qty:</span> {calculatedQty} <span className="text-muted-foreground text-[10px]">(Formula: {part.quantityFormula})</span></p>
                                     <p><span className="font-medium">Material:</span> {materialInfo?.name || part.materialId}{materialInfo?.hasGrain ? " (Grain)" : ""}</p>
                                     <p><span className="font-medium">Grain:</span> {grainText}</p>
                                 </div>
@@ -907,7 +990,7 @@ export default function CabinetDesignerPage() {
                                         <Label>Material ID</Label>
                                         <Select
                                             value={part.materialId}
-                                            onValueChange={(value) => handleTemplateInputChange({ target: { name: 'materialId', value }} as any, 'parts.materialId', index, 'materialId')}
+                                            onValueChange={(value) => handleTemplateInputChange({ target: { name: 'materialId', value }} as any, `parts.${index}.materialId`)}
                                         >
                                             <SelectTrigger className="text-sm"><SelectValue placeholder="Select material" /></SelectTrigger>
                                             <SelectContent>
@@ -925,7 +1008,7 @@ export default function CabinetDesignerPage() {
                                         <Label>Grain Direction</Label>
                                         <Select
                                             value={part.grainDirection || 'none'}
-                                            onValueChange={(value) => handleTemplateInputChange({ target: { name: 'grainDirection', value: value === 'none' ? null : value }} as any, 'parts.grainDirection', index, 'grainDirection')}
+                                            onValueChange={(value) => handleTemplateInputChange({ target: { name: 'grainDirection', value: value === 'none' ? null : value }} as any, `parts.${index}.grainDirection`)}
                                         >
                                             <SelectTrigger className="text-sm"><SelectValue /></SelectTrigger>
                                             <SelectContent>
@@ -944,7 +1027,7 @@ export default function CabinetDesignerPage() {
                                                 <Checkbox
                                                     id={`edge_${index}_${edge}`}
                                                     checked={!!part.edgeBanding?.[edge]}
-                                                    onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, 'parts.edgeBanding', index, edge as keyof PartDefinition['edgeBanding'])}
+                                                    onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, `parts.${index}.edgeBanding.${edge}`, partIndex, edge as keyof PartDefinition['edgeBanding'])}
                                                 />
                                                 <Label htmlFor={`edge_${index}_${edge}`} className="capitalize font-normal">{edge}</Label>
                                             </FormItem>
@@ -959,7 +1042,7 @@ export default function CabinetDesignerPage() {
                                     <Label className="font-medium">Part Notes:</Label>
                                     <Textarea 
                                         value={part.notes || ''} 
-                                        onChange={(e) => handleTemplateInputChange(e, 'parts.notes', index, 'notes')} 
+                                        onChange={(e) => handleTemplateInputChange(e, `parts.${index}.notes`)}
                                         rows={2} 
                                         className="text-sm"
                                         placeholder="Optional notes specific to this part in the template..."
@@ -972,9 +1055,60 @@ export default function CabinetDesignerPage() {
                 </Card>
 
                 <Card>
-                    <CardHeader><CardTitle className="text-lg">Accessories (Conceptual)</CardTitle></CardHeader>
-                    <CardContent><p className="text-sm text-muted-foreground">Define accessories like hinges, handles, with quantity formulas. (UI for this is not yet implemented).</p></CardContent>
-                </Card>
+                  <CardHeader className="flex flex-row items-center justify-between">
+                      <div>
+                          <CardTitle className="text-lg flex items-center"><Wrench className="mr-2 h-5 w-5" />Accessories</CardTitle>
+                          <CardDescription>Define accessories like hinges, handles, with quantity formulas.</CardDescription>
+                      </div>
+                      <Button size="sm" onClick={handleAddAccessoryToTemplate}><PlusCircle className="mr-2 h-4 w-4" />Add Accessory</Button>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                      {(currentTemplate.accessories || []).map((acc, index) => (
+                          <Card key={acc.id} className="p-4 relative bg-card/80">
+                              <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemoveAccessoryFromTemplate(acc.id)}><XCircle className="h-5 w-5"/></Button>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                  <div>
+                                      <Label htmlFor={`acc_type_${index}`}>Accessory Type</Label>
+                                      <Select 
+                                          value={acc.accessoryId} 
+                                          onValueChange={(value) => handleAccessoryInputChange(value, index, 'accessoryId')}
+                                      >
+                                          <SelectTrigger id={`acc_type_${index}`} className="text-sm"><SelectValue placeholder="Select accessory" /></SelectTrigger>
+                                          <SelectContent>
+                                              {PREDEFINED_ACCESSORIES.map(pa => (
+                                                  <SelectItem key={pa.id} value={pa.id}>{pa.name}</SelectItem>
+                                              ))}
+                                          </SelectContent>
+                                      </Select>
+                                  </div>
+                                  <div>
+                                      <Label htmlFor={`acc_qty_formula_${index}`}>Quantity Formula</Label>
+                                      <Input 
+                                          id={`acc_qty_formula_${index}`} 
+                                          value={acc.quantityFormula} 
+                                          onChange={(e) => handleAccessoryInputChange(e, index, 'quantityFormula')} 
+                                          placeholder="e.g., 2 or NumberOfDoors * 2" 
+                                          className="text-sm"
+                                      />
+                                  </div>
+                                  <div className="md:col-span-2">
+                                      <Label htmlFor={`acc_notes_${index}`}>Notes</Label>
+                                      <Textarea 
+                                          id={`acc_notes_${index}`} 
+                                          value={acc.notes || ''} 
+                                          onChange={(e) => handleAccessoryInputChange(e, index, 'notes')} 
+                                          placeholder="Optional notes for this accessory..." 
+                                          className="text-sm"
+                                          rows={2}
+                                      />
+                                  </div>
+                              </div>
+                          </Card>
+                      ))}
+                      {(!currentTemplate.accessories || currentTemplate.accessories.length === 0) && <p className="text-muted-foreground text-center py-4">No accessories defined yet. Click "Add Accessory" to begin.</p>}
+                  </CardContent>
+              </Card>
+
 
             </CardContent>
             <CardFooter className="flex justify-end space-x-3">
