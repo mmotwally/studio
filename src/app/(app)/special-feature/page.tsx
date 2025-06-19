@@ -11,237 +11,39 @@ import { Label } from '@/components/ui/label';
 import { Sparkles, LayoutList, Server, Download, Info, Loader2 } from 'lucide-react';
 import * as React from 'react';
 import { useToast } from "@/hooks/use-toast";
-import { performSpecialServerAction, performServerSideNestingAction, exportCutListForDesktopAction, runDeepnestAlgorithmAction } from './actions';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import potpack from 'potpack';
-import type { PotpackBox, PotpackStats, InputPart, PackedPart, SheetLayout } from '@/types';
+// Removed potpack and action imports for extreme simplification
+// import type { InputPart, PackedPart, SheetLayout } from '@/types'; // These would also be removed if causing issues
 
 
-const KERF_ALLOWANCE = 3; // mm, adjust as needed
-const DEFAULT_SHEET_WIDTH = 2440; // mm
-const DEFAULT_SHEET_HEIGHT = 1220; // mm
-
-
+// Minimal state
 export default function SpecialFeaturePage() {
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = React.useState(false);
+  const [isLoading, setIsLoading] = React.useState<boolean>(false);
   const [actionResult, setActionResult] = React.useState<string | null>(null);
   const [partsListData, setPartsListData] = React.useState<string>('');
   const [selectedClientAlgorithm, setSelectedClientAlgorithm] = React.useState<string>('rectpack2d');
-  const [packedLayoutData, setPackedLayoutData] = React.useState<SheetLayout[] | null>(null);
+  // const [packedLayoutData, setPackedLayoutData] = React.useState<any | null>(null); // Simplified type
 
-  const handleGenericSpecialFunction = async () => {
-    setIsLoading(true);
-    setActionResult(null);
-    setPackedLayoutData(null);
-    try {
-      const inputData = { parameter1: "generic test data", parameter2: 789 };
-      const result = await performSpecialServerAction(inputData);
-      if (result.success) {
-        toast({ title: "Success!", description: result.message });
-        setActionResult(`Server (Generic Action) responded: ${result.message} - Output: ${JSON.stringify(result.output?.resultData)}`);
-      } else {
-        toast({ title: "Error", description: result.message, variant: "destructive" });
-        setActionResult(`Server (Generic Action) error: ${result.message}`);
-      }
-    } catch (error) {
-      console.error("Failed to perform generic special action:", error);
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      toast({ title: "Client Error", description: `Failed to execute generic special function: ${errorMessage}`, variant: "destructive" });
-      setActionResult(`Client error (Generic Action): ${errorMessage}`);
-    } finally {
-      setIsLoading(false);
-    }
+  // Minimal handlers
+  const handleClientSideNesting = () => {
+    console.log("Client-side nesting triggered with algorithm:", selectedClientAlgorithm);
+    toast({ title: "Client Nesting", description: "Conceptual client nesting executed." });
   };
 
-  const handleClientSideNesting = async () => {
-    if (!partsListData.trim()) {
-      toast({ title: "Input Required", description: "Please provide a parts list.", variant: "default" });
-      return;
-    }
-    setIsLoading(true);
-    setActionResult(null);
-    setPackedLayoutData(null);
-
-    if (selectedClientAlgorithm === 'rectpack2d') { // potpack logic
-      try {
-        const inputParts: InputPart[] = JSON.parse(partsListData);
-
-        if (!Array.isArray(inputParts)) {
-            throw new Error("Invalid parts list format: Expected an array.");
-        }
-        for (const p of inputParts) {
-            if (
-                typeof p.name !== 'string' ||
-                typeof p.width !== 'number' || p.width <= 0 ||
-                typeof p.height !== 'number' || p.height <= 0 ||
-                typeof p.qty !== 'number' || p.qty <= 0
-            ) {
-                throw new Error("Invalid part structure. Each part must have name (string), and positive width, height, qty (numbers).");
-            }
-        }
-
-        let allIndividualParts: PotpackBox[] = [];
-        inputParts.forEach(part => {
-          for (let i = 0; i < part.qty; i++) {
-            allIndividualParts.push({
-              w: part.width + KERF_ALLOWANCE,
-              h: part.height + KERF_ALLOWANCE,
-              name: `${part.name} #${i + 1}`,
-              original: part
-            });
-          }
-        });
-        
-        const packedSheets: SheetLayout[] = [];
-        let sheetIndex = 0;
-
-        while(allIndividualParts.length > 0) {
-            sheetIndex++;
-            const currentSheetPartsToPack = [...allIndividualParts]; 
-            const stats: PotpackStats = potpack(currentSheetPartsToPack); 
-
-            const packedPartsForThisSheet: PackedPart[] = [];
-            const remainingPartsForNextAttempt: PotpackBox[] = [];
-
-            let actualPackedWidth = 0;
-            let actualPackedHeight = 0;
-
-            currentSheetPartsToPack.forEach(p => {
-                if (p.x !== undefined && p.y !== undefined) { 
-                    if ((p.x + p.w) <= DEFAULT_SHEET_WIDTH && (p.y + p.h) <= DEFAULT_SHEET_HEIGHT) { 
-                        packedPartsForThisSheet.push({
-                            name: p.name!, 
-                            width: p.original!.width, 
-                            height: p.original!.height,
-                            qty: 1, 
-                            x: p.x,
-                            y: p.y,
-                            material: p.original!.material 
-                        });
-                        actualPackedWidth = Math.max(actualPackedWidth, p.x + p.w);
-                        actualPackedHeight = Math.max(actualPackedHeight, p.y + p.h);
-                    } else {
-                        remainingPartsForNextAttempt.push({ w: p.w, h: p.h, name: p.name, original: p.original });
-                    }
-                } else {
-                    remainingPartsForNextAttempt.push({ w: p.w, h: p.h, name: p.name, original: p.original });
-                }
-            });
-            
-            if (packedPartsForThisSheet.length > 0) {
-                 packedSheets.push({
-                    id: sheetIndex,
-                    dimensions: { w: DEFAULT_SHEET_WIDTH, h: DEFAULT_SHEET_HEIGHT },
-                    parts: packedPartsForThisSheet,
-                    packedAreaWidth: actualPackedWidth > 0 ? actualPackedWidth - KERF_ALLOWANCE : 0, 
-                    packedAreaHeight: actualPackedHeight > 0 ? actualPackedHeight - KERF_ALLOWANCE : 0,
-                    efficiency: (packedPartsForThisSheet.reduce((sum, p) => sum + (p.width * p.height), 0) / (DEFAULT_SHEET_WIDTH * DEFAULT_SHEET_HEIGHT)) * 100,
-                });
-            }
-            
-            allIndividualParts = remainingPartsForNextAttempt; 
-
-            if (packedPartsForThisSheet.length === 0 && allIndividualParts.length > 0) {
-                toast({ title: "Nesting Warning", description: "Some parts might be too large to fit on a new sheet or no further packing possible.", variant: "default"});
-                setActionResult(`Could not pack remaining ${allIndividualParts.length} parts. Check dimensions.`);
-                break; 
-            }
-             if (sheetIndex > 20 && allIndividualParts.length > 0) { 
-                toast({ title: "Nesting Limit", description: "Reached maximum sheet limit (20) for this conceptual demo.", variant: "default"});
-                setActionResult(`Nesting stopped after 20 sheets. Remaining parts: ${allIndividualParts.length}`);
-                break;
-            }
-        }
-
-        setPackedLayoutData(packedSheets);
-        const resultMsg = `Client-Side Nesting (potpack) complete. ${packedSheets.length} sheet(s) used. ${allIndividualParts.length > 0 ? `${allIndividualParts.length} parts remaining.` : ''}`;
-        setActionResult(resultMsg);
-        toast({ title: "Nesting Complete", description: resultMsg });
-
-      } catch (e) {
-        const errorMsg = e instanceof Error ? e.message : "Failed to parse parts list or run nesting.";
-        toast({ title: "Nesting Error", description: errorMsg, variant: "destructive" });
-        setActionResult(`Client-Side Nesting Error: ${errorMsg}`);
-      }
-    } else if (selectedClientAlgorithm === 'deepnest') {
-      try {
-        JSON.parse(partsListData); 
-        const result = await runDeepnestAlgorithmAction(partsListData);
-        if (result.success) {
-          setActionResult(`Deepnest.io (Conceptual Backend) Result: ${result.message} - Layout: ${JSON.stringify(result.layout, null, 2)}`);
-          toast({ title: "Deepnest Call Success", description: result.message });
-        } else {
-          toast({ title: "Deepnest Call Error", description: result.message, variant: "destructive" });
-          setActionResult(`Deepnest.io (Conceptual Backend) Error: ${result.message}`);
-        }
-      } catch (e) {
-        const errorMsg = e instanceof Error ? e.message : "Invalid JSON for parts list or backend call failed.";
-        toast({ title: "Deepnest Error", description: errorMsg, variant: "destructive" });
-        setActionResult(`Deepnest Call Error: ${errorMsg}`);
-      }
-    }
-    setIsLoading(false);
+  const handleServerSideNesting = () => {
+    console.log("Server-side nesting triggered");
+    toast({ title: "Server Nesting", description: "Conceptual server nesting executed." });
   };
 
-  const handleServerSideNesting = async () => {
-    if (!partsListData.trim()) {
-      toast({ title: "Input Required", description: "Please provide a parts list for server-side nesting.", variant: "default" });
-      return;
-    }
-    setIsLoading(true);
-    setActionResult(null);
-    setPackedLayoutData(null);
-    try {
-      const result = await performServerSideNestingAction(partsListData);
-      if (result.success) {
-        toast({ title: "Server Nesting Success", description: result.message });
-        setActionResult(`Server-Side Nesting result: ${result.message} - ${result.details || ''}`);
-      } else {
-        toast({ title: "Server Nesting Error", description: result.message, variant: "destructive" });
-        setActionResult(`Server-Side Nesting error: ${result.message}`);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown server nesting error.";
-      toast({ title: "Client Error (Server Nesting)", description: errorMessage, variant: "destructive" });
-      setActionResult(`Client Error (Server Nesting): ${errorMessage}`);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleExportForDesktop = () => {
+    console.log("Export for desktop triggered");
+    toast({ title: "Export", description: "Conceptual export executed." });
   };
 
-  const handleExportForDesktop = async () => {
-    if (!partsListData.trim()) {
-      toast({ title: "Input Required", description: "Please provide a parts list to export.", variant: "default" });
-      return;
-    }
-    setIsLoading(true);
-    setActionResult(null);
-    setPackedLayoutData(null);
-    try {
-      const result = await exportCutListForDesktopAction(partsListData);
-      if (result.success) {
-        toast({ title: "Export Prepared (Conceptual)", description: result.message });
-        setActionResult(`Export for Desktop: ${result.message}`);
-        if (result.data && typeof result.data === 'string' && result.data.startsWith('data:')) {
-          const link = document.createElement("a");
-          link.href = result.data;
-          link.download = result.fileName || "cutlist.csv";
-          document.body.appendChild(link);
-          link.click();
-          document.body.removeChild(link);
-        }
-      } else {
-        toast({ title: "Export Error", description: result.message, variant: "destructive" });
-        setActionResult(`Export for Desktop error: ${result.message}`);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "Unknown export error.";
-      toast({ title: "Client Error (Export)", description: errorMessage, variant: "destructive" });
-      setActionResult(`Client Error (Export): ${errorMessage}`);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleGenericSpecialFunction = () => {
+    console.log("Generic special function triggered");
+    toast({ title: "Generic Action", description: "Conceptual generic action executed." });
   };
 
   return (
@@ -270,7 +72,7 @@ export default function SpecialFeaturePage() {
             </TabsList>
 
             <TabsContent value="client-nesting" className="mt-4 p-4 border rounded-md">
-              <CardTitle className="text-lg mb-2">Client-Side Nesting (JS Library / Conceptual Backend)</CardTitle>
+              <CardTitle className="text-lg mb-2">Client-Side Nesting</CardTitle>
               <CardDescription className="mb-4">
                 Visualize parts nested onto sheets. Select an algorithm below. Good for quick previews.
               </CardDescription>
@@ -278,8 +80,7 @@ export default function SpecialFeaturePage() {
                 <Info className="h-4 w-4" />
                 <AlertTitle>Implementation Status</AlertTitle>
                 <AlertDescription>
-                  Rectpack2D uses `potpack` for client-side packing. Deepnest.io calls a conceptual backend action.
-                  Input JSON format: `[{"name":"Part A", "width":100, "height":50, "qty":2, "material":"Plywood"}, ...]`
+                  Client-side nesting is currently conceptual.
                 </AlertDescription>
               </Alert>
               <div className="space-y-4">
@@ -290,26 +91,26 @@ export default function SpecialFeaturePage() {
                       <SelectValue placeholder="Select algorithm" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="rectpack2d">Rectpack2D (potpack - Client-Side)</SelectItem>
-                      <SelectItem value="deepnest">Deepnest.io (Conceptual Backend Call)</SelectItem>
+                      <SelectItem value="rectpack2d">Rectpack2D (Conceptual)</SelectItem>
+                      <SelectItem value="deepnest">Deepnest.io (Conceptual)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <Textarea
-                  placeholder={`Paste parts list here (JSON array). Example:\n[{"name":"Top", "width":500, "height":300, "qty":1, "material":"MDF"},\n {"name":"Side", "width":300, "height":700, "qty":2, "material":"Plywood"}]`}
+                  placeholder="Paste parts list here (JSON array)."
                   value={partsListData}
                   onChange={(e) => setPartsListData(e.target.value)}
                   rows={6}
                 />
                 <Button onClick={handleClientSideNesting} disabled={isLoading || !partsListData.trim()}>
-                  {isLoading && (selectedClientAlgorithm === 'rectpack2d' || selectedClientAlgorithm === 'deepnest') ? <Loader2 className="mr-2 animate-spin" /> : <LayoutList className="mr-2" />}
-                  {isLoading && (selectedClientAlgorithm === 'rectpack2d' || selectedClientAlgorithm === 'deepnest') ? 'Processing...' : 'Visualize Nesting (Client)'}
+                  {isLoading ? <Loader2 className="mr-2 animate-spin" /> : <LayoutList className="mr-2" />}
+                  {isLoading ? 'Processing...' : 'Visualize Nesting (Client)'}
                 </Button>
               </div>
             </TabsContent>
 
             <TabsContent value="server-nesting" className="mt-4 p-4 border rounded-md">
-              <CardTitle className="text-lg mb-2">Server-Side Nesting (Custom Algorithm)</CardTitle>
+              <CardTitle className="text-lg mb-2">Server-Side Nesting</CardTitle>
               <CardDescription className="mb-4">
                 Leverage more powerful server resources for complex nesting algorithms.
               </CardDescription>
@@ -317,7 +118,7 @@ export default function SpecialFeaturePage() {
                 <Info className="h-4 w-4" />
                 <AlertTitle>Conceptual Implementation</AlertTitle>
                 <AlertDescription>
-                  This tab demonstrates calling a server action that would perform advanced nesting. The actual server-side algorithm is a placeholder.
+                  This tab demonstrates calling a server action that would perform advanced nesting.
                 </AlertDescription>
               </Alert>
               <div className="space-y-3">
@@ -343,7 +144,7 @@ export default function SpecialFeaturePage() {
                 <Info className="h-4 w-4" />
                 <AlertTitle>Conceptual Implementation</AlertTitle>
                 <AlertDescription>
-                  A conceptual CSV export is demonstrated. Actual file generation for specific software formats would require dedicated libraries.
+                  A conceptual CSV export is demonstrated.
                 </AlertDescription>
               </Alert>
               <div className="space-y-3">
@@ -363,7 +164,7 @@ export default function SpecialFeaturePage() {
             <TabsContent value="general-utils" className="mt-4 p-4 border rounded-md">
                 <CardTitle className="text-lg mb-2">Other Utilities</CardTitle>
                 <CardDescription className="mb-4">
-                    This section can host other special functions or tools. Below is a generic example.
+                    This section can host other special functions or tools.
                 </CardDescription>
                 <Button onClick={handleGenericSpecialFunction} size="lg" disabled={isLoading}>
                     {isLoading ? <Loader2 className="mr-2 animate-spin" /> : <Sparkles className="mr-2 h-4 w-4" />}
@@ -378,22 +179,16 @@ export default function SpecialFeaturePage() {
               <pre className="text-xs text-muted-foreground whitespace-pre-wrap overflow-x-auto">{actionResult}</pre>
             </div>
           )}
-          {packedLayoutData && selectedClientAlgorithm === 'rectpack2d' && (
+          {/* {packedLayoutData && ( // Simplified, so this part is commented out
             <div className="mt-6 p-4 border rounded-md bg-muted w-full">
-              <p className="text-sm font-semibold">Packed Layout Data (potpack - Client-Side):</p>
+              <p className="text-sm font-semibold">Packed Layout Data (Conceptual):</p>
               <div className="max-h-96 overflow-auto">
-                {packedLayoutData.map(sheet => (
-                  <div key={sheet.id} className="mb-4 p-2 border rounded-sm">
-                    <h4 className="font-medium text-xs">Sheet {sheet.id} ({sheet.dimensions.w}x{sheet.dimensions.h}mm)</h4>
-                    <p className="text-xs">Efficiency: {sheet.efficiency?.toFixed(1)}% (Packed Area: {sheet.packedAreaWidth?.toFixed(0)}x{sheet.packedAreaHeight?.toFixed(0)}mm)</p>
-                    <pre className="text-xs text-muted-foreground whitespace-pre-wrap overflow-x-auto bg-background/50 p-2 rounded-sm mt-1">
-                      {JSON.stringify(sheet.parts, null, 2)}
-                    </pre>
-                  </div>
-                ))}
+                <pre className="text-xs text-muted-foreground whitespace-pre-wrap overflow-x-auto bg-background/50 p-2 rounded-sm mt-1">
+                  {JSON.stringify(packedLayoutData, null, 2)}
+                </pre>
               </div>
             </div>
-          )}
+          )} */}
         </CardContent>
       </Card>
     </>
