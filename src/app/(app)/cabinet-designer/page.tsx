@@ -5,7 +5,7 @@ import * as React from 'react';
 import Image from 'next/image';
 import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { FormItem, FormLabel, FormControl } from '@/components/ui/form';
 import { useToast } from "@/hooks/use-toast";
-import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer } from 'lucide-react';
+import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer, Edit2 } from 'lucide-react';
 import {
     calculateCabinetDetails, calculateDrawerSet, saveCabinetTemplateAction, getCabinetTemplatesAction, getCabinetTemplateByIdAction, deleteCabinetTemplateAction,
     getMaterialDefinitionsAction, getAccessoryDefinitionsAction
@@ -34,10 +34,11 @@ import { AddMaterialTypeDialog } from '@/components/cabinet-designer/add-materia
 import { AddAccessoryTypeDialog } from '@/components/cabinet-designer/add-accessory-type-dialog';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { PREDEFINED_FORMULAS } from './predefined-formulas';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+
 
 const initialHardcodedCabinetTypes = [
   { value: 'standard_base_2_door', label: 'Standard Base Cabinet - 2 Door (600x720x560mm default)' },
-  // Other hardcoded types can be added here or managed entirely via DB templates
 ];
 
 const defaultDims = { width: 600, height: 720, depth: 560 };
@@ -51,6 +52,8 @@ const generateNewTemplatePlaceholder = (): CabinetTemplateData => ({
   parameters: { PT: 18, BPT: 3, BPO: 10, DG: 2, DCG: 3, TRD: 80, B: 10, DW: 500, DD: 450, DH: 150, Clearance: 13 },
   parts: [],
   accessories: [],
+  createdAt: new Date().toISOString(),
+  lastUpdated: new Date().toISOString(),
 });
 
 const globalParameterUIDefinitions = [
@@ -143,6 +146,8 @@ export default function CabinetDesignerPage() {
   const [customAccessoryTypes, setCustomAccessoryTypes] = React.useState<AccessoryDefinitionDB[]>([]);
   const [isMaterialDialogOp, setIsMaterialDialogOp] = React.useState(false);
   const [isAccessoryDialogOp, setIsAccessoryDialogOp] = React.useState(false);
+  const [templateToDelete, setTemplateToDelete] = React.useState<CabinetTemplateData | null>(null);
+
 
   const fetchAndSetTemplates = React.useCallback(async () => {
     try {
@@ -153,9 +158,11 @@ export default function CabinetDesignerPage() {
         ...templatesFromDb.map(t => ({ value: t.id, label: `${t.name} (Custom DB)` }))
       ];
       setSelectableCabinetTypes(combinedTypes);
+      return templatesFromDb;
     } catch (error) {
       console.error("Failed to fetch cabinet templates:", error);
       toast({ title: "Error", description: "Could not load custom templates.", variant: "destructive" });
+      return [];
     }
   }, [toast]);
 
@@ -207,7 +214,7 @@ export default function CabinetDesignerPage() {
                 newCalcInput.width = defaultDims.width; newCalcInput.height = defaultDims.height; newCalcInput.depth = defaultDims.depth;
             }
         } else if (dbType) {
-            newCalcInput.customTemplate = dbType;
+            newCalcInput.customTemplate = dbType; // Store the full template data
             newCalcInput.width = dbType.defaultDimensions.width; newCalcInput.height = dbType.defaultDimensions.height; newCalcInput.depth = dbType.defaultDimensions.depth;
         }
         return newCalcInput;
@@ -225,8 +232,15 @@ export default function CabinetDesignerPage() {
     let templateToCalculateWith = calculationInput.customTemplate;
     if (!templateToCalculateWith && !initialHardcodedCabinetTypes.some(hct => hct.value === calculationInput.cabinetType)) {
         const foundDbTemplate = dbTemplates.find(dbt => dbt.id === calculationInput.cabinetType);
-        if (foundDbTemplate) templateToCalculateWith = foundDbTemplate;
-        else {
+        if (foundDbTemplate) {
+            templateToCalculateWith = foundDbTemplate;
+            // Ensure calculationInput.customTemplate is updated if it wasn't already
+            if (!calculationInput.customTemplate || calculationInput.customTemplate.id !== foundDbTemplate.id) {
+                 setCalculationInput(prev => ({...prev, customTemplate: foundDbTemplate}));
+            }
+        } else {
+            // This case might occur if selectableCabinetTypes got out of sync or if it's a new template ID not yet in dbTemplates state
+            // Try fetching by ID as a fallback
             const fetchedFromDb = await getCabinetTemplateByIdAction(calculationInput.cabinetType);
             if (fetchedFromDb) {
                  templateToCalculateWith = fetchedFromDb;
@@ -237,7 +251,7 @@ export default function CabinetDesignerPage() {
     if (templateToCalculateWith) result = await calculateCabinetDetails({ ...calculationInput, customTemplate: templateToCalculateWith });
     else if (initialHardcodedCabinetTypes.some(hct => hct.value === calculationInput.cabinetType)) result = await calculateCabinetDetails({ ...calculationInput, customTemplate: undefined });
     else {
-      toast({ title: "Calculation Not Implemented", description: `Calculation logic for "${calculationInput.cabinetType}" is not available.`, variant: "default", duration: 7000 });
+      toast({ title: "Calculation Error", description: `Could not find definition for "${calculationInput.cabinetType}". Try selecting again.`, variant: "destructive", duration: 7000 });
       setCalculationError(`Calculation logic for "${calculationInput.cabinetType}" is not available or template missing.`);
       setIsLoading(false); return;
     }
@@ -344,10 +358,11 @@ export default function CabinetDesignerPage() {
         const result = await saveCabinetTemplateAction(currentTemplate);
         if (result.success && result.id) {
             toast({ title: "Template Saved to Database", description: `Template "${currentTemplate.name}" has been saved.` });
-            await fetchAndSetTemplates();
+            const updatedTemplates = await fetchAndSetTemplates();
+            const savedFullTemplate = updatedTemplates.find(t => t.id === result.id) || currentTemplate; // Prefer fresher data from DB
             setCalculationInput({
-                cabinetType: result.id, width: currentTemplate.defaultDimensions.width, height: currentTemplate.defaultDimensions.height,
-                depth: currentTemplate.defaultDimensions.depth, customTemplate: currentTemplate,
+                cabinetType: result.id, width: savedFullTemplate.defaultDimensions.width, height: savedFullTemplate.defaultDimensions.height,
+                depth: savedFullTemplate.defaultDimensions.depth, customTemplate: savedFullTemplate,
             });
             setViewMode('calculator');
         } else throw new Error(result.error || "Failed to save template to database.");
@@ -356,6 +371,45 @@ export default function CabinetDesignerPage() {
         toast({ title: "Error Saving Template", description: (error instanceof Error ? error.message : "Unknown error."), variant: "destructive" });
     } finally { setIsLoading(false); }
   };
+
+  const handleEditSelectedTemplate = () => {
+    if (calculationInput.customTemplate) {
+        setCurrentTemplate(calculationInput.customTemplate);
+        setViewMode('templateDefinition');
+    } else if (dbTemplates.find(t => t.id === calculationInput.cabinetType)) {
+        const templateToEdit = dbTemplates.find(t => t.id === calculationInput.cabinetType);
+        if (templateToEdit) {
+            setCurrentTemplate(templateToEdit);
+            setViewMode('templateDefinition');
+        } else {
+            toast({ title: "Error", description: "Could not load selected template for editing.", variant: "destructive" });
+        }
+    }
+  };
+
+  const confirmDeleteTemplate = async () => {
+    if (!templateToDelete) return;
+    setIsLoading(true);
+    try {
+      await deleteCabinetTemplateAction(templateToDelete.id);
+      toast({ title: "Template Deleted", description: `Template "${templateToDelete.name}" has been deleted.` });
+      setTemplateToDelete(null);
+      await fetchAndSetTemplates(); // Refresh the list
+      // Reset calculator if the deleted template was selected
+      if (calculationInput.cabinetType === templateToDelete.id) {
+        setCalculationInput({
+          cabinetType: 'standard_base_2_door',
+          width: defaultDims.width, height: defaultDims.height, depth: defaultDims.depth,
+          customTemplate: undefined,
+        });
+        setCalculatedData(null);
+      }
+    } catch (error) {
+      console.error("Failed to delete template:", error);
+      toast({ title: "Error Deleting Template", description: (error instanceof Error ? error.message : "Unknown error."), variant: "destructive" });
+    } finally { setIsLoading(false); }
+  };
+
 
   const handleAddAccessoryToTemplate = () => {
     setCurrentTemplate(prev => {
@@ -462,6 +516,9 @@ export default function CabinetDesignerPage() {
       })
     );
   };
+  
+  const isSelectedTemplateCustomDb = dbTemplates.some(t => t.id === calculationInput.cabinetType);
+
 
   const renderCalculatorView = () => (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -481,6 +538,19 @@ export default function CabinetDesignerPage() {
            <Button onClick={() => { setCurrentTemplate(generateNewTemplatePlaceholder()); setViewMode('templateDefinition'); }} variant="outline" className="w-full"><PlusCircle className="mr-2 h-4 w-4" /> Define New Cabinet Template</Button>
           <Separator />
           <div><Label htmlFor="cabinetType">Cabinet Type</Label><Select value={calculationInput.cabinetType} onValueChange={handleTypeChange}><SelectTrigger id="cabinetType"><SelectValue placeholder="Select type" /></SelectTrigger><SelectContent>{selectableCabinetTypes.map(type => (<SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>))}</SelectContent></Select></div>
+          {isSelectedTemplateCustomDb && (
+            <div className="flex gap-2 mt-2">
+                <Button variant="outline" size="sm" onClick={handleEditSelectedTemplate} className="flex-1">
+                    <Edit2 className="mr-2 h-4 w-4" /> Edit Template
+                </Button>
+                <Button variant="destructive" size="sm" onClick={() => {
+                    const template = dbTemplates.find(t => t.id === calculationInput.cabinetType);
+                    if(template) setTemplateToDelete(template);
+                }} className="flex-1">
+                    <Trash2 className="mr-2 h-4 w-4" /> Delete Template
+                </Button>
+            </div>
+          )}
           <div className="aspect-video bg-muted rounded-md flex items-center justify-center"><Image src={getPreviewImageSrc()} alt={`${calculationInput.cabinetType} Preview`} width={300} height={200} className="object-contain" data-ai-hint={getImageAiHint()}/></div>
           <div><Label htmlFor="width">Width (mm)</Label><Input id="width" name="width" type="number" value={calculationInput.width} onChange={handleInputChange}/></div>
           <div><Label htmlFor="height">Height (mm)</Label><Input id="height" name="height" type="number" value={calculationInput.height} onChange={handleInputChange}/></div>
@@ -601,6 +671,26 @@ export default function CabinetDesignerPage() {
     <TooltipProvider>
       <PageHeader title="Cabinet Designer" description={viewMode === 'calculator' ? "Configure, calculate parts, and estimate costs." : "Define a new parametric cabinet template."}/>
       {viewMode === 'calculator' ? renderCalculatorView() : renderTemplateDefinitionView()}
+
+      {templateToDelete && (
+        <AlertDialog open={!!templateToDelete} onOpenChange={() => setTemplateToDelete(null)}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Are you sure you want to delete this template?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action will permanently delete the template "{templateToDelete.name}" from the database. This cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setTemplateToDelete(null)} disabled={isLoading}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteTemplate} className={buttonVariants({ variant: "destructive" })} disabled={isLoading}>
+                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Delete Template
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </TooltipProvider>
   );
 }
