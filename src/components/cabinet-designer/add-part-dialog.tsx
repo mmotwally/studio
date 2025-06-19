@@ -28,8 +28,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import type { PartDefinition, CabinetPartType, EdgeBandingAssignment, CabinetTypeContext, PredefinedFormula, CabinetTemplateData } from "@/app/(app)/cabinet-designer/types";
-import { PREDEFINED_MATERIALS } from "@/app/(app)/cabinet-designer/types";
+import type { PartDefinition, CabinetPartType, EdgeBandingAssignment, CabinetTypeContext, PredefinedFormula, CabinetTemplateData, SelectItem as GenericSelectItem } from "@/app/(app)/cabinet-designer/types";
 import { PREDEFINED_FORMULAS } from "@/app/(app)/cabinet-designer/predefined-formulas";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -54,17 +53,13 @@ const addPartFormSchema = z.object({
   }),
   nameLabel: z.string().min(1, "Part name label is required."),
   quantityFormula: z.string().min(1, "Quantity formula is required (e.g., '1', '2', or parameter).").default("1"),
-  
   widthFormulaKey: z.string().optional(), 
   customWidthFormula: z.string().optional(), 
-  
   heightFormulaKey: z.string().optional(),
   customHeightFormula: z.string().optional(),
-
   materialId: z.string().min(1, "Material selection is required."),
   thicknessChoice: z.enum(["global", "custom"]).default("global"),
   customThicknessValue: z.string().optional(),
-
   grainDirection: z.enum(["with", "reverse", "none"]).nullable().default(null),
   edgeBanding_front: z.boolean().default(false),
   edgeBanding_back: z.boolean().default(false),
@@ -76,20 +71,19 @@ const addPartFormSchema = z.object({
         return false;
     }
     return true;
-}, { message: "Custom width formula cannot be empty if 'Custom Formula' is selected.", path: ["customWidthFormula"] })
+}, { message: "Custom width formula cannot be empty.", path: ["customWidthFormula"] })
 .refine(data => {
     if (data.heightFormulaKey === CUSTOM_FORMULA_KEY && !data.customHeightFormula?.trim()) {
         return false;
     }
     return true;
-}, { message: "Custom height formula cannot be empty if 'Custom Formula' is selected.", path: ["customHeightFormula"] })
+}, { message: "Custom height formula cannot be empty.", path: ["customHeightFormula"] })
 .refine(data => {
     if (data.thicknessChoice === "custom" && (!data.customThicknessValue?.trim() || isNaN(parseFloat(data.customThicknessValue)) || parseFloat(data.customThicknessValue) <=0 )) {
         return false;
     }
     return true;
-}, { message: "Custom thickness must be a valid positive number if 'Specify Custom Thickness' is selected.", path: ["customThicknessValue"] });
-
+}, { message: "Custom thickness must be a valid positive number.", path: ["customThicknessValue"] });
 
 type AddPartFormValues = z.infer<typeof addPartFormSchema>;
 
@@ -98,11 +92,14 @@ interface AddPartDialogProps {
   onAddPart: (newPart: PartDefinition) => void;
   existingPartCount: number;
   templateParameters: CabinetTemplateData['parameters']; 
+  materialOptions: GenericSelectItem[];
 }
 
-export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateParameters }: AddPartDialogProps) {
+export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateParameters, materialOptions }: AddPartDialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+
+  const defaultMaterialId = materialOptions.find(m => m.value === "STD_PANEL_18MM")?.value || materialOptions[0]?.value || "";
 
   const form = useForm<AddPartFormValues>({
     resolver: zodResolver(addPartFormSchema),
@@ -115,7 +112,7 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
       customWidthFormula: PREDEFINED_FORMULAS.find(f => f.partType === 'Side Panel' && f.context?.includes('Base') && f.dimension === 'Width')?.formula || "D",
       heightFormulaKey: PREDEFINED_FORMULAS.find(f => f.partType === 'Side Panel' && f.context?.includes('Base') && f.dimension === 'Height')?.key || CUSTOM_FORMULA_KEY,
       customHeightFormula: PREDEFINED_FORMULAS.find(f => f.partType === 'Side Panel' && f.context?.includes('Base') && f.dimension === 'Height')?.formula || "H - PT",
-      materialId: PREDEFINED_MATERIALS[0]?.id || "",
+      materialId: defaultMaterialId,
       thicknessChoice: "global",
       customThicknessValue: "",
       grainDirection: 'with',
@@ -129,8 +126,6 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
   
   const selectedPartType = form.watch("partType");
   const selectedCabinetContext = form.watch("cabinetContext");
-  const selectedWidthFormulaKey = form.watch("widthFormulaKey");
-  const selectedHeightFormulaKey = form.watch("heightFormulaKey");
   const selectedThicknessChoice = form.watch("thicknessChoice");
 
   const getFilteredFormulas = (dimension: 'Width' | 'Height') => {
@@ -145,321 +140,108 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
   const availableWidthFormulas = React.useMemo(() => getFilteredFormulas('Width'), [selectedPartType, selectedCabinetContext]);
   const availableHeightFormulas = React.useMemo(() => getFilteredFormulas('Height'), [selectedPartType, selectedCabinetContext]);
 
-
   React.useEffect(() => {
     if (selectedPartType) {
-        const defaultLabel = selectedPartType.includes("Panel") || selectedPartType.includes("Door") || selectedPartType.includes("Shelf") || selectedPartType.includes("Front")
-                            ? selectedPartType 
-                            : `${selectedPartType}`;
+        const defaultLabel = selectedPartType.includes("Panel") || selectedPartType.includes("Door") || selectedPartType.includes("Shelf") || selectedPartType.includes("Front") ? selectedPartType : `${selectedPartType}`;
         form.setValue("nameLabel", defaultLabel, { shouldDirty: true });
-
-        if (selectedPartType === 'Side Panel' || selectedPartType === 'Doors' || selectedPartType === 'Drawer Side' || selectedPartType === 'Top Rail (Front)' || selectedPartType === 'Top Rail (Back)') {
-            form.setValue("quantityFormula", "2", { shouldDirty: true });
-        } else {
-            form.setValue("quantityFormula", "1", { shouldDirty: true });
-        }
+        if (selectedPartType === 'Side Panel' || selectedPartType === 'Doors' || selectedPartType === 'Drawer Side' || selectedPartType === 'Top Rail (Front)' || selectedPartType === 'Top Rail (Back)') form.setValue("quantityFormula", "2", { shouldDirty: true });
+        else form.setValue("quantityFormula", "1", { shouldDirty: true });
         
         const firstWidthFormula = availableWidthFormulas[0];
-        if (firstWidthFormula) {
-            form.setValue("widthFormulaKey", firstWidthFormula.key, { shouldDirty: true });
-            form.setValue("customWidthFormula", firstWidthFormula.formula, { shouldDirty: true });
-        } else {
-            form.setValue("widthFormulaKey", CUSTOM_FORMULA_KEY, { shouldDirty: true });
-            form.setValue("customWidthFormula", "", { shouldDirty: true }); 
-        }
+        if (firstWidthFormula) { form.setValue("widthFormulaKey", firstWidthFormula.key, { shouldDirty: true }); form.setValue("customWidthFormula", firstWidthFormula.formula, { shouldDirty: true }); }
+        else { form.setValue("widthFormulaKey", CUSTOM_FORMULA_KEY, { shouldDirty: true }); form.setValue("customWidthFormula", "", { shouldDirty: true }); }
 
         const firstHeightFormula = availableHeightFormulas[0];
-        if (firstHeightFormula) {
-            form.setValue("heightFormulaKey", firstHeightFormula.key, { shouldDirty: true });
-            form.setValue("customHeightFormula", firstHeightFormula.formula, { shouldDirty: true });
-        } else {
-            form.setValue("heightFormulaKey", CUSTOM_FORMULA_KEY, { shouldDirty: true });
-            form.setValue("customHeightFormula", "", { shouldDirty: true });
-        }
+        if (firstHeightFormula) { form.setValue("heightFormulaKey", firstHeightFormula.key, { shouldDirty: true }); form.setValue("customHeightFormula", firstHeightFormula.formula, { shouldDirty: true }); }
+        else { form.setValue("heightFormulaKey", CUSTOM_FORMULA_KEY, { shouldDirty: true }); form.setValue("customHeightFormula", "", { shouldDirty: true }); }
     }
   }, [selectedPartType, selectedCabinetContext, form, availableWidthFormulas, availableHeightFormulas]);
-
 
   async function onSubmit(values: AddPartFormValues) {
     setIsSubmitting(true);
     try {
-      const edgeBanding: EdgeBandingAssignment = {
-        front: values.edgeBanding_front,
-        back: values.edgeBanding_back,
-        top: values.edgeBanding_top,
-        bottom: values.edgeBanding_bottom,
-      };
-
-      const finalWidthFormula = values.widthFormulaKey === CUSTOM_FORMULA_KEY 
-                               ? values.customWidthFormula || "" 
-                               : PREDEFINED_FORMULAS.find(f => f.key === values.widthFormulaKey)?.formula || values.customWidthFormula || "";
-      
-      const finalHeightFormula = values.heightFormulaKey === CUSTOM_FORMULA_KEY
-                               ? values.customHeightFormula || ""
-                               : PREDEFINED_FORMULAS.find(f => f.key === values.heightFormulaKey)?.formula || values.customHeightFormula || "";
-
-      const finalThicknessFormula = values.thicknessChoice === "global"
-                               ? "PT"
-                               : values.customThicknessValue || "PT"; 
-
-
+      const edgeBanding: EdgeBandingAssignment = { front: values.edgeBanding_front, back: values.edgeBanding_back, top: values.edgeBanding_top, bottom: values.edgeBanding_bottom };
+      const finalWidthFormula = values.widthFormulaKey === CUSTOM_FORMULA_KEY ? values.customWidthFormula || "" : PREDEFINED_FORMULAS.find(f => f.key === values.widthFormulaKey)?.formula || values.customWidthFormula || "";
+      const finalHeightFormula = values.heightFormulaKey === CUSTOM_FORMULA_KEY ? values.customHeightFormula || "" : PREDEFINED_FORMULAS.find(f => f.key === values.heightFormulaKey)?.formula || values.customHeightFormula || "";
+      const finalThicknessFormula = values.thicknessChoice === "global" ? "PT" : values.customThicknessValue || "PT"; 
       const newPart: PartDefinition = {
-        partId: `${values.partType.toLowerCase().replace(/[\s()]+/g, '_')}_${existingPartCount + 1}_${Date.now()}`,
-        nameLabel: values.nameLabel,
-        partType: values.partType,
-        cabinetContext: values.cabinetContext,
-        quantityFormula: values.quantityFormula,
-        widthFormula: finalWidthFormula,
-        widthFormulaKey: values.widthFormulaKey,
-        heightFormula: finalHeightFormula,
-        heightFormulaKey: values.heightFormulaKey,
-        thicknessFormula: finalThicknessFormula,
-        materialId: values.materialId,
-        grainDirection: values.grainDirection,
-        edgeBanding: edgeBanding,
-        notes: values.notes || `Added via dialog. Part Type: ${values.partType}`,
+        partId: `${values.partType.toLowerCase().replace(/[\s()]+/g, '_')}_${existingPartCount + 1}_${Date.now()}`, nameLabel: values.nameLabel, partType: values.partType, cabinetContext: values.cabinetContext,
+        quantityFormula: values.quantityFormula, widthFormula: finalWidthFormula, widthFormulaKey: values.widthFormulaKey, heightFormula: finalHeightFormula, heightFormulaKey: values.heightFormulaKey,
+        thicknessFormula: finalThicknessFormula, materialId: values.materialId, grainDirection: values.grainDirection, edgeBanding: edgeBanding, notes: values.notes || `Added via dialog. Part Type: ${values.partType}`,
       };
-
       onAddPart(newPart);
-      toast({
-        title: "Part Added",
-        description: `"${values.nameLabel}" has been added to the template.`,
-      });
-      setOpen(false);
-      form.reset(); 
+      toast({ title: "Part Added", description: `"${values.nameLabel}" has been added.` });
+      setOpen(false); form.reset(); 
     } catch (error) {
       console.error("Failed to add part:", error);
-      toast({
-        title: "Error",
-        description: (error instanceof Error ? error.message : "Could not add part.") || "Could not add part.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
+      toast({ title: "Error", description: (error instanceof Error ? error.message : "Could not add part."), variant: "destructive" });
+    } finally { setIsSubmitting(false); }
   }
 
-  const renderFormulaSelect = (
-    dimension: 'Width' | 'Height',
-    availableFormulas: PredefinedFormula[],
-    valueKey: "widthFormulaKey" | "heightFormulaKey",
-    customValueKey: "customWidthFormula" | "customHeightFormula"
-  ) => (
-    <FormField
-      control={form.control}
-      name={valueKey}
+  const renderFormulaSelect = (dimension: 'Width' | 'Height', availableFormulas: PredefinedFormula[], valueKey: "widthFormulaKey" | "heightFormulaKey", customValueKey: "customWidthFormula" | "customHeightFormula") => (
+    <FormField control={form.control} name={valueKey}
       render={({ field }) => (
         <FormItem>
           <FormLabel>{dimension} Formula*</FormLabel>
-          <Select 
-            onValueChange={(val) => {
-                field.onChange(val);
-                if (val !== CUSTOM_FORMULA_KEY) {
-                    const selected = PREDEFINED_FORMULAS.find(f => f.key === val);
-                    form.setValue(customValueKey, selected?.formula || "", {shouldValidate: true});
-                } else {
-                    form.setValue(customValueKey, "", {shouldValidate: true});
-                }
-            }} 
-            value={field.value}
-          >
-            <FormControl>
-              <SelectTrigger>
-                <SelectValue placeholder={`Select ${dimension.toLowerCase()} formula`} />
-              </SelectTrigger>
-            </FormControl>
+          <Select onValueChange={(val) => { field.onChange(val); if (val !== CUSTOM_FORMULA_KEY) { const selected = PREDEFINED_FORMULAS.find(f => f.key === val); form.setValue(customValueKey, selected?.formula || "", {shouldValidate: true}); } else { form.setValue(customValueKey, "", {shouldValidate: true}); }}} value={field.value}>
+            <FormControl><SelectTrigger><SelectValue placeholder={`Select ${dimension.toLowerCase()} formula`} /></SelectTrigger></FormControl>
             <SelectContent>
-              {availableFormulas.map((f) => (
-                <SelectItem key={f.key} value={f.key}>
-                  {f.name} ({f.formula})
-                </SelectItem>
-              ))}
+              {availableFormulas.map((f) => (<SelectItem key={f.key} value={f.key}>{f.name} ({f.formula})</SelectItem>))}
               <SelectItem value={CUSTOM_FORMULA_KEY}>Custom Formula...</SelectItem>
             </SelectContent>
           </Select>
           <FormMessage />
            {field.value === CUSTOM_FORMULA_KEY && (
-             <Controller
-                name={customValueKey}
-                control={form.control}
-                render={({ field: customField }) => (
-                    <Textarea
-                        {...customField}
-                        placeholder={`Enter custom ${dimension.toLowerCase()} formula (e.g., H - 2*PT + BPO)`}
-                        className="mt-2 text-sm"
-                        rows={2}
-                    />
-                )}
-            />
+             <Controller name={customValueKey} control={form.control} render={({ field: customField }) => (<Textarea {...customField} placeholder={`Enter custom ${dimension.toLowerCase()} formula`} className="mt-2 text-sm" rows={2}/>)}/>
            )}
             {form.formState.errors[customValueKey] && <FormMessage>{form.formState.errors[customValueKey]?.message}</FormMessage>}
-        </FormItem>
-      )}
-    />
-  );
-
+        </FormItem>)} /> );
 
   return (
     <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-      <DialogHeader>
-        <DialogTitle>Add New Part to Template</DialogTitle>
-        <DialogDescription>
-          Select part type, context, and define its properties and formulas.
-        </DialogDescription>
-      </DialogHeader>
+      <DialogHeader><DialogTitle>Add New Part to Template</DialogTitle><DialogDescription>Select type, context, and define properties and formulas.</DialogDescription></DialogHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="partType"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Part Type*</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select a part type" /></SelectTrigger></FormControl>
-                    <SelectContent>{cabinetPartTypes.map((type) => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="cabinetContext"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Cabinet Context*</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select context" /></SelectTrigger></FormControl>
-                    <SelectContent>{cabinetTypeContexts.map((ctx) => (<SelectItem key={ctx} value={ctx}>{ctx}</SelectItem>))}</SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <FormField control={form.control} name="partType" render={({ field }) => (<FormItem><FormLabel>Part Type*</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger></FormControl><SelectContent>{cabinetPartTypes.map((type) => (<SelectItem key={type} value={type}>{type}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)}/>
+            <FormField control={form.control} name="cabinetContext" render={({ field }) => (<FormItem><FormLabel>Cabinet Context*</FormLabel><Select onValueChange={field.onChange} value={field.value}><FormControl><SelectTrigger><SelectValue placeholder="Select context" /></SelectTrigger></FormControl><SelectContent>{cabinetTypeContexts.map((ctx) => (<SelectItem key={ctx} value={ctx}>{ctx}</SelectItem>))}</SelectContent></Select><FormMessage /></FormItem>)}/>
           </div>
-           <FormField
-            control={form.control}
-            name="nameLabel"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Part Name Label*</FormLabel>
-                <FormControl><Input placeholder="e.g., Left Side Panel" {...field} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          
-            <FormField
-                control={form.control}
-                name="quantityFormula"
-                render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Quantity Formula*</FormLabel>
-                    <FormControl><Input placeholder="e.g., 1 or 2" {...field} /></FormControl>
-                    <FormMessage />
-                </FormItem>
-                )}
-            />
-
+           <FormField control={form.control} name="nameLabel" render={({ field }) => (<FormItem><FormLabel>Part Name Label*</FormLabel><FormControl><Input placeholder="e.g., Left Side Panel" {...field} /></FormControl><FormMessage /></FormItem>)}/>
+            <FormField control={form.control} name="quantityFormula" render={({ field }) => (<FormItem><FormLabel>Quantity Formula*</FormLabel><FormControl><Input placeholder="e.g., 1 or 2" {...field} /></FormControl><FormMessage /></FormItem>)}/>
           {renderFormulaSelect('Width', availableWidthFormulas, 'widthFormulaKey', 'customWidthFormula')}
           {renderFormulaSelect('Height', availableHeightFormulas, 'heightFormulaKey', 'customHeightFormula')}
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField
-              control={form.control}
-              name="materialId"
+            <FormField control={form.control} name="materialId"
               render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Material*</FormLabel>
+                <FormItem><FormLabel>Material*</FormLabel>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl><SelectTrigger><SelectValue placeholder="Select material" /></SelectTrigger></FormControl>
-                    <SelectContent>{PREDEFINED_MATERIALS.map((material) => (<SelectItem key={material.id} value={material.id}>{material.name} {material.hasGrain ? "(Grain)" : ""}</SelectItem>))}</SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-                control={form.control}
-                name="thicknessChoice"
+                    <SelectContent>{materialOptions.map((material) => (<SelectItem key={material.value} value={material.value}>{material.label}</SelectItem>))}</SelectContent>
+                  </Select><FormMessage />
+                </FormItem>)}/>
+            <FormField control={form.control} name="thicknessChoice"
                 render={({ field }) => (
-                <FormItem>
-                    <FormLabel>Part Thickness*</FormLabel>
+                <FormItem><FormLabel>Part Thickness*</FormLabel>
                     <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
-                        <FormItem className="flex items-center space-x-2"><RadioGroupItem value="global" id="thickness-global" /><Label htmlFor="thickness-global" className="font-normal">Use Global Panel Thickness (PT)</Label></FormItem>
-                        <FormItem className="flex items-center space-x-2"><RadioGroupItem value="custom" id="thickness-custom" /><Label htmlFor="thickness-custom" className="font-normal">Specify Custom Thickness (mm)</Label></FormItem>
-                    </RadioGroup>
-                    <FormMessage />
-                </FormItem>
-                )}
-            />
+                        <FormItem className="flex items-center space-x-2"><RadioGroupItem value="global" id="thickness-global-dlg" /><Label htmlFor="thickness-global-dlg" className="font-normal">Use Global Panel Thickness (PT)</Label></FormItem>
+                        <FormItem className="flex items-center space-x-2"><RadioGroupItem value="custom" id="thickness-custom-dlg" /><Label htmlFor="thickness-custom-dlg" className="font-normal">Specify Custom Thickness (mm)</Label></FormItem>
+                    </RadioGroup><FormMessage />
+                </FormItem>)}/>
            </div>
-            {selectedThicknessChoice === "custom" && (
-                <FormField
-                    control={form.control}
-                    name="customThicknessValue"
-                    render={({ field }) => (
-                        <FormItem>
-                            <FormLabel>Custom Thickness Value (mm)*</FormLabel>
-                            <FormControl><Input type="number" placeholder="e.g., 19" {...field} value={field.value ?? ""} /></FormControl>
-                            <FormMessage />
-                        </FormItem>
-                    )}
-                />
-            )}
-          
-          <FormField
-            control={form.control}
-            name="grainDirection"
+            {selectedThicknessChoice === "custom" && (<FormField control={form.control} name="customThicknessValue" render={({ field }) => (<FormItem><FormLabel>Custom Thickness Value (mm)*</FormLabel><FormControl><Input type="number" placeholder="e.g., 19" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>)}/>)}
+          <FormField control={form.control} name="grainDirection"
             render={({ field }) => (
-              <FormItem>
-                <FormLabel>Grain Direction</FormLabel>
-                <FormControl>
-                    <RadioGroup onValueChange={(value) => field.onChange(value === 'none' ? null : value as "with" | "reverse")} value={field.value || "none"} className="flex flex-row gap-4">
-                        <FormItem className="flex items-center space-x-2"><RadioGroupItem value="none" id="grain-none" /><Label htmlFor="grain-none" className="font-normal">None</Label></FormItem>
-                        <FormItem className="flex items-center space-x-2"><RadioGroupItem value="with" id="grain-with" /><Label htmlFor="grain-with" className="font-normal">With Grain (Height)</Label></FormItem>
-                        <FormItem className="flex items-center space-x-2"><RadioGroupItem value="reverse" id="grain-reverse" /><Label htmlFor="grain-reverse" className="font-normal">Reverse Grain (Width)</Label></FormItem>
-                    </RadioGroup>
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <div>
-            <FormLabel className="text-base font-medium">Edge Banding</FormLabel>
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2">
-              {(['front', 'back', 'top', 'bottom'] as const).map((edge) => (
-                <FormField key={edge} control={form.control} name={`edgeBanding_${edge}`}
-                  render={({ field }) => (
-                    <FormItem className="flex flex-row items-center space-x-2">
-                      <FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl>
-                      <Label htmlFor={`edgeBanding_${edge}_${field.name}`} className="font-normal capitalize">{edge}</Label>
-                    </FormItem>
-                  )}
-                />
-              ))}
-            </div>
-          </div>
-          <FormField
-            control={form.control}
-            name="notes"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Part Notes</FormLabel>
-                <FormControl><Textarea placeholder="Optional notes for this specific part definition..." {...field} value={field.value ?? ""} /></FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-
-          <DialogFooter>
-            <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button></DialogClose>
-            <Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Adding..." : "Add Part to Template"}</Button>
-          </DialogFooter>
+              <FormItem><FormLabel>Grain Direction</FormLabel>
+                <FormControl><RadioGroup onValueChange={(value) => field.onChange(value === 'none' ? null : value as "with" | "reverse")} value={field.value || "none"} className="flex flex-row gap-4">
+                        <FormItem className="flex items-center space-x-2"><RadioGroupItem value="none" id="grain-none-dlg" /><Label htmlFor="grain-none-dlg" className="font-normal">None</Label></FormItem>
+                        <FormItem className="flex items-center space-x-2"><RadioGroupItem value="with" id="grain-with-dlg" /><Label htmlFor="grain-with-dlg" className="font-normal">With Grain (Height)</Label></FormItem>
+                        <FormItem className="flex items-center space-x-2"><RadioGroupItem value="reverse" id="grain-reverse-dlg" /><Label htmlFor="grain-reverse-dlg" className="font-normal">Reverse Grain (Width)</Label></FormItem>
+                    </RadioGroup></FormControl><FormMessage />
+              </FormItem>)}/>
+          <div><FormLabel className="text-base font-medium">Edge Banding</FormLabel><div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2">
+              {(['front', 'back', 'top', 'bottom'] as const).map((edge) => (<FormField key={edge} control={form.control} name={`edgeBanding_${edge}`} render={({ field }) => (<FormItem className="flex flex-row items-center space-x-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><Label htmlFor={`edgeBanding_${edge}_${field.name}`} className="font-normal capitalize">{edge}</Label></FormItem>)}/>))}</div></div>
+          <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Part Notes</FormLabel><FormControl><Textarea placeholder="Optional notes..." {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>)}/>
+          <DialogFooter><DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button></DialogClose><Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Adding..." : "Add Part to Template"}</Button></DialogFooter>
         </form>
       </Form>
     </DialogContent>
