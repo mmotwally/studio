@@ -1,12 +1,12 @@
 
 'use server';
 
-import type { InputPart, PackedPart, SheetLayout } from '@/types';
+import type { InputPart, PackedPart, SheetLayout, SheetDimensionOption } from '@/types';
 
 // Constants for nesting, could be configurable in a real app
 const KERF_ALLOWANCE = 3; // mm
-const DEFAULT_SHEET_WIDTH = 2440; // mm
-const DEFAULT_SHEET_HEIGHT = 1220; // mm
+// const DEFAULT_SHEET_WIDTH = 2440; // mm - This will now be configurable per material
+// const DEFAULT_SHEET_HEIGHT = 1220; // mm
 const MAX_SHEETS_PER_JOB = 50; // Safety limit
 
 
@@ -66,26 +66,38 @@ export async function exportCutListForDesktopAction(partsData: string): Promise<
 }
 
 
-// Simulated FFDH (First Fit Decreasing Height) with 90-degree rotation
-export async function runDeepnestAlgorithmAction(partsDataString: string): Promise<{ success: boolean; message: string; layout?: SheetLayout[] }> {
-  console.log("runDeepnestAlgorithmAction (Server-Side FFDH Simulation with Rotation) called.");
+// Simulated FFDH (First Fit Decreasing Height) with 90-degree rotation, respecting material-specific sheet sizes
+export async function runDeepnestAlgorithmAction(
+  partsDataString: string,
+  materialSheetConfigString: string
+): Promise<{ success: boolean; message: string; layout?: SheetLayout[] }> {
+  console.log("runDeepnestAlgorithmAction (Server-Side FFDH with Material Sizes & Rotation) called.");
   
   let inputParts: InputPart[];
+  let materialSheetConfig: Record<string, { width: number; height: number }>;
+  const DEFAULT_FALLBACK_SHEET_WIDTH = 2440;
+  const DEFAULT_FALLBACK_SHEET_HEIGHT = 1220;
+
+
   try {
     inputParts = JSON.parse(partsDataString);
-    if (!Array.isArray(inputParts)) throw new Error("Input must be a JSON array.");
+    if (!Array.isArray(inputParts)) throw new Error("Input parts must be a JSON array.");
     for (const part of inputParts) {
       if (
         typeof part.name !== 'string' ||
         typeof part.width !== 'number' || !(part.width > 0) ||
         typeof part.height !== 'number' || !(part.height > 0) ||
-        typeof part.qty !== 'number' || !(part.qty > 0)
+        typeof part.qty !== 'number' || !(part.qty > 0) ||
+        (part.material && typeof part.material !== 'string')
       ) {
-        throw new Error("Each part must have a 'name' (string), and positive numeric 'width', 'height', and 'qty'. Invalid part: " + JSON.stringify(part));
+        throw new Error("Each part must have a 'name' (string), 'material' (string, optional), and positive numeric 'width', 'height', and 'qty'. Invalid part: " + JSON.stringify(part));
       }
     }
+    materialSheetConfig = JSON.parse(materialSheetConfigString);
+    if (typeof materialSheetConfig !== 'object' || materialSheetConfig === null) throw new Error("Material sheet config must be a JSON object.");
+
   } catch (e: any) {
-    console.error("Error parsing partsDataString in server action (FFDH-Sim):", e.message);
+    console.error("Error parsing input data in server action (FFDH-Sim):", e.message);
     return { success: false, message: `Server-side parsing error (FFDH-Sim): ${e.message}` };
   }
 
@@ -93,157 +105,158 @@ export async function runDeepnestAlgorithmAction(partsDataString: string): Promi
     return { success: false, message: "No parts provided for server-side FFDH-Sim nesting." };
   }
 
-  const allPartInstances: Array<{
-    id: string;
-    originalName: string;
-    originalWidth: number;
-    originalHeight: number;
-    packed: boolean;
-    material?: string;
-  }> = [];
-
+  // Group parts by material
+  const partsByMaterial = new Map<string, InputPart[]>();
   inputParts.forEach(part => {
-    for (let i = 0; i < part.qty; i++) {
-      allPartInstances.push({
-        id: `${part.name}_${i + 1}`,
-        originalName: part.name,
-        originalWidth: part.width,
-        originalHeight: part.height,
-        packed: false,
-        material: part.material,
-      });
+    const materialKey = part.material || "Default_Material"; // Use a default if material is not specified
+    if (!partsByMaterial.has(materialKey)) {
+      partsByMaterial.set(materialKey, []);
     }
+    partsByMaterial.get(materialKey)!.push(part);
   });
 
-  // Sort parts for FFDH: primarily by height descending, then width descending
-  allPartInstances.sort((a, b) => {
-    if (b.originalHeight === a.originalHeight) {
-      return b.originalWidth - a.originalWidth;
-    }
-    return b.originalHeight - a.originalHeight;
-  });
+  const allPackedSheets: SheetLayout[] = [];
+  let globalSheetId = 1;
+  let totalPartsProcessed = 0;
+  let totalPartsNotPacked = 0;
 
-  const packedSheetsServer: SheetLayout[] = [];
-  let sheetId = 1;
+  for (const [material, materialParts] of partsByMaterial.entries()) {
+    const sheetConfig = materialSheetConfig[material] || { width: DEFAULT_FALLBACK_SHEET_WIDTH, height: DEFAULT_FALLBACK_SHEET_HEIGHT };
+    const currentMaterialSheetWidth = sheetConfig.width;
+    const currentMaterialSheetHeight = sheetConfig.height;
 
-  while (allPartInstances.some(p => !p.packed) && sheetId <= MAX_SHEETS_PER_JOB) {
-    const currentSheetParts: PackedPart[] = [];
-    let currentX = 0;
-    let currentY = 0;
-    let currentRowMaxHeight = 0; // Effective height of parts in current row (with kerf)
+    const allPartInstancesForMaterial: Array<{
+      id: string;
+      originalName: string;
+      originalWidth: number;
+      originalHeight: number;
+      packed: boolean;
+      material?: string;
+    }> = [];
 
-    for (const part of allPartInstances) {
-      if (part.packed) continue;
-
-      let placedOnSheet = false;
-      let placedPartData: PackedPart | null = null;
-
-      // Try placing in original orientation
-      const effWidthOrig = part.originalWidth + KERF_ALLOWANCE;
-      const effHeightOrig = part.originalHeight + KERF_ALLOWANCE;
-
-      // Try current row, original orientation
-      if (currentX + effWidthOrig <= DEFAULT_SHEET_WIDTH && currentY + effHeightOrig <= DEFAULT_SHEET_HEIGHT) {
-         placedPartData = {
-            ...part, x: currentX, y: currentY, width: part.originalWidth, height: part.originalHeight, isRotated: false, qty:1
-         };
-         placedOnSheet = true;
+    materialParts.forEach(part => {
+      for (let i = 0; i < part.qty; i++) {
+        allPartInstancesForMaterial.push({
+          id: `${part.name}_${i + 1}_${material.replace(/\s+/g, '_')}`, // Ensure unique ID across materials
+          originalName: part.name,
+          originalWidth: part.width,
+          originalHeight: part.height,
+          packed: false,
+          material: part.material,
+        });
       }
-      // Try new row, original orientation
-      else if (currentY + currentRowMaxHeight + effHeightOrig <= DEFAULT_SHEET_HEIGHT && effWidthOrig <= DEFAULT_SHEET_WIDTH) {
-         placedPartData = {
-            ...part, x: 0, y: currentY + currentRowMaxHeight, width: part.originalWidth, height: part.originalHeight, isRotated: false, qty:1
-         };
-         placedOnSheet = true;
+    });
+    totalPartsProcessed += allPartInstancesForMaterial.length;
+
+    // Sort parts for FFDH for this material: primarily by height descending, then width descending
+    allPartInstancesForMaterial.sort((a, b) => {
+      if (b.originalHeight === a.originalHeight) {
+        return b.originalWidth - a.originalWidth;
       }
+      return b.originalHeight - a.originalHeight;
+    });
 
-      // If not placed, try rotated orientation (if part is not square, to avoid redundant checks if already tried)
-      if (!placedOnSheet && part.originalWidth !== part.originalHeight) {
-        const effWidthRot = part.originalHeight + KERF_ALLOWANCE;
-        const effHeightRot = part.originalWidth + KERF_ALLOWANCE;
+    let sheetsUsedForMaterial = 0;
+    while (allPartInstancesForMaterial.some(p => !p.packed) && sheetsUsedForMaterial < MAX_SHEETS_PER_JOB) { // MAX_SHEETS_PER_JOB acts per material here
+      const currentSheetParts: PackedPart[] = [];
+      let currentX = 0;
+      let currentY = 0;
+      let currentRowMaxHeight = 0;
 
-        // Try current row, rotated orientation
-        if (currentX + effWidthRot <= DEFAULT_SHEET_WIDTH && currentY + effHeightRot <= DEFAULT_SHEET_HEIGHT) {
-          placedPartData = {
-            ...part, x: currentX, y: currentY, width: part.originalHeight, height: part.originalWidth, isRotated: true, qty:1
-          };
+      for (const part of allPartInstancesForMaterial) {
+        if (part.packed) continue;
+
+        let placedOnSheet = false;
+        let placedPartData: PackedPart | null = null;
+
+        // Try original orientation
+        const effWidthOrig = part.originalWidth + KERF_ALLOWANCE;
+        const effHeightOrig = part.originalHeight + KERF_ALLOWANCE;
+
+        if (currentX + effWidthOrig <= currentMaterialSheetWidth && currentY + effHeightOrig <= currentMaterialSheetHeight) {
+          placedPartData = { ...part, x: currentX, y: currentY, width: part.originalWidth, height: part.originalHeight, isRotated: false, qty:1 };
+          placedOnSheet = true;
+        } else if (currentY + currentRowMaxHeight + effHeightOrig <= currentMaterialSheetHeight && effWidthOrig <= currentMaterialSheetWidth) {
+          placedPartData = { ...part, x: 0, y: currentY + currentRowMaxHeight, width: part.originalWidth, height: part.originalHeight, isRotated: false, qty:1 };
           placedOnSheet = true;
         }
-        // Try new row, rotated orientation
-        else if (currentY + currentRowMaxHeight + effHeightRot <= DEFAULT_SHEET_HEIGHT && effWidthRot <= DEFAULT_SHEET_WIDTH) {
-          placedPartData = {
-            ...part, x: 0, y: currentY + currentRowMaxHeight, width: part.originalHeight, height: part.originalWidth, isRotated: true, qty:1
-          };
-          placedOnSheet = true;
-        }
-      }
-      
-      if (placedOnSheet && placedPartData) {
-        part.packed = true;
-        currentSheetParts.push(placedPartData);
 
-        // Update packing position
-        const packedEffectiveWidth = (placedPartData.isRotated ? part.originalHeight : part.originalWidth) + KERF_ALLOWANCE;
-        const packedEffectiveHeight = (placedPartData.isRotated ? part.originalWidth : part.originalHeight) + KERF_ALLOWANCE;
+        // Try rotated orientation
+        if (!placedOnSheet && part.originalWidth !== part.originalHeight) { // Avoid rotating squares unnecessarily
+          const effWidthRot = part.originalHeight + KERF_ALLOWANCE;
+          const effHeightRot = part.originalWidth + KERF_ALLOWANCE;
 
-        if (placedPartData.y! > currentY) { // New row was started
-            currentY = placedPartData.y!;
-            currentX = packedEffectiveWidth;
-            currentRowMaxHeight = packedEffectiveHeight;
-        } else { // Placed in current row
-            currentX += packedEffectiveWidth;
-            currentRowMaxHeight = Math.max(currentRowMaxHeight, packedEffectiveHeight);
-        }
-      }
-    } // End for (part of allPartInstances)
-
-    if (currentSheetParts.length > 0) {
-      let actualUsedWidthOnSheet = 0;
-      let actualUsedHeightOnSheet = 0;
-      let totalPartAreaOnSheet = 0;
-      currentSheetParts.forEach(p => {
-          // Area calculation for efficiency uses original dimensions + kerf
-          totalPartAreaOnSheet += (p.originalWidth! + KERF_ALLOWANCE) * (p.originalHeight! + KERF_ALLOWANCE);
-          // Used area for sheet dimensions:
-          const packedWidthWithKerf = (p.isRotated ? p.originalHeight! : p.originalWidth!) + KERF_ALLOWANCE;
-          const packedHeightWithKerf = (p.isRotated ? p.originalWidth! : p.originalHeight!) + KERF_ALLOWANCE;
-          if (p.x !== undefined && p.y !== undefined) {
-            actualUsedWidthOnSheet = Math.max(actualUsedWidthOnSheet, p.x + packedWidthWithKerf);
-            actualUsedHeightOnSheet = Math.max(actualUsedHeightOnSheet, p.y + packedHeightWithKerf);
+          if (currentX + effWidthRot <= currentMaterialSheetWidth && currentY + effHeightRot <= currentMaterialSheetHeight) {
+            placedPartData = { ...part, x: currentX, y: currentY, width: part.originalHeight, height: part.originalWidth, isRotated: true, qty:1 };
+            placedOnSheet = true;
+          } else if (currentY + currentRowMaxHeight + effHeightRot <= currentMaterialSheetHeight && effWidthRot <= currentMaterialSheetWidth) {
+            placedPartData = { ...part, x: 0, y: currentY + currentRowMaxHeight, width: part.originalHeight, height: part.originalWidth, isRotated: true, qty:1 };
+            placedOnSheet = true;
           }
-      });
-      const sheetArea = DEFAULT_SHEET_WIDTH * DEFAULT_SHEET_HEIGHT;
-      const efficiency = (totalPartAreaOnSheet / sheetArea) * 100;
+        }
+        
+        if (placedOnSheet && placedPartData) {
+          part.packed = true;
+          currentSheetParts.push(placedPartData);
+          const packedEffectiveWidth = (placedPartData.isRotated ? part.originalHeight : part.originalWidth) + KERF_ALLOWANCE;
+          const packedEffectiveHeight = (placedPartData.isRotated ? part.originalWidth : part.originalHeight) + KERF_ALLOWANCE;
 
-      packedSheetsServer.push({
-        id: sheetId,
-        dimensions: { w: DEFAULT_SHEET_WIDTH, h: DEFAULT_SHEET_HEIGHT },
-        parts: currentSheetParts,
-        packedAreaWidth: actualUsedWidthOnSheet,
-        packedAreaHeight: actualUsedHeightOnSheet,
-        efficiency: parseFloat(efficiency.toFixed(1)),
-      });
-      sheetId++;
-    } else if (allPartInstances.some(p => !p.packed)) {
-      const remainingUnpacked = allPartInstances.filter(p => !p.packed);
-      const largestRemaining = remainingUnpacked.reduce((max, p) => (p.originalWidth * p.originalHeight > max.originalWidth * max.originalHeight) ? p : max, { originalWidth: 0, originalHeight: 0, originalName: 'N/A', id:'', packed:false });
-      const message = `Server FFDH-Sim (Rotation): Could not pack ${remainingUnpacked.length} remaining parts. Largest: ${largestRemaining.originalName} (${largestRemaining.originalWidth}x${largestRemaining.originalHeight}). Sheet ${sheetId}.`;
-      console.warn(message);
-      return { success: false, message, layout: packedSheetsServer }; 
-    }
-  } // End while
+          if (placedPartData.y! > currentY) { 
+              currentY = placedPartData.y!;
+              currentX = packedEffectiveWidth;
+              currentRowMaxHeight = packedEffectiveHeight;
+          } else { 
+              currentX += packedEffectiveWidth;
+              currentRowMaxHeight = Math.max(currentRowMaxHeight, packedEffectiveHeight);
+          }
+        }
+      }
 
-  const unpackedCount = allPartInstances.filter(p => !p.packed).length;
-  if (unpackedCount > 0 && sheetId > MAX_SHEETS_PER_JOB) {
-    return { success: false, message: `Server FFDH-Sim (Rotation): Max sheets (${MAX_SHEETS_PER_JOB}) reached. ${unpackedCount} parts remain unpacked.`, layout: packedSheetsServer };
-  }
-  if (unpackedCount > 0) {
-    return { success: false, message: `Server FFDH-Sim (Rotation): Finished packing, but ${unpackedCount} parts could not be placed.`, layout: packedSheetsServer };
+      if (currentSheetParts.length > 0) {
+        let actualUsedWidthOnSheet = 0;
+        let actualUsedHeightOnSheet = 0;
+        let totalPartAreaOnSheet = 0;
+        currentSheetParts.forEach(p => {
+            totalPartAreaOnSheet += (p.originalWidth! + KERF_ALLOWANCE) * (p.originalHeight! + KERF_ALLOWANCE);
+            const packedWidthWithKerf = (p.isRotated ? p.originalHeight! : p.originalWidth!) + KERF_ALLOWANCE;
+            const packedHeightWithKerf = (p.isRotated ? p.originalWidth! : p.originalHeight!) + KERF_ALLOWANCE;
+            if (p.x !== undefined && p.y !== undefined) {
+              actualUsedWidthOnSheet = Math.max(actualUsedWidthOnSheet, p.x + packedWidthWithKerf);
+              actualUsedHeightOnSheet = Math.max(actualUsedHeightOnSheet, p.y + packedHeightWithKerf);
+            }
+        });
+        const sheetArea = currentMaterialSheetWidth * currentMaterialSheetHeight;
+        const efficiency = sheetArea > 0 ? (totalPartAreaOnSheet / sheetArea) * 100 : 0;
+
+        allPackedSheets.push({
+          id: globalSheetId++,
+          dimensions: { w: currentMaterialSheetWidth, h: currentMaterialSheetHeight },
+          parts: currentSheetParts,
+          packedAreaWidth: actualUsedWidthOnSheet,
+          packedAreaHeight: actualUsedHeightOnSheet,
+          efficiency: parseFloat(efficiency.toFixed(1)),
+          material: material,
+        });
+        sheetsUsedForMaterial++;
+      } else if (allPartInstancesForMaterial.some(p => !p.packed)) {
+          // No parts could be placed on a new sheet, implies remaining parts are too large for this material's sheet size
+          break; 
+      }
+    } // End while for current material
+
+    totalPartsNotPacked += allPartInstancesForMaterial.filter(p => !p.packed).length;
+  } // End for (material of partsByMaterial)
+
+  const finalMessage = `Server FFDH (Rotation, Material Sizes): Processed ${totalPartsProcessed} part instances. 
+    ${allPackedSheets.length} sheets used. ${totalPartsNotPacked} parts could not be packed.`;
+  
+  if (totalPartsNotPacked > 0) {
+    return { success: false, message: finalMessage, layout: allPackedSheets };
   }
 
   return {
     success: true,
-    message: `Server FFDH-Sim (Rotation): Processed ${allPartInstances.length} part instances onto ${packedSheetsServer.length} sheets.`,
-    layout: packedSheetsServer,
+    message: finalMessage,
+    layout: allPackedSheets,
   };
 }

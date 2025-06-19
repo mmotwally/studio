@@ -614,7 +614,7 @@ export interface InputPart {
 export interface PackedPart extends InputPart { 
   x?: number;
   y?: number;
-  isRotated?: boolean; // True if the part was placed in a rotated (90deg) orientation
+  isRotated?: boolean; 
 }
 
 export interface SheetLayout {
@@ -624,18 +624,19 @@ export interface SheetLayout {
   packedAreaWidth?: number; 
   packedAreaHeight?: number; 
   efficiency?: number; 
+  material?: string; // Added to identify material for this sheet
 }
 
 // For potpack (client-side)
 export interface PotpackBox {
-  w: number; // effective width (original + kerf)
-  h: number; // effective height (original + kerf)
-  x?: number; // output by potpack
-  y?: number; // output by potpack
-  name?: string; // To track the part, e.g., "PartA_1"
-  originalName?: string; // e.g., "PartA"
-  originalWidth?: number; // Original dimension before kerf
-  originalHeight?: number; // Original dimension before kerf
+  w: number; 
+  h: number; 
+  x?: number; 
+  y?: number; 
+  name?: string; 
+  originalName?: string; 
+  originalWidth?: number; 
+  originalHeight?: number; 
   material?: string;
   [key: string]: any; 
 }
@@ -652,3 +653,12 @@ export interface NestingJob {
   timestamp: string; 
   parts: InputPart[]; 
 }
+
+export interface SheetDimensionOption {
+  label: string;
+  width: number;
+  height: number;
+}
+
+
+```

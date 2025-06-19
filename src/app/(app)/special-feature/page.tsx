@@ -8,27 +8,38 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Sparkles, LayoutList, Server, Download, Info, Loader2, Trash2, UploadCloud } from 'lucide-react';
+import { Sparkles, LayoutList, Server, Download, Info, Loader2, Trash2, UploadCloud, SheetIcon } from 'lucide-react';
 import * as React from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import potpack from 'potpack'; // For client-side Rectpack2D
-import type { InputPart, PackedPart, SheetLayout, PotpackBox, PotpackStats, NestingJob } from '@/types';
+import potpack from 'potpack';
+import type { InputPart, PackedPart, SheetLayout, PotpackBox, PotpackStats, NestingJob, SheetDimensionOption } from '@/types';
 import { performServerSideNestingAction, exportCutListForDesktopAction, runDeepnestAlgorithmAction, performSpecialServerAction } from './actions';
-import { Separator } from '@/components/ui/separator'; // Added import
+import { Separator } from '@/components/ui/separator';
+import { format } from 'date-fns';
 
-const KERF_ALLOWANCE = 3; 
+const KERF_ALLOWANCE = 3;
 const DEFAULT_SHEET_WIDTH = 2440;
 const DEFAULT_SHEET_HEIGHT = 1220;
 
+const PREDEFINED_SHEET_SIZES: SheetDimensionOption[] = [
+  { label: "Standard 1220 x 2440 mm", width: 1220, height: 2440 },
+  { label: "Metric Full 2100 x 2800 mm", width: 2100, height: 2800 },
+  { label: "Square 1520 x 1520 mm", width: 1520, height: 1520 },
+  { label: "Long 1220 x 2800 mm", width: 1220, height: 2800 },
+  { label: "Longer 1220 x 3000 mm", width: 1220, height: 3000 },
+  { label: "Large Format 1830 x 3600 mm", width: 1830, height: 3600 },
+];
+
+
 const PART_COLORS = [
-  "rgba(173, 216, 230, 0.7)", "rgba(144, 238, 144, 0.7)", "rgba(255, 182, 193, 0.7)", 
+  "rgba(173, 216, 230, 0.7)", "rgba(144, 238, 144, 0.7)", "rgba(255, 182, 193, 0.7)",
   "rgba(255, 255, 224, 0.7)", "rgba(211, 211, 211, 0.7)", "rgba(240, 128, 128, 0.7)",
   "rgba(175, 238, 238, 0.7)", "rgba(255, 218, 185, 0.7)", "rgba(221, 160, 221, 0.7)",
   "rgba(245, 222, 179, 0.7)", "rgba(204, 204, 255, 0.7)", "rgba(255, 230, 204, 0.7)",
-  "rgba(204, 255, 204, 0.7)", "rgba(255, 204, 255, 0.7)", "rgba(230, 204, 255, 0.7)" 
+  "rgba(204, 255, 204, 0.7)", "rgba(255, 204, 255, 0.7)", "rgba(230, 204, 255, 0.7)"
 ];
-const MAX_SHEETS_PER_JOB = 50; 
+const MAX_SHEETS_PER_JOB = 50;
 
 export default function SpecialFeaturePage() {
   const { toast } = useToast();
@@ -42,6 +53,10 @@ export default function SpecialFeaturePage() {
   const [availableNestingJobs, setAvailableNestingJobs] = React.useState<{value: string, label: string}[]>([]);
   const [selectedNestingJobId, setSelectedNestingJobId] = React.useState<string>("");
 
+  const [uniqueMaterials, setUniqueMaterials] = React.useState<string[]>([]);
+  const [materialSheetSizeConfig, setMaterialSheetSizeConfig] = React.useState<Record<string, { width: number; height: number }>>({});
+
+
   const LOCAL_STORAGE_NESTING_JOBS_KEY = "cabinetDesignerNestingJobs";
 
   const loadNestingJobsFromStorage = React.useCallback(() => {
@@ -52,7 +67,7 @@ export default function SpecialFeaturePage() {
         setAvailableNestingJobs(
           jobs.map(job => ({
             value: job.id,
-            label: `${job.name} (${new Date(job.timestamp).toLocaleDateString()})`
+            label: `${job.name} (${format(new Date(job.timestamp), "PP")})`
           }))
         );
       } else {
@@ -63,7 +78,7 @@ export default function SpecialFeaturePage() {
       setAvailableNestingJobs([]);
       toast({ title: "Error", description: "Could not load saved nesting jobs.", variant: "destructive"});
     }
-  }, [toast]); 
+  }, [toast]);
 
   React.useEffect(() => {
     loadNestingJobsFromStorage();
@@ -100,19 +115,65 @@ export default function SpecialFeaturePage() {
       localStorage.removeItem(LOCAL_STORAGE_NESTING_JOBS_KEY);
       setAvailableNestingJobs([]);
       setSelectedNestingJobId("");
-      setPartsListData(""); 
+      setPartsListData("");
       toast({ title: "Cleared", description: "Saved nesting jobs have been cleared." });
     } catch (e) {
       toast({ title: "Error", description: "Could not clear saved nesting jobs.", variant: "destructive" });
     }
   }, [toast]);
-  
+
+  React.useEffect(() => {
+    if (partsListData) {
+      try {
+        const parsedParts: InputPart[] = JSON.parse(partsListData);
+        if (Array.isArray(parsedParts)) {
+          const materials = new Set<string>();
+          parsedParts.forEach(part => {
+            if (part.material) materials.add(part.material);
+            else materials.add("Default_Material"); // Add a default if material is not specified
+          });
+          const uniqueMatsArray = Array.from(materials);
+          setUniqueMaterials(uniqueMatsArray);
+
+          setMaterialSheetSizeConfig(prevConfig => {
+            const newConfig = {...prevConfig};
+            const defaultSheet = PREDEFINED_SHEET_SIZES.find(s => s.width === DEFAULT_SHEET_WIDTH && s.height === DEFAULT_SHEET_HEIGHT) || PREDEFINED_SHEET_SIZES[0];
+            uniqueMatsArray.forEach(mat => {
+              if (!newConfig[mat]) {
+                newConfig[mat] = { width: defaultSheet.width, height: defaultSheet.height };
+              }
+            });
+            return newConfig;
+          });
+        }
+      } catch (e) {
+        setUniqueMaterials([]);
+        setMaterialSheetSizeConfig({});
+      }
+    } else {
+      setUniqueMaterials([]);
+      setMaterialSheetSizeConfig({});
+    }
+  }, [partsListData]);
+
+  const handleSheetSizeChange = (material: string, selectedSizeValue: string) => {
+    const [wStr, hStr] = selectedSizeValue.split('x');
+    const width = parseInt(wStr, 10);
+    const height = parseInt(hStr, 10);
+    if (!isNaN(width) && !isNaN(height)) {
+      setMaterialSheetSizeConfig(prev => ({
+        ...prev,
+        [material]: { width, height }
+      }));
+    }
+  };
+
   const generatePartColorMap = React.useCallback((parts: InputPart[]): Map<string, string> => {
     const map = new Map<string, string>();
     let colorIndex = 0;
     const uniquePartNames = new Set<string>();
     parts.forEach(part => uniquePartNames.add(part.originalName || part.name));
-    
+
     uniquePartNames.forEach(name => {
       if (!map.has(name)) {
         map.set(name, PART_COLORS[colorIndex % PART_COLORS.length]);
@@ -123,28 +184,30 @@ export default function SpecialFeaturePage() {
   }, []);
 
   const renderSVGs = React.useCallback((layoutData: SheetLayout[], pcm: Map<string, string>) => {
-    if (!layoutData || layoutData.length === 0 ) return null; // pcm check removed to allow rendering even if map is briefly empty
-    
+    if (!layoutData || layoutData.length === 0 ) return null;
+
     return layoutData.map((sheet, index) => (
       <div key={`sheet-${index}`} className="mb-6 p-3 border rounded-lg shadow-sm bg-white">
-        <h4 className="font-bold text-base mb-2 text-gray-700">
-          Sheet {sheet.id} <span className="font-normal text-sm">(Dimensions: {sheet.dimensions.w} x {sheet.dimensions.h} mm)</span>
+        <h4 className="font-bold text-base mb-1 text-gray-700">
+          Sheet {sheet.id}: <span className="font-normal">{sheet.material || 'N/A Material'}</span>
+        </h4>
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-xs text-gray-600">(Sheet Dim: {sheet.dimensions.w} x {sheet.dimensions.h} mm)</span>
           <span className={`ml-2 text-sm font-semibold ${sheet.efficiency && sheet.efficiency < 70 ? 'text-orange-600' : 'text-green-600'}`}>
             Efficiency: {sheet.efficiency?.toFixed(1) || 'N/A'}%
           </span>
-        </h4>
-        <svg 
-            width="100%" 
-            viewBox={`-5 -5 ${sheet.dimensions.w + 10} ${sheet.dimensions.h + 10}`} 
+        </div>
+        <svg
+            width="100%"
+            viewBox={`-5 -5 ${sheet.dimensions.w + 10} ${sheet.dimensions.h + 10}`}
             className="border border-gray-300 rounded"
             preserveAspectRatio="xMidYMid meet"
         >
           <rect x="0" y="0" width={sheet.dimensions.w} height={sheet.dimensions.h} fill="#f7fafc" stroke="#e2e8f0" strokeWidth="2"/>
           {sheet.parts.map((part, pIndex) => {
             const colorKey = part.originalName || part.name.substring(0, part.name.lastIndexOf('_')) || part.name;
-            const partColor = pcm.get(colorKey) || 'rgba(128, 128, 128, 0.7)'; // Fallback color
-            
-            // Use part.width and part.height from PackedPart as these are the dimensions to be drawn
+            const partColor = pcm.get(colorKey) || 'rgba(128, 128, 128, 0.7)';
+
             const displayWidth = part.width;
             const displayHeight = part.height;
 
@@ -153,34 +216,30 @@ export default function SpecialFeaturePage() {
             if (displayWidth < 50 || displayHeight < 20) fontSize = 6;
             if (displayWidth * displayHeight < 1000 && (displayWidth < 30 || displayHeight < 30)) fontSize = 5;
 
-
-            const labelText = `${part.originalName || part.name} (${part.originalWidth}x${part.originalHeight}${part.isRotated ? ' R' : ''})`;
-
             return (
               <g key={`part-${sheet.id}-${pIndex}`} transform={`translate(${part.x ?? 0}, ${part.y ?? 0})`}>
-                <rect 
-                  x={KERF_ALLOWANCE / 2} 
+                <rect
+                  x={KERF_ALLOWANCE / 2}
                   y={KERF_ALLOWANCE / 2}
-                  width={displayWidth}  
-                  height={displayHeight} 
+                  width={displayWidth}
+                  height={displayHeight}
                   fill={partColor}
-                  stroke="rgba(0,0,0,0.5)" 
+                  stroke="rgba(0,0,0,0.5)"
                   strokeWidth="1"
                 />
                 <clipPath id={`clip-${sheet.id}-${pIndex}`}>
                      <rect x={KERF_ALLOWANCE/2 + 2} y={KERF_ALLOWANCE/2 + 2} width={Math.max(0, displayWidth - 4)} height={Math.max(0, displayHeight - 4)} />
                 </clipPath>
-                <text 
-                    x={(KERF_ALLOWANCE / 2) + (displayWidth / 2)} 
-                    y={(KERF_ALLOWANCE / 2) + (displayHeight / 2) - (fontSize * 0.1)} 
-                    fontSize={fontSize} 
+                <text
+                    x={(KERF_ALLOWANCE / 2) + (displayWidth / 2)}
+                    y={(KERF_ALLOWANCE / 2) + (displayHeight / 2) - (fontSize * 0.1)}
+                    fontSize={fontSize}
                     fill="black"
                     textAnchor="middle"
                     dominantBaseline="middle"
                     clipPath={`url(#clip-${sheet.id}-${pIndex})`}
                     style={{ pointerEvents: 'none' }}
                 >
-                   {/* Display original name and original dimensions, indicate rotation */}
                    <tspan x={(KERF_ALLOWANCE / 2) + (displayWidth / 2)} dy={displayHeight > fontSize * 2.5 ? "-0.4em" : "0em"}>{part.originalName || part.name}</tspan>
                    {displayHeight > fontSize * 2.5 && (<tspan x={(KERF_ALLOWANCE / 2) + (displayWidth / 2)} dy="1.2em">{`${part.originalWidth}x${part.originalHeight}${part.isRotated ? ' (R)' : ''}`}</tspan>)}
                 </text>
@@ -190,7 +249,7 @@ export default function SpecialFeaturePage() {
         </svg>
       </div>
     ));
-  }, []); 
+  }, []);
 
   React.useEffect(() => {
     if (packedLayoutData && packedLayoutData.length > 0) {
@@ -204,15 +263,12 @@ export default function SpecialFeaturePage() {
                 height: p.height,
                 qty: p.qty,
                 material: p.material,
-                originalName: p.originalName || p.name, // Ensure originalName exists
+                originalName: p.originalName || p.name,
                 originalWidth: p.originalWidth || p.width,
                 originalHeight: p.originalHeight || p.height,
             }));
-        } else {
-            console.warn("Parsed partsListData is not an array. Using fallback for color map.");
         }
       } catch {
-        console.warn("Failed to parse partsListData. Using fallback for color map generation from packed data.");
         const uniquePartDefs = new Map<string, InputPart>();
         packedLayoutData.forEach(sheet => {
           sheet.parts.forEach(part => {
@@ -223,7 +279,8 @@ export default function SpecialFeaturePage() {
                 originalName: part.originalName || part.name,
                 width: part.originalWidth || part.width,
                 height: part.originalHeight || part.height,
-                qty: 1, 
+                qty: 1,
+                material: part.material,
               });
             }
           });
@@ -231,7 +288,7 @@ export default function SpecialFeaturePage() {
         partsForColorMap = Array.from(uniquePartDefs.values());
       }
       const newPartColorMap = generatePartColorMap(partsForColorMap);
-      setPartColorMap(newPartColorMap); 
+      setPartColorMap(newPartColorMap);
       setVisualizedLayout(renderSVGs(packedLayoutData, newPartColorMap));
     } else {
       setVisualizedLayout(null);
@@ -245,7 +302,7 @@ export default function SpecialFeaturePage() {
     setActionResult(null);
     setPackedLayoutData(null);
     setVisualizedLayout(null);
-    
+
     let validatedInputParts: InputPart[] = [];
     try {
       let inputPartsRaw: any[];
@@ -274,7 +331,7 @@ export default function SpecialFeaturePage() {
           height: rawPart.height,
           qty: rawPart.qty,
           material: rawPart.material,
-          originalName: rawPart.originalName || rawPart.name, 
+          originalName: rawPart.originalName || rawPart.name,
           originalWidth: rawPart.originalWidth || rawPart.width,
           originalHeight: rawPart.originalHeight || rawPart.height,
         });
@@ -283,21 +340,21 @@ export default function SpecialFeaturePage() {
       if (validatedInputParts.length === 0) {
         throw new Error("No parts provided in the list.");
       }
-      
+
       if (selectedClientAlgorithm === 'rectpack2d') {
         toast({ title: "Processing...", description: "Using Rectpack2D (Potpack Client-Side)." });
-        await new Promise(resolve => setTimeout(resolve, 100)); 
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         const allPartsToPack: PotpackBox[] = [];
         validatedInputParts.forEach(part => {
           for (let i = 0; i < part.qty; i++) {
             allPartsToPack.push({
-              w: part.width + KERF_ALLOWANCE, 
+              w: part.width + KERF_ALLOWANCE,
               h: part.height + KERF_ALLOWANCE,
               name: `${part.name}_${i + 1}`,
-              originalName: part.originalName, // Pass original name
-              originalWidth: part.originalWidth, // Pass original width
-              originalHeight: part.originalHeight, // Pass original height
+              originalName: part.originalName,
+              originalWidth: part.originalWidth,
+              originalHeight: part.originalHeight,
               material: part.material
             });
           }
@@ -308,35 +365,35 @@ export default function SpecialFeaturePage() {
         let sheetId = 1;
 
         while (remainingPartsToPack.length > 0 && sheetId <= MAX_SHEETS_PER_JOB) {
-          const partsForCurrentSheetAttempt = [...remainingPartsToPack]; 
-          const stats: PotpackStats = potpack(partsForCurrentSheetAttempt); 
-          
+          const partsForCurrentSheetAttempt = [...remainingPartsToPack];
+          const stats: PotpackStats = potpack(partsForCurrentSheetAttempt);
+
           const currentSheetParts: PackedPart[] = [];
           const stillRemainingAfterSheet: PotpackBox[] = [];
 
-          for (const packedBox of partsForCurrentSheetAttempt) { 
+          for (const packedBox of partsForCurrentSheetAttempt) {
             if (packedBox.x !== undefined && packedBox.y !== undefined &&
                 (packedBox.x + packedBox.w) <= DEFAULT_SHEET_WIDTH &&
                 (packedBox.y + packedBox.h) <= DEFAULT_SHEET_HEIGHT) {
               currentSheetParts.push({
                 name: packedBox.name!,
-                width: packedBox.originalWidth!, 
+                width: packedBox.originalWidth!,
                 height: packedBox.originalHeight!,
-                qty: 1, 
+                qty: 1,
                 x: packedBox.x,
                 y: packedBox.y,
                 material: packedBox.material,
                 originalName: packedBox.originalName,
                 originalWidth: packedBox.originalWidth,
                 originalHeight: packedBox.originalHeight,
-                isRotated: false, // Potpack doesn't rotate
+                isRotated: false,
               });
             } else {
-              delete packedBox.x; delete packedBox.y; 
+              delete packedBox.x; delete packedBox.y;
               stillRemainingAfterSheet.push(packedBox);
             }
           }
-          
+
           if (currentSheetParts.length > 0) {
             let actualUsedWidth = 0;
             let actualUsedHeight = 0;
@@ -357,32 +414,33 @@ export default function SpecialFeaturePage() {
               packedAreaWidth: actualUsedWidth,
               packedAreaHeight: actualUsedHeight,
               efficiency: parseFloat(currentSheetEfficiency.toFixed(1)),
+              material: currentSheetParts[0]?.material || 'Mixed/Default',
             });
             sheetId++;
           } else if (stillRemainingAfterSheet.length > 0) {
             toast({ title: "Packing Incomplete (Potpack)", description: `Some remaining parts (${stillRemainingAfterSheet.length}) could not be packed. They may be too large.`, variant: "default" });
-            break; 
+            break;
           }
           remainingPartsToPack = stillRemainingAfterSheet;
         }
-        
+
         if (remainingPartsToPack.length > 0 && sheetId > MAX_SHEETS_PER_JOB) {
              toast({ title: "Max Sheets Reached (Potpack)", description: `Packing stopped after ${MAX_SHEETS_PER_JOB} sheets. ${remainingPartsToPack.length} part instances remain.`, variant: "default" });
         }
         setPackedLayoutData(packedSheets);
-        setActionResult(`Potpack (Client) processed ${allPartsToPack.length} total part instances onto ${packedSheets.length} sheets.`);
+        setActionResult(`Potpack (Client) processed ${allPartsToPack.length} total part instances onto ${packedSheets.length} sheets. Uses default sheet size (2440x1220mm) for all materials.`);
         toast({ title: "Client Nesting (Potpack)", description: "Parts processed successfully." });
 
       } else if (selectedClientAlgorithm === 'deepnest') {
-        toast({ title: "Processing...", description: "Using Simulated FFDH (Server-Side with Rotation)." });
-        const result = await runDeepnestAlgorithmAction(partsListData);
+        toast({ title: "Processing...", description: "Using Simulated FFDH (Server-Side with Rotation & Material Sizes)." });
+        const result = await runDeepnestAlgorithmAction(partsListData, JSON.stringify(materialSheetSizeConfig));
         if (result.success && result.layout) {
           setPackedLayoutData(result.layout);
           setActionResult(result.message);
-          toast({ title: "Deepnest (FFDH Sim - Server)", description: result.message });
+          toast({ title: "Simulated FFDH - Server", description: result.message });
         } else {
-          setPackedLayoutData(result.layout || null); 
-          throw new Error(result.message || "Deepnest (FFDH Sim) backend call failed.");
+          setPackedLayoutData(result.layout || null);
+          throw new Error(result.message || "FFDH Sim backend call failed.");
         }
       }
 
@@ -392,7 +450,7 @@ export default function SpecialFeaturePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [partsListData, selectedClientAlgorithm, toast]);
+  }, [partsListData, selectedClientAlgorithm, toast, materialSheetSizeConfig]);
 
 
   const handleServerSideNesting = React.useCallback(async () => {
@@ -459,37 +517,34 @@ export default function SpecialFeaturePage() {
       setIsLoading(false);
     }
   }, [toast]);
-  
+
 
   return (
     <>
       <PageHeader
-        title="Cabinet Console - Special Features"
-        description="Explore advanced functionalities including nesting optimizations and other utilities."
+        title="Cabinet Console - Advanced Tools"
+        description="Explore advanced functionalities including nesting optimizations and other utilities. Load saved project parts or paste JSON."
       />
       <Card className="shadow-lg">
         <CardHeader>
           <CardTitle className="flex items-center">
             <Sparkles className="mr-2 h-5 w-5 text-primary" />
-            Advanced Tools & Optimizations
+            Nesting & Optimization Utilities
           </CardTitle>
-          <CardDescription>
-            This section is dedicated to specialized tools, including various approaches to nesting part layouts for material optimization.
-          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6 p-6">
           <Tabs defaultValue="client-nesting" className="w-full">
             <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-              <TabsTrigger value="client-nesting"><LayoutList className="mr-2" />Client/Server Hybrid Nesting</TabsTrigger>
-              <TabsTrigger value="server-nesting"><Server className="mr-2" />Server-Side Nesting (Legacy)</TabsTrigger>
+              <TabsTrigger value="client-nesting"><LayoutList className="mr-2" />Nesting Algorithms</TabsTrigger>
+              <TabsTrigger value="server-nesting"><Server className="mr-2" />Legacy Server Nesting</TabsTrigger>
               <TabsTrigger value="export-desktop"><Download className="mr-2" />Export for Desktop</TabsTrigger>
               <TabsTrigger value="general-utils"><Sparkles className="mr-2" />Other Utilities</TabsTrigger>
             </TabsList>
 
             <TabsContent value="client-nesting" className="mt-4 p-4 border rounded-md">
-              <CardTitle className="text-lg mb-2">Client/Server Hybrid Nesting</CardTitle>
+              <CardTitle className="text-lg mb-2">Nesting Configuration & Visualization</CardTitle>
               <CardDescription className="mb-4">
-                Load parts from a saved Cabinet Designer project or paste JSON. Visualize parts nested onto sheets. Select an algorithm to see its results.
+                Load parts from a saved Cabinet Designer project or paste JSON. Configure sheet sizes per material for the server-side algorithm, then visualize the nested layout.
               </CardDescription>
               <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
@@ -522,25 +577,53 @@ export default function SpecialFeaturePage() {
                   </div>
                 </div>
                 <Separator/>
-                <div className="space-y-2">
+                <Textarea
+                  placeholder={`Paste parts list here as JSON array. Example: \n[{"name":"Part A","width":300,"height":200,"qty":2, "material":"Plywood 18mm"}, {"name":"Part B","width":150,"height":100,"qty":5, "material":"MDF 12mm"}]`}
+                  value={partsListData}
+                  onChange={(e) => setPartsListData(e.target.value)}
+                  rows={6}
+                  className="text-xs font-mono"
+                />
+
+                {uniqueMaterials.length > 0 && (
+                  <Card className="p-4 bg-muted/50">
+                    <CardTitle className="text-md mb-3">Sheet Size Configuration (for Server-Side FFDH)</CardTitle>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {uniqueMaterials.map(material => (
+                        <div key={material} className="space-y-1.5">
+                          <Label htmlFor={`sheet-size-${material}`} className="font-medium">{material}</Label>
+                          <Select
+                            value={`${materialSheetSizeConfig[material]?.width || DEFAULT_SHEET_WIDTH}x${materialSheetSizeConfig[material]?.height || DEFAULT_SHEET_HEIGHT}`}
+                            onValueChange={(value) => handleSheetSizeChange(material, value)}
+                          >
+                            <SelectTrigger id={`sheet-size-${material}`}>
+                              <SelectValue placeholder="Select sheet size" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {PREDEFINED_SHEET_SIZES.map(size => (
+                                <SelectItem key={size.label} value={`${size.width}x${size.height}`}>{size.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-3">Note: Sheet size configuration currently applies only to the "Simulated FFDH (Server Side)" algorithm.</p>
+                  </Card>
+                )}
+
+                <div className="space-y-2 mt-4">
                   <Label htmlFor="client-nesting-algorithm">Nesting Algorithm</Label>
                   <Select value={selectedClientAlgorithm} onValueChange={setSelectedClientAlgorithm}>
-                    <SelectTrigger id="client-nesting-algorithm" className="w-full sm:w-[300px]">
+                    <SelectTrigger id="client-nesting-algorithm" className="w-full sm:w-[400px]">
                       <SelectValue placeholder="Select algorithm" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="rectpack2d">Rectpack2D (Potpack - Client Side, No Rotation)</SelectItem>
-                      <SelectItem value="deepnest">Simulated FFDH (Server Side, With Rotation)</SelectItem>
+                      <SelectItem value="rectpack2d">Rectpack2D (Potpack - Client Side, No Rotation, Default Sheet)</SelectItem>
+                      <SelectItem value="deepnest">Simulated FFDH (Server Side, With Rotation & Material Sizes)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <Textarea
-                  placeholder={`Paste parts list here as JSON array. Example: \n[{"name":"Part A","width":300,"height":200,"qty":2, "material":"Plywood"}, {"name":"Part B","width":150,"height":100,"qty":5, "material":"MDF"}]`}
-                  value={partsListData}
-                  onChange={(e) => setPartsListData(e.target.value)}
-                  rows={8}
-                  className="text-xs font-mono"
-                />
                 <Button onClick={handleClientSideNesting} disabled={isLoading || !partsListData.trim()}>
                   {isLoading ? <Loader2 className="mr-2 animate-spin" /> : <LayoutList className="mr-2" />}
                   {isLoading ? 'Nesting...' : 'Visualize Nesting'}
@@ -564,7 +647,7 @@ export default function SpecialFeaturePage() {
                 <Info className="h-4 w-4" />
                 <AlertTitle>Conceptual Implementation</AlertTitle>
                 <AlertDescription>
-                  This tab demonstrates calling a generic server action. The "Client/Server Hybrid Nesting" tab now handles the more defined "Simulated FFDH (Server Side)" conceptual call.
+                  This tab demonstrates calling a generic server action. The "Nesting Algorithms" tab now handles the more defined "Simulated FFDH (Server Side)" conceptual call.
                 </AlertDescription>
               </Alert>
               <div className="space-y-3">
@@ -636,7 +719,7 @@ export default function SpecialFeaturePage() {
               </div>
             </div>
           )}
-          
+
           {packedLayoutData && (
             <div className="mt-6 p-4 border rounded-md bg-muted w-full">
               <p className="text-sm font-semibold">Packed Layout Data ({selectedClientAlgorithm === 'rectpack2d' ? 'Potpack Client' : 'Simulated FFDH - Server'}):</p>
