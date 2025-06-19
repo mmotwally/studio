@@ -8,13 +8,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Sparkles, LayoutList, Server, Download, Info, Loader2, Trash2, UploadCloud, FileCheck2 } from 'lucide-react'; // Added icons
+import { Sparkles, LayoutList, Server, Download, Info, Loader2, Trash2, UploadCloud } from 'lucide-react';
 import * as React from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import potpack from 'potpack';
-import type { InputPart, PackedPart, SheetLayout, PotpackBox, PotpackStats, NestingJob } from '@/types'; // Added NestingJob
+import type { InputPart, PackedPart, SheetLayout, PotpackBox, PotpackStats, NestingJob } from '@/types';
 import { performServerSideNestingAction, exportCutListForDesktopAction, runDeepnestAlgorithmAction, performSpecialServerAction } from './actions';
+import { Separator } from '@/components/ui/separator'; // Added import
 
 const KERF_ALLOWANCE = 3; 
 const DEFAULT_SHEET_WIDTH = 2440;
@@ -23,8 +24,8 @@ const DEFAULT_SHEET_HEIGHT = 1220;
 const PART_COLORS = [
   "rgba(173, 216, 230, 0.7)", "rgba(144, 238, 144, 0.7)", "rgba(255, 182, 193, 0.7)", 
   "rgba(255, 255, 224, 0.7)", "rgba(211, 211, 211, 0.7)", "rgba(240, 128, 128, 0.7)",
-  "rgba(175, 238, 238, 0.7)", "rgba(255, 218, 185, 0.7)", "rgba(221, 160, 221, 0.7)", // Thistle
-  "rgba(245, 222, 179, 0.7)", // Wheat
+  "rgba(175, 238, 238, 0.7)", "rgba(255, 218, 185, 0.7)", "rgba(221, 160, 221, 0.7)",
+  "rgba(245, 222, 179, 0.7)",
 ];
 const MAX_SHEETS_PER_JOB = 50; 
 
@@ -37,8 +38,6 @@ export default function SpecialFeaturePage() {
   const [packedLayoutData, setPackedLayoutData] = React.useState<SheetLayout[] | null>(null);
   const [visualizedLayout, setVisualizedLayout] = React.useState<React.ReactNode | null>(null);
   const [partColorMap, setPartColorMap] = React.useState<Map<string, string>>(new Map());
-
-  // State for loading jobs from Cabinet Designer
   const [availableNestingJobs, setAvailableNestingJobs] = React.useState<{value: string, label: string}[]>([]);
   const [selectedNestingJobId, setSelectedNestingJobId] = React.useState<string>("");
 
@@ -82,7 +81,7 @@ export default function SpecialFeaturePage() {
         if (foundJob) {
           setPartsListData(JSON.stringify(foundJob.parts, null, 2));
           toast({ title: "Job Loaded", description: `Parts for "${foundJob.name}" loaded into textarea.`});
-          setPackedLayoutData(null); // Clear previous layout
+          setPackedLayoutData(null);
           setVisualizedLayout(null);
           setActionResult(null);
         } else {
@@ -100,19 +99,16 @@ export default function SpecialFeaturePage() {
       localStorage.removeItem(LOCAL_STORAGE_NESTING_JOBS_KEY);
       setAvailableNestingJobs([]);
       setSelectedNestingJobId("");
-      setPartsListData(""); // Clear textarea if jobs are cleared
+      setPartsListData(""); 
       toast({ title: "Cleared", description: "Saved nesting jobs have been cleared." });
     } catch (e) {
       toast({ title: "Error", description: "Could not clear saved nesting jobs.", variant: "destructive" });
     }
   };
 
-
   const generatePartColorMap = (parts: InputPart[]): Map<string, string> => {
     const map = new Map<string, string>();
     let colorIndex = 0;
-    // Ensure we use the original name (if available) for color mapping
-    // This helps keep colors consistent for same base part types
     parts.forEach(part => {
       const colorKey = part.originalName || part.name; 
       if (!map.has(colorKey)) {
@@ -151,8 +147,7 @@ export default function SpecialFeaturePage() {
             let fontSize = 10;
             if (displayWidth < 70 || displayHeight < 30) fontSize = 8;
             if (displayWidth < 50 || displayHeight < 20) fontSize = 6;
-             if (displayWidth * displayHeight < 1000) fontSize = 5;
-
+            if (displayWidth * displayHeight < 1000) fontSize = 5;
 
             return (
               <g key={`part-${sheet.id}-${pIndex}`} transform={`translate(${part.x ?? 0}, ${part.y ?? 0})`}>
@@ -189,7 +184,6 @@ export default function SpecialFeaturePage() {
     ));
   };
 
-
   const handleClientSideNesting = async () => {
     setIsLoading(true);
     setActionResult(null);
@@ -223,8 +217,8 @@ export default function SpecialFeaturePage() {
           width: rawPart.width,
           height: rawPart.height,
           qty: rawPart.qty,
-          material: rawPart.material, // Keep material if provided
-          originalName: rawPart.name, // Store original name
+          material: rawPart.material,
+          originalName: rawPart.name,
           originalWidth: rawPart.width,
           originalHeight: rawPart.height,
         });
@@ -261,13 +255,13 @@ export default function SpecialFeaturePage() {
         let sheetId = 1;
 
         while (remainingPartsToPack.length > 0 && sheetId <= MAX_SHEETS_PER_JOB) {
-          const partsForCurrentSheetAttempt = [...remainingPartsToPack]; // potpack modifies this array
+          const partsForCurrentSheetAttempt = [...remainingPartsToPack];
           const stats: PotpackStats = potpack(partsForCurrentSheetAttempt);
           
           const currentSheetParts: PackedPart[] = [];
           const stillRemainingAfterSheet: PotpackBox[] = [];
 
-          for (const packedBox of partsForCurrentSheetAttempt) { // Iterate over the potentially modified array
+          for (const packedBox of partsForCurrentSheetAttempt) {
             if (packedBox.x !== undefined && packedBox.y !== undefined &&
                 (packedBox.x + packedBox.w) <= DEFAULT_SHEET_WIDTH &&
                 (packedBox.y + packedBox.h) <= DEFAULT_SHEET_HEIGHT) {
@@ -284,8 +278,6 @@ export default function SpecialFeaturePage() {
                 originalHeight: packedBox.originalHeight,
               });
             } else {
-              // If potpack didn't place it, or if it placed it outside sheet boundaries (should not happen with potpack's bin size logic if sheet is the bin)
-              // Ensure x,y are cleared so it's considered for next sheet
               delete packedBox.x; delete packedBox.y; 
               stillRemainingAfterSheet.push(packedBox);
             }
@@ -329,7 +321,7 @@ export default function SpecialFeaturePage() {
 
       } else if (selectedClientAlgorithm === 'deepnest') {
         toast({ title: "Processing...", description: "Using Simulated FFDH (Server-Side)." });
-        const result = await runDeepnestAlgorithmAction(partsListData); // partsListData already contains originalName etc.
+        const result = await runDeepnestAlgorithmAction(partsListData);
         if (result.success && result.layout) {
           setPackedLayoutData(result.layout);
           setActionResult(result.message);
@@ -350,24 +342,21 @@ export default function SpecialFeaturePage() {
 
   React.useEffect(() => {
     if (packedLayoutData && packedLayoutData.length > 0) {
-      // Regenerate partColorMap if it wasn't based on the currently loaded parts
-      // This is important if parts are loaded from storage vs. typed in
       let partsForColorMap: InputPart[] = [];
       try {
           partsForColorMap = JSON.parse(partsListData);
-      } catch { /* ignore if not valid json, map might be based on previous valid input */ }
+      } catch { /* ignore */ }
       
       if(partsForColorMap.length > 0){
          const pcm = generatePartColorMap(partsForColorMap);
          setPartColorMap(pcm);
-      } // Else, keep existing map if partsListData is invalid (e.g., mid-typing)
-
+      }
       setVisualizedLayout(renderSVGs(packedLayoutData, partColorMap));
     } else {
       setVisualizedLayout(null);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [packedLayoutData]); // Re-run if packedLayoutData changes. partColorMap is dep but should be updated before layout. partsListData is used to derive colors.
+  }, [packedLayoutData, partColorMap]); 
 
 
   const handleServerSideNesting = async () => {
@@ -505,7 +494,7 @@ export default function SpecialFeaturePage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="rectpack2d">Rectpack2D (Potpack - Client Side)</SelectItem>
-                      <SelectItem value="deepnest">FFDH Simulation (Server Side)</SelectItem>
+                      <SelectItem value="deepnest">Simulated FFDH (Server Side)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -539,7 +528,7 @@ export default function SpecialFeaturePage() {
                 <Info className="h-4 w-4" />
                 <AlertTitle>Conceptual Implementation</AlertTitle>
                 <AlertDescription>
-                  This tab demonstrates calling a generic server action. The "Client/Server Hybrid Nesting" tab now handles the more defined "FFDH Simulation (Server Side)" conceptual call.
+                  This tab demonstrates calling a generic server action. The "Client/Server Hybrid Nesting" tab now handles the more defined "Simulated FFDH (Server Side)" conceptual call.
                 </AlertDescription>
               </Alert>
               <div className="space-y-3">
@@ -605,7 +594,7 @@ export default function SpecialFeaturePage() {
 
           {visualizedLayout && (
              <div className="mt-6 p-4 border rounded-lg bg-gray-50 w-full shadow">
-              <p className="text-lg font-semibold mb-3 text-gray-800">Visualized Layout ({selectedClientAlgorithm === 'rectpack2d' ? 'Potpack - Client' : 'FFDH Sim - Server'}):</p>
+              <p className="text-lg font-semibold mb-3 text-gray-800">Visualized Layout ({selectedClientAlgorithm === 'rectpack2d' ? 'Potpack - Client' : 'Simulated FFDH - Server'}):</p>
               <div className="max-h-[70vh] overflow-auto p-2 bg-gray-100 rounded">
                 {visualizedLayout}
               </div>
@@ -614,7 +603,7 @@ export default function SpecialFeaturePage() {
           
           {packedLayoutData && (
             <div className="mt-6 p-4 border rounded-md bg-muted w-full">
-              <p className="text-sm font-semibold">Packed Layout Data ({selectedClientAlgorithm === 'rectpack2d' ? 'Potpack Client' : 'FFDH Sim - Server'}):</p>
+              <p className="text-sm font-semibold">Packed Layout Data ({selectedClientAlgorithm === 'rectpack2d' ? 'Potpack Client' : 'Simulated FFDH - Server'}):</p>
               <div className="max-h-96 overflow-auto">
                 <pre className="text-xs text-muted-foreground whitespace-pre-wrap overflow-x-auto bg-background/50 p-2 rounded-sm mt-1 font-mono">
                   {JSON.stringify(packedLayoutData, null, 2)}
