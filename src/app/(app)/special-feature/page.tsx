@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
 import { Sparkles, LayoutList, Server, Download, Info } from 'lucide-react';
 import * as React from 'react';
 import { useToast } from "@/hooks/use-toast";
@@ -16,7 +18,8 @@ export default function SpecialFeaturePage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = React.useState(false);
   const [actionResult, setActionResult] = React.useState<string | null>(null);
-  const [partsListData, setPartsListData] = React.useState<string>(''); // For user to paste parts list
+  const [partsListData, setPartsListData] = React.useState<string>('');
+  const [selectedClientAlgorithm, setSelectedClientAlgorithm] = React.useState<string>('rectpack2d'); // Default selection
 
   const handleGenericSpecialFunction = async () => {
     setIsLoading(true);
@@ -42,12 +45,12 @@ export default function SpecialFeaturePage() {
   };
 
   const handleClientSideNesting = () => {
-    console.log("Attempting Client-Side Nesting with data:", partsListData);
+    console.log(`Attempting Client-Side Nesting with algorithm: ${selectedClientAlgorithm} and data:`, partsListData);
     toast({
-      title: "Client-Side Nesting (Conceptual)",
-      description: "Nesting logic would run in the browser. Check console for data.",
+      title: `Client-Side Nesting (${selectedClientAlgorithm}) (Conceptual)`,
+      description: "Nesting logic would run in the browser. Check console for data and selected algorithm.",
     });
-    setActionResult("Client-Side Nesting initiated (conceptual). Actual library integration needed.");
+    setActionResult(`Client-Side Nesting (${selectedClientAlgorithm}) initiated (conceptual). Actual library integration needed.`);
   };
 
   const handleServerSideNesting = async () => {
@@ -87,9 +90,7 @@ export default function SpecialFeaturePage() {
       if (result.success) {
         toast({ title: "Export Prepared (Conceptual)", description: result.message });
         setActionResult(`Export for Desktop: ${result.message} - ${result.data || '(Conceptual: file would be downloaded)'}`);
-        // In a real implementation, result.data might be a Blob or URL to trigger download
         if (result.data && typeof result.data === 'string' && result.data.startsWith('data:')) {
-          // Simulate download for CSV example
           const link = document.createElement("a");
           link.href = result.data;
           link.download = result.fileName || "cutlist.csv";
@@ -97,7 +98,6 @@ export default function SpecialFeaturePage() {
           link.click();
           document.body.removeChild(link);
         }
-
       } else {
         toast({ title: "Export Error", description: result.message, variant: "destructive" });
         setActionResult(`Export for Desktop error: ${result.message}`);
@@ -110,7 +110,6 @@ export default function SpecialFeaturePage() {
       setIsLoading(false);
     }
   };
-
 
   return (
     <>
@@ -138,18 +137,30 @@ export default function SpecialFeaturePage() {
             </TabsList>
 
             <TabsContent value="client-nesting" className="mt-4 p-4 border rounded-md">
-              <CardTitle className="text-lg mb-2">Client-Side Nesting (JS Library)</CardTitle>
+              <CardTitle className="text-lg mb-2">Client-Side Nesting (JS Library / WASM)</CardTitle>
               <CardDescription className="mb-4">
-                Visualize parts nested onto sheets directly in your browser. Good for quick previews but may be slower for very large jobs and might offer less optimal results or fewer features (like grain matching) compared to dedicated solutions.
+                Visualize parts nested onto sheets directly in your browser. Select an algorithm below. Good for quick previews.
               </CardDescription>
               <Alert variant="default" className="mb-4 bg-sky-50 border-sky-200 text-sky-700">
                 <Info className="h-4 w-4" />
                 <AlertTitle>Conceptual Implementation</AlertTitle>
                 <AlertDescription>
-                  This tab demonstrates where client-side nesting logic (using a JavaScript library) would be integrated. The actual library and visualization are not yet implemented.
+                  This tab demonstrates where client-side nesting logic would be integrated. The actual library and visualization are not yet implemented.
                 </AlertDescription>
               </Alert>
-              <div className="space-y-3">
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="client-nesting-algorithm">Nesting Algorithm (Conceptual)</Label>
+                  <Select value={selectedClientAlgorithm} onValueChange={setSelectedClientAlgorithm}>
+                    <SelectTrigger id="client-nesting-algorithm" className="w-full sm:w-[300px]">
+                      <SelectValue placeholder="Select algorithm" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="rectpack2d">Rectpack2D (Conceptual WASM)</SelectItem>
+                      <SelectItem value="deepnest">Deepnest.io (Conceptual Backend Call)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
                 <Textarea
                   placeholder="Paste parts list here (e.g., JSON or CSV format).&#10;Example: [{name: 'Side Panel', width: 700, height: 500, qty: 2}, ...]"
                   value={partsListData}
@@ -209,7 +220,6 @@ export default function SpecialFeaturePage() {
                 <Button onClick={handleExportForDesktop} disabled={isLoading || !partsListData.trim()}>
                   <Download className="mr-2" /> Export Cut List (Conceptual CSV)
                 </Button>
-                {/* <Button variant="outline" disabled>Export Parts (DXF - Conceptual)</Button> */}
               </div>
             </TabsContent>
 
@@ -236,5 +246,4 @@ export default function SpecialFeaturePage() {
     </>
   );
 }
-
     
