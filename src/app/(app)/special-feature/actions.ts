@@ -1,8 +1,16 @@
 
 'use server';
 
-// This file will contain server-side logic (actions) for the Special Feature page.
-// For example, database operations, Genkit flow calls, etc.
+import potpack from 'potpack';
+import type { InputPart, PackedPart, SheetLayout, PotpackBox, PotpackStats } from '@/types';
+
+
+// Constants for nesting, could be configurable in a real app
+const KERF_ALLOWANCE = 3; // mm
+const DEFAULT_SHEET_WIDTH = 2440; // mm
+const DEFAULT_SHEET_HEIGHT = 1220; // mm
+const MAX_SHEETS_PER_JOB = 50; // Safety limit
+
 
 export interface SpecialActionInput {
   parameter1: string;
@@ -76,28 +84,125 @@ export async function exportCutListForDesktopAction(partsData: string): Promise<
   };
 }
 
-// New conceptual action for Deepnest-like backend processing
-export async function runDeepnestAlgorithmAction(partsData: string): Promise<{ success: boolean; message: string; layout?: any }> {
-  console.log("runDeepnestAlgorithmAction called with partsData:", partsData);
-  // Simulate a call to a backend that might use Deepnest or similar
-  await new Promise(resolve => setTimeout(resolve, 2000)); // Longer delay to simulate complex processing
 
-  // In a real scenario, this would:
-  // 1. Parse partsData
-  // 2. Interface with a Deepnest engine (WASM, a separate microservice, etc.)
-  // 3. Return the nested layout data (e.g., SVG path, JSON coordinates)
+export async function runDeepnestAlgorithmAction(partsDataString: string): Promise<{ success: boolean; message: string; layout?: SheetLayout[] }> {
+  console.log("runDeepnestAlgorithmAction (server-side potpack) called with partsDataString:", partsDataString);
+  
+  let inputParts: InputPart[];
+  try {
+    inputParts = JSON.parse(partsDataString);
+    if (!Array.isArray(inputParts)) throw new Error("Input must be a JSON array.");
+    for (const part of inputParts) {
+      if (
+        typeof part.name !== 'string' ||
+        typeof part.width !== 'number' || !(part.width > 0) ||
+        typeof part.height !== 'number' || !(part.height > 0) ||
+        typeof part.qty !== 'number' || !(part.qty > 0)
+      ) {
+        throw new Error("Each part must have a 'name' (string), and positive numeric 'width', 'height', and 'qty'.");
+      }
+    }
+  } catch (e: any) {
+    console.error("Error parsing partsDataString in server action:", e.message);
+    return { success: false, message: `Server-side parsing error: ${e.message}` };
+  }
 
-  // For now, return a conceptual success message and dummy layout
-  const dummyLayout = {
-    sheetsUsed: 1,
-    wastePercentage: 15.5,
-    svgPreview: "<svg><rect x='0' y='0' width='100' height='50' fill='blue' /><text x='10' y='30' fill='white'>Deepnest (Conceptual)</text></svg>"
-  };
+  if (inputParts.length === 0) {
+    return { success: false, message: "No parts provided for server-side nesting." };
+  }
+
+  const allPartsToPack: PotpackBox[] = [];
+  inputParts.forEach(part => {
+    for (let i = 0; i < part.qty; i++) {
+      allPartsToPack.push({
+        w: part.width + KERF_ALLOWANCE,
+        h: part.height + KERF_ALLOWANCE,
+        name: `${part.name}_${i + 1}`, // Unique name for each instance
+        originalName: part.name,
+        originalWidth: part.width,
+        originalHeight: part.height,
+      });
+    }
+  });
+
+  const packedSheetsServer: SheetLayout[] = [];
+  let remainingPartsToPack = [...allPartsToPack];
+  let sheetId = 1;
+
+  while (remainingPartsToPack.length > 0 && sheetId <= MAX_SHEETS_PER_JOB) {
+    const partsForCurrentSheetAttempt = [...remainingPartsToPack];
+    const stats: PotpackStats = potpack(partsForCurrentSheetAttempt); // potpack modifies partsForCurrentSheetAttempt
+
+    const currentSheetParts: PackedPart[] = [];
+    const stillRemainingAfterSheet: PotpackBox[] = [];
+
+    for (const packedBox of partsForCurrentSheetAttempt) {
+      if (packedBox.x !== undefined && packedBox.y !== undefined &&
+          (packedBox.x + packedBox.w) <= DEFAULT_SHEET_WIDTH &&
+          (packedBox.y + packedBox.h) <= DEFAULT_SHEET_HEIGHT) {
+        currentSheetParts.push({
+          name: packedBox.name!, // Potpack assigns x,y, use its name
+          width: packedBox.originalWidth!,
+          height: packedBox.originalHeight!,
+          qty: 1, // Each box is a single instance
+          x: packedBox.x,
+          y: packedBox.y,
+          material: packedBox.originalName, // For color mapping on client
+          originalName: packedBox.originalName,
+          originalWidth: packedBox.originalWidth,
+          originalHeight: packedBox.originalHeight,
+        });
+      } else {
+        // This part was not packed by potpack onto the current conceptual bin
+        // or it overflowed the standard sheet. Reset and add to remaining.
+        delete packedBox.x;
+        delete packedBox.y;
+        stillRemainingAfterSheet.push(packedBox);
+      }
+    }
+    
+    if (currentSheetParts.length > 0) {
+      let actualUsedWidthOnSheet = 0;
+      let actualUsedHeightOnSheet = 0;
+      let totalPartAreaOnSheet = 0;
+
+      currentSheetParts.forEach(p => {
+        if (p.x !== undefined && p.y !== undefined) {
+          actualUsedWidthOnSheet = Math.max(actualUsedWidthOnSheet, p.x + p.originalWidth! + KERF_ALLOWANCE);
+          actualUsedHeightOnSheet = Math.max(actualUsedHeightOnSheet, p.y + p.originalHeight! + KERF_ALLOWANCE);
+          totalPartAreaOnSheet += (p.originalWidth! + KERF_ALLOWANCE) * (p.originalHeight! + KERF_ALLOWANCE);
+        }
+      });
+      
+      const sheetArea = DEFAULT_SHEET_WIDTH * DEFAULT_SHEET_HEIGHT;
+      const efficiency = (totalPartAreaOnSheet / sheetArea) * 100;
+
+      packedSheetsServer.push({
+        id: sheetId,
+        dimensions: { w: DEFAULT_SHEET_WIDTH, h: DEFAULT_SHEET_HEIGHT },
+        parts: currentSheetParts,
+        packedAreaWidth: actualUsedWidthOnSheet, 
+        packedAreaHeight: actualUsedHeightOnSheet,
+        efficiency: efficiency,
+      });
+      sheetId++;
+    } else if (stillRemainingAfterSheet.length > 0) {
+      // No parts could be packed on a new sheet, likely oversized parts
+      // This indicates an issue, as potpack should always try to pack if parts are smaller than the bin
+      console.warn("Server-side potpack: No parts packed onto a new sheet, but parts remain. Remaining:", stillRemainingAfterSheet.length);
+      return { success: false, message: `Server-side nesting: Could not pack remaining ${stillRemainingAfterSheet.length} parts. Check part sizes.`, layout: packedSheetsServer };
+    }
+    remainingPartsToPack = stillRemainingAfterSheet;
+  }
+  
+  if (remainingPartsToPack.length > 0 && sheetId > MAX_SHEETS_PER_JOB) {
+    return { success: false, message: `Server-side nesting: Max sheets (${MAX_SHEETS_PER_JOB}) reached. ${remainingPartsToPack.length} parts remain unpacked.`, layout: packedSheetsServer };
+  }
 
   return {
     success: true,
-    message: "Deepnest.io conceptual backend processing complete.",
-    layout: dummyLayout,
+    message: `Deepnest (Conceptual Backend Call using potpack) processed ${allPartsToPack.length} part instances onto ${packedSheetsServer.length} sheets.`,
+    layout: packedSheetsServer,
   };
 }
     

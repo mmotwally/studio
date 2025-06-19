@@ -114,6 +114,7 @@ export interface InventoryItemExport {
   locationShelf?: string | null;
   supplierName?: string;
   unitName?: string;
+  imageUrl?: string | null;
 }
 
 
@@ -604,21 +605,27 @@ export interface InputPart {
   width: number;
   height: number;
   qty: number;
-  material?: string; // Optional, for context
+  material?: string; // Optional, for context for color mapping etc.
+  // These are added by potpack logic if name is modified for uniqueness
+  originalName?: string; 
+  originalWidth?: number; 
+  originalHeight?: number; 
 }
 
-export interface PackedPart extends InputPart {
+export interface PackedPart extends InputPart { // InputPart already has name, width, height, qty, material
   x?: number;
   y?: number;
-  // Potpack might add 'bin' if multiple bins were supported directly, but we handle multi-sheet manually
+  // originalName, originalWidth, originalHeight might be redundant here if InputPart has them
+  // but useful if PackedPart is derived from a simpler source that only had w,h.
+  // For consistency, let's ensure they are available if needed for rendering.
 }
 
 export interface SheetLayout {
   id: number;
   dimensions: { w: number; h: number }; // Sheet dimensions
   parts: PackedPart[]; // Parts packed onto this sheet
-  packedAreaWidth?: number; // Actual width used by packed parts
-  packedAreaHeight?: number; // Actual height used by packed parts
+  packedAreaWidth?: number; // Actual width used by packed parts (from potpack stats or calculated)
+  packedAreaHeight?: number; // Actual height used by packed parts (from potpack stats or calculated)
   efficiency?: number; // Percentage of sheet area used by parts
 }
 
@@ -628,14 +635,15 @@ export interface PotpackBox {
   h: number;
   x?: number;
   y?: number;
-  name?: string; // Custom property for tracking
-  original?: InputPart; // Link back to the original part definition
+  name?: string; // Potpack may not use this, but we can add it
+  originalName?: string; // Custom property
+  originalWidth?: number; // Custom property
+  originalHeight?: number; // Custom property
   [key: string]: any; // Allow other properties
 }
 export interface PotpackStats {
-  w: number; // width of overall bounding box
-  h: number; // height of overall bounding box
-  fill: number; // percentage of space filled
+  w: number; // width of overall bounding box (bin width used)
+  h: number; // height of overall bounding box (bin height used)
+  fill: number; // percentage of space filled in the bin potpack calculated
   [key: string]: any;
 }
-

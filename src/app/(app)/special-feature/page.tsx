@@ -13,14 +13,13 @@ import * as React from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import potpack from 'potpack';
-import type { InputPart, PackedPart, SheetLayout, PotpackBox, PotpackStats } from '@/types'; // Ensure Potpack types are imported
+import type { InputPart, PackedPart, SheetLayout, PotpackBox, PotpackStats } from '@/types';
 import { performServerSideNestingAction, exportCutListForDesktopAction, runDeepnestAlgorithmAction, performSpecialServerAction } from './actions';
 
 const KERF_ALLOWANCE = 3; 
 const DEFAULT_SHEET_WIDTH = 2440;
 const DEFAULT_SHEET_HEIGHT = 1220;
 
-// Simple color palette for parts - can be expanded
 const PART_COLORS = [
   "rgba(173, 216, 230, 0.7)", // lightblue
   "rgba(144, 238, 144, 0.7)", // lightgreen
@@ -31,6 +30,7 @@ const PART_COLORS = [
   "rgba(175, 238, 238, 0.7)", // paleturquoise
   "rgba(255, 218, 185, 0.7)", // peachpuff
 ];
+const MAX_SHEETS_PER_JOB = 50; // Safety limit
 
 export default function SpecialFeaturePage() {
   const { toast } = useToast();
@@ -50,54 +50,53 @@ export default function SpecialFeaturePage() {
 
     await new Promise(resolve => setTimeout(resolve, 100)); 
 
-    if (selectedClientAlgorithm === 'rectpack2d') {
+    try {
+      let inputPartsRaw: any[];
       try {
-        let inputPartsRaw: any[] = [];
-        try {
-          inputPartsRaw = JSON.parse(partsListData);
-        } catch (e) {
-          throw new Error("Invalid JSON format for parts list. Please provide an array of parts.");
-        }
+        inputPartsRaw = JSON.parse(partsListData);
+      } catch (e) {
+        throw new Error("Invalid JSON format for parts list. Please provide an array of parts.");
+      }
 
-        if (!Array.isArray(inputPartsRaw)) {
-          throw new Error("Parts list must be a JSON array.");
-        }
+      if (!Array.isArray(inputPartsRaw)) {
+        throw new Error("Parts list must be a JSON array.");
+      }
 
-        const inputParts: InputPart[] = [];
-        for (const rawPart of inputPartsRaw) {
-          if (
-            typeof rawPart.name !== 'string' ||
-            typeof rawPart.width !== 'number' || !(rawPart.width > 0) ||
-            typeof rawPart.height !== 'number' || !(rawPart.height > 0) ||
-            typeof rawPart.qty !== 'number' || !(rawPart.qty > 0)
-          ) {
-            throw new Error("Each part must have a 'name' (string), and positive numeric 'width', 'height', and 'qty'.");
-          }
-          inputParts.push(rawPart as InputPart);
+      const validatedInputParts: InputPart[] = [];
+      for (const rawPart of inputPartsRaw) {
+        if (
+          typeof rawPart.name !== 'string' ||
+          typeof rawPart.width !== 'number' || !(rawPart.width > 0) ||
+          typeof rawPart.height !== 'number' || !(rawPart.height > 0) ||
+          typeof rawPart.qty !== 'number' || !(rawPart.qty > 0)
+        ) {
+          throw new Error("Each part must have a 'name' (string), and positive numeric 'width', 'height', and 'qty'. Invalid part: " + JSON.stringify(rawPart));
         }
+        validatedInputParts.push(rawPart as InputPart);
+      }
 
-        if (inputParts.length === 0) {
-          throw new Error("No parts provided in the list.");
+      if (validatedInputParts.length === 0) {
+        throw new Error("No parts provided in the list.");
+      }
+      
+      const partColorMap = new Map<string, string>();
+      let colorIndex = 0;
+      validatedInputParts.forEach(part => {
+        if (!partColorMap.has(part.name)) {
+          partColorMap.set(part.name, PART_COLORS[colorIndex % PART_COLORS.length]);
+          colorIndex++;
         }
-        
-        // Assign colors to unique part names
-        const partColorMap = new Map<string, string>();
-        let colorIndex = 0;
-        inputParts.forEach(part => {
-          if (!partColorMap.has(part.name)) {
-            partColorMap.set(part.name, PART_COLORS[colorIndex % PART_COLORS.length]);
-            colorIndex++;
-          }
-        });
+      });
 
+      if (selectedClientAlgorithm === 'rectpack2d') {
         const allPartsToPack: PotpackBox[] = [];
-        inputParts.forEach(part => {
+        validatedInputParts.forEach(part => {
           for (let i = 0; i < part.qty; i++) {
             allPartsToPack.push({
               w: part.width + KERF_ALLOWANCE, 
               h: part.height + KERF_ALLOWANCE,
-              name: `${part.name}_${i + 1}`, // Unique name for each instance
-              originalName: part.name, // Keep original name for color mapping
+              name: `${part.name}_${i + 1}`,
+              originalName: part.name,
               originalWidth: part.width,
               originalHeight: part.height,
             });
@@ -107,54 +106,50 @@ export default function SpecialFeaturePage() {
         const packedSheets: SheetLayout[] = [];
         let remainingPartsToPack = [...allPartsToPack];
         let sheetId = 1;
-        const MAX_SHEETS = 50;
 
-        while (remainingPartsToPack.length > 0 && sheetId <= MAX_SHEETS) {
-          const partsForCurrentSheetAttempt = [...remainingPartsToPack]; // potpack modifies the array
+        while (remainingPartsToPack.length > 0 && sheetId <= MAX_SHEETS_PER_JOB) {
+          const partsForCurrentSheetAttempt = [...remainingPartsToPack];
           const stats: PotpackStats = potpack(partsForCurrentSheetAttempt);
           
           const currentSheetParts: PackedPart[] = [];
           const stillRemainingAfterSheet: PotpackBox[] = [];
 
-          for (const part of partsForCurrentSheetAttempt) { // Iterate over the array potpack modified
-            if (part.x !== undefined && part.y !== undefined &&
-                (part.x + part.w) <= DEFAULT_SHEET_WIDTH &&
-                (part.y + part.h) <= DEFAULT_SHEET_HEIGHT) {
+          for (const packedBox of partsForCurrentSheetAttempt) {
+            if (packedBox.x !== undefined && packedBox.y !== undefined &&
+                (packedBox.x + packedBox.w) <= DEFAULT_SHEET_WIDTH &&
+                (packedBox.y + packedBox.h) <= DEFAULT_SHEET_HEIGHT) {
               currentSheetParts.push({
-                name: part.name!,
-                width: part.originalWidth!, 
-                height: part.originalHeight!,
+                name: packedBox.name!,
+                width: packedBox.originalWidth!, 
+                height: packedBox.originalHeight!,
                 qty: 1, 
-                x: part.x,
-                y: part.y,
-                material: part.originalName, // Using originalName for color lookup
+                x: packedBox.x,
+                y: packedBox.y,
+                material: packedBox.originalName,
+                originalName: packedBox.originalName,
+                originalWidth: packedBox.originalWidth,
+                originalHeight: packedBox.originalHeight,
               });
             } else {
-              delete part.x; // Reset for next attempt if not packed or overflowed
-              delete part.y;
-              stillRemainingAfterSheet.push(part);
+              delete packedBox.x;
+              delete packedBox.y;
+              stillRemainingAfterSheet.push(packedBox);
             }
           }
           
           if (currentSheetParts.length > 0) {
-             // Calculate actual used area on *this* sheet by finding max x+w and y+h of parts *on this sheet*
             let actualUsedWidth = 0;
             let actualUsedHeight = 0;
             let totalPartAreaOnSheet = 0;
 
             currentSheetParts.forEach(p => {
-                if (p.x !== undefined && p.y !== undefined) {
-                    actualUsedWidth = Math.max(actualUsedWidth, p.x + p.width + KERF_ALLOWANCE);
-                    actualUsedHeight = Math.max(actualUsedHeight, p.y + p.height + KERF_ALLOWANCE);
-                    totalPartAreaOnSheet += (p.width + KERF_ALLOWANCE) * (p.height + KERF_ALLOWANCE);
+                if (p.x !== undefined && p.y !== undefined && p.originalWidth && p.originalHeight) {
+                    actualUsedWidth = Math.max(actualUsedWidth, p.x + p.originalWidth + KERF_ALLOWANCE);
+                    actualUsedHeight = Math.max(actualUsedHeight, p.y + p.originalHeight + KERF_ALLOWANCE);
+                    totalPartAreaOnSheet += (p.originalWidth + KERF_ALLOWANCE) * (p.originalHeight + KERF_ALLOWANCE);
                 }
             });
             
-            // Potpack's stats.w and stats.h are for the *bin it thought it needed*.
-            // If it packed into a bin smaller than DEFAULT_SHEET_WIDTH/HEIGHT,
-            // efficiency should be against the part of the sheet *it actually used*.
-            // Or, if we always use full sheets, efficiency is against DEFAULT_SHEET_WIDTH/HEIGHT.
-            // For simplicity in display, let's use efficiency against the full sheet.
             const sheetArea = DEFAULT_SHEET_WIDTH * DEFAULT_SHEET_HEIGHT;
             const currentSheetEfficiency = (totalPartAreaOnSheet / sheetArea) * 100;
 
@@ -162,8 +157,8 @@ export default function SpecialFeaturePage() {
               id: sheetId,
               dimensions: { w: DEFAULT_SHEET_WIDTH, h: DEFAULT_SHEET_HEIGHT },
               parts: currentSheetParts,
-              packedAreaWidth: actualUsedWidth, // Potpack's stats.w might be for a smaller theoretical bin
-              packedAreaHeight: actualUsedHeight, // Potpack's stats.h
+              packedAreaWidth: actualUsedWidth,
+              packedAreaHeight: actualUsedHeight,
               efficiency: currentSheetEfficiency,
             });
             sheetId++;
@@ -174,96 +169,100 @@ export default function SpecialFeaturePage() {
           remainingPartsToPack = stillRemainingAfterSheet;
         }
         
-        if (remainingPartsToPack.length > 0 && sheetId > MAX_SHEETS) {
-             toast({ title: "Max Sheets Reached", description: `Packing stopped after ${MAX_SHEETS} sheets. Some parts may remain.`, variant: "default" });
+        if (remainingPartsToPack.length > 0 && sheetId > MAX_SHEETS_PER_JOB) {
+             toast({ title: "Max Sheets Reached", description: `Packing stopped after ${MAX_SHEETS_PER_JOB} sheets. Some parts may remain.`, variant: "default" });
         }
 
         setPackedLayoutData(packedSheets);
-        setActionResult(`Potpack processed ${allPartsToPack.length} total part instances onto ${packedSheets.length} sheets.`);
-        
-        const svgs = packedSheets.map((sheet, index) => (
-          <div key={`sheet-${index}`} className="mb-6 p-3 border rounded-lg shadow-sm bg-white">
-            <h4 className="font-bold text-base mb-2 text-gray-700">
-              Sheet {sheet.id} <span className="font-normal text-sm">(Dimensions: {sheet.dimensions.w} x {sheet.dimensions.h} mm)</span>
-              <span className={`ml-2 text-sm font-semibold ${sheet.efficiency && sheet.efficiency < 70 ? 'text-orange-600' : 'text-green-600'}`}>
-                Efficiency: {sheet.efficiency?.toFixed(1) || 'N/A'}%
-              </span>
-            </h4>
-            <svg 
-                width="100%" 
-                viewBox={`-5 -5 ${sheet.dimensions.w + 10} ${sheet.dimensions.h + 10}`} 
-                className="border border-gray-300 rounded"
-                preserveAspectRatio="xMidYMid meet"
-            >
-              {/* Sheet Outline */}
-              <rect x="0" y="0" width={sheet.dimensions.w} height={sheet.dimensions.h} fill="#f7fafc" stroke="#e2e8f0" strokeWidth="2"/>
-              
-              {sheet.parts.map((part, pIndex) => {
-                const partColor = partColorMap.get(part.material || part.name) || 'rgba(128, 128, 128, 0.7)'; // Fallback grey
-                const partName = part.name.substring(0, part.name.lastIndexOf('_')) || part.name; // Remove instance suffix
-                
-                // Basic text scaling attempt (very simple)
-                const textLength = Math.max(partName.length, `${part.width}x${part.height}`.length);
-                let fontSize = 12;
-                if (part.width < textLength * 6 || part.height < 30) fontSize = 8;
-                if (part.width < textLength * 4 || part.height < 20) fontSize = 6;
+        setActionResult(`Potpack (Client) processed ${allPartsToPack.length} total part instances onto ${packedSheets.length} sheets.`);
+        toast({ title: "Client Nesting (Potpack)", description: "Parts processed successfully." });
 
-
-                return (
-                  <g key={`part-${pIndex}`} transform={`translate(${part.x ?? 0}, ${part.y ?? 0})`}>
-                    <rect 
-                      x={KERF_ALLOWANCE / 2} // Center part within its kerf-allocated space visually
-                      y={KERF_ALLOWANCE / 2}
-                      width={part.width}  
-                      height={part.height} 
-                      fill={partColor}
-                      stroke="rgba(0,0,0,0.5)" 
-                      strokeWidth="1"
-                    />
-                    {/* ClipPath to keep text within part boundaries */}
-                    <clipPath id={`clip-${sheet.id}-${pIndex}`}>
-                         <rect x={KERF_ALLOWANCE/2 + 2} y={KERF_ALLOWANCE/2 + 2} width={part.width - 4} height={part.height - 4} />
-                    </clipPath>
-                    <text 
-                        x={(KERF_ALLOWANCE / 2) + (part.width / 2)} 
-                        y={(KERF_ALLOWANCE / 2) + (part.height / 2) - (fontSize * 0.2)} // Adjust for two lines
-                        fontSize={fontSize} 
-                        fill="black"
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        clipPath={`url(#clip-${sheet.id}-${pIndex})`}
-                        style={{ pointerEvents: 'none' }}
-                    >
-                       <tspan x={(KERF_ALLOWANCE / 2) + (part.width / 2)} dy="-0.2em">{partName}</tspan>
-                       <tspan x={(KERF_ALLOWANCE / 2) + (part.width / 2)} dy="1.2em">{`${part.width}x${part.height}`}</tspan>
-                    </text>
-                  </g>
-                );
-              })}
-            </svg>
-          </div>
-        ));
-        setVisualizedLayout(<div>{svgs}</div>);
-
-        toast({ title: "Client Nesting (Potpack)", description: "Parts processed and layout visualized." });
-
-      } catch (error: any) {
-        setActionResult(`Error: ${error.message}`);
-        toast({ title: "Client Nesting Error", description: error.message, variant: "destructive" });
-      }
-    } else if (selectedClientAlgorithm === 'deepnest') {
-      try {
+      } else if (selectedClientAlgorithm === 'deepnest') {
         const result = await runDeepnestAlgorithmAction(partsListData);
-        setActionResult(`Deepnest Conceptual Backend Call: ${result.message}\nDetails: ${JSON.stringify(result.layout, null, 2)}`);
-        setVisualizedLayout(result.layout?.svgPreview ? <div dangerouslySetInnerHTML={{ __html: result.layout.svgPreview }} /> : <p>No SVG preview from conceptual Deepnest.</p>);
-        toast({ title: "Deepnest (Conceptual)", description: result.message });
-      } catch (error: any) {
-        setActionResult(`Error calling Deepnest conceptual action: ${error.message}`);
-        toast({ title: "Deepnest Action Error", description: error.message, variant: "destructive" });
+        if (result.success && result.layout) {
+          setPackedLayoutData(result.layout);
+          setActionResult(result.message);
+          toast({ title: "Deepnest (Conceptual Backend Call)", description: result.message });
+        } else {
+          throw new Error(result.message || "Deepnest conceptual backend call failed.");
+        }
       }
+
+      // Common visualization logic after data is set by either algorithm
+      if (packedLayoutData || (selectedClientAlgorithm === 'deepnest' && (await runDeepnestAlgorithmAction(partsListData)).layout)) {
+          const dataToVisualize = selectedClientAlgorithm === 'deepnest' ? (await runDeepnestAlgorithmAction(partsListData)).layout : packedLayoutData;
+          if(dataToVisualize) {
+            const svgs = dataToVisualize.map((sheet, index) => (
+              <div key={`sheet-${index}`} className="mb-6 p-3 border rounded-lg shadow-sm bg-white">
+                <h4 className="font-bold text-base mb-2 text-gray-700">
+                  Sheet {sheet.id} <span className="font-normal text-sm">(Dimensions: {sheet.dimensions.w} x {sheet.dimensions.h} mm)</span>
+                  <span className={`ml-2 text-sm font-semibold ${sheet.efficiency && sheet.efficiency < 70 ? 'text-orange-600' : 'text-green-600'}`}>
+                    Efficiency: {sheet.efficiency?.toFixed(1) || 'N/A'}%
+                  </span>
+                </h4>
+                <svg 
+                    width="100%" 
+                    viewBox={`-5 -5 ${sheet.dimensions.w + 10} ${sheet.dimensions.h + 10}`} 
+                    className="border border-gray-300 rounded"
+                    preserveAspectRatio="xMidYMid meet"
+                >
+                  <rect x="0" y="0" width={sheet.dimensions.w} height={sheet.dimensions.h} fill="#f7fafc" stroke="#e2e8f0" strokeWidth="2"/>
+                  {sheet.parts.map((part, pIndex) => {
+                    const partColor = partColorMap.get(part.material || part.name.substring(0, part.name.lastIndexOf('_')) || part.name) || 'rgba(128, 128, 128, 0.7)';
+                    const partName = part.originalName || part.name.substring(0, part.name.lastIndexOf('_')) || part.name;
+                    const partWidth = part.originalWidth || part.width;
+                    const partHeight = part.originalHeight || part.height;
+                    const textLength = Math.max(partName.length, `${partWidth}x${partHeight}`.length);
+                    let fontSize = 12;
+                    if (partWidth < textLength * 6 || partHeight < 30) fontSize = 8;
+                    if (partWidth < textLength * 4 || partHeight < 20) fontSize = 6;
+
+                    return (
+                      <g key={`part-${pIndex}`} transform={`translate(${part.x ?? 0}, ${part.y ?? 0})`}>
+                        <rect 
+                          x={KERF_ALLOWANCE / 2} 
+                          y={KERF_ALLOWANCE / 2}
+                          width={partWidth}  
+                          height={partHeight} 
+                          fill={partColor}
+                          stroke="rgba(0,0,0,0.5)" 
+                          strokeWidth="1"
+                        />
+                        <clipPath id={`clip-${sheet.id}-${pIndex}`}>
+                             <rect x={KERF_ALLOWANCE/2 + 2} y={KERF_ALLOWANCE/2 + 2} width={partWidth - 4} height={partHeight - 4} />
+                        </clipPath>
+                        <text 
+                            x={(KERF_ALLOWANCE / 2) + (partWidth / 2)} 
+                            y={(KERF_ALLOWANCE / 2) + (partHeight / 2) - (fontSize * 0.2)}
+                            fontSize={fontSize} 
+                            fill="black"
+                            textAnchor="middle"
+                            dominantBaseline="middle"
+                            clipPath={`url(#clip-${sheet.id}-${pIndex})`}
+                            style={{ pointerEvents: 'none' }}
+                        >
+                           <tspan x={(KERF_ALLOWANCE / 2) + (partWidth / 2)} dy="-0.2em">{partName}</tspan>
+                           <tspan x={(KERF_ALLOWANCE / 2) + (partWidth / 2)} dy="1.2em">{`${partWidth}x${partHeight}`}</tspan>
+                        </text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </div>
+            ));
+            setVisualizedLayout(<div>{svgs}</div>);
+          }
+      }
+
+
+    } catch (error: any) {
+      setActionResult(`Error: ${error.message}`);
+      toast({ title: "Client Nesting Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
+
 
   const handleServerSideNesting = async () => {
     setIsLoading(true);
@@ -278,8 +277,9 @@ export default function SpecialFeaturePage() {
     } catch (error: any) {
       setActionResult(`Error: ${error.message}`);
       toast({ title: "Server Nesting Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleExportForDesktop = async () => {
@@ -305,8 +305,9 @@ export default function SpecialFeaturePage() {
     } catch (error: any) {
       setActionResult(`Error: ${error.message}`);
       toast({ title: "Export Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
 
   const handleGenericSpecialFunction = async () => {
@@ -323,8 +324,9 @@ export default function SpecialFeaturePage() {
     } catch (error: any) {
       setActionResult(`Error: ${error.message}`);
       toast({ title: "Generic Action Error", description: error.message, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
-    setIsLoading(false);
   };
   
 
@@ -382,7 +384,7 @@ export default function SpecialFeaturePage() {
                   {isLoading ? <Loader2 className="mr-2 animate-spin" /> : <LayoutList className="mr-2" />}
                   {isLoading ? 'Nesting...' : 'Visualize Nesting (Client)'}
                 </Button>
-                 {actionResult && selectedClientAlgorithm === 'rectpack2d' && (
+                 {actionResult && (
                     <Alert variant="default" className="mt-4 text-xs">
                         <Info className="h-4 w-4" />
                         <AlertTitle>Nesting Summary</AlertTitle>
@@ -458,7 +460,7 @@ export default function SpecialFeaturePage() {
             </TabsContent>
           </Tabs>
 
-          {actionResult && selectedClientAlgorithm !== 'rectpack2d' && (
+          {actionResult && selectedClientAlgorithm !== 'rectpack2d' && selectedClientAlgorithm !== 'deepnest' && (
             <div className="mt-6 p-4 border rounded-md bg-muted w-full">
               <p className="text-sm font-semibold">Action Result:</p>
               <pre className="text-xs text-muted-foreground whitespace-pre-wrap overflow-x-auto">{actionResult}</pre>
@@ -474,9 +476,9 @@ export default function SpecialFeaturePage() {
             </div>
           )}
           
-          {packedLayoutData && selectedClientAlgorithm === 'rectpack2d' && (
+          {packedLayoutData && (selectedClientAlgorithm === 'rectpack2d' || selectedClientAlgorithm === 'deepnest') && (
             <div className="mt-6 p-4 border rounded-md bg-muted w-full">
-              <p className="text-sm font-semibold">Packed Layout Data (Potpack):</p>
+              <p className="text-sm font-semibold">Packed Layout Data ({selectedClientAlgorithm === 'rectpack2d' ? 'Potpack Client' : 'Deepnest Server'}):</p>
               <div className="max-h-96 overflow-auto">
                 <pre className="text-xs text-muted-foreground whitespace-pre-wrap overflow-x-auto bg-background/50 p-2 rounded-sm mt-1 font-mono">
                   {JSON.stringify(packedLayoutData, null, 2)}
@@ -488,5 +490,5 @@ export default function SpecialFeaturePage() {
       </Card>
     </>
   );
-
+}
     
