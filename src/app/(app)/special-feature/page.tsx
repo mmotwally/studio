@@ -15,7 +15,7 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import potpack from 'potpack';
 import type { InputPart, PackedPart, SheetLayout, PotpackBox, PotpackStats, NestingJob } from '@/types';
 import { performServerSideNestingAction, exportCutListForDesktopAction, runDeepnestAlgorithmAction, performSpecialServerAction } from './actions';
-import { Separator } from '@/components/ui/separator'; // Added import
+import { Separator } from '@/components/ui/separator';
 
 const KERF_ALLOWANCE = 3; 
 const DEFAULT_SHEET_WIDTH = 2440;
@@ -62,7 +62,7 @@ export default function SpecialFeaturePage() {
       setAvailableNestingJobs([]);
       toast({ title: "Error", description: "Could not load saved nesting jobs.", variant: "destructive"});
     }
-  }, [toast]);
+  }, [toast]); // toast is stable
 
   React.useEffect(() => {
     loadNestingJobsFromStorage();
@@ -105,8 +105,8 @@ export default function SpecialFeaturePage() {
       toast({ title: "Error", description: "Could not clear saved nesting jobs.", variant: "destructive" });
     }
   };
-
-  const generatePartColorMap = (parts: InputPart[]): Map<string, string> => {
+  
+  const generatePartColorMap = React.useCallback((parts: InputPart[]): Map<string, string> => {
     const map = new Map<string, string>();
     let colorIndex = 0;
     parts.forEach(part => {
@@ -117,10 +117,10 @@ export default function SpecialFeaturePage() {
       }
     });
     return map;
-  };
-  
-  const renderSVGs = (layoutData: SheetLayout[], pcm: Map<string, string>) => {
-    if (!layoutData) return null;
+  }, []); // PART_COLORS is stable
+
+  const renderSVGs = React.useCallback((layoutData: SheetLayout[], pcm: Map<string, string>) => {
+    if (!layoutData || layoutData.length === 0 || pcm.size === 0) return null;
     return layoutData.map((sheet, index) => (
       <div key={`sheet-${index}`} className="mb-6 p-3 border rounded-lg shadow-sm bg-white">
         <h4 className="font-bold text-base mb-2 text-gray-700">
@@ -182,7 +182,48 @@ export default function SpecialFeaturePage() {
         </svg>
       </div>
     ));
-  };
+  }, []); // KERF_ALLOWANCE is stable
+
+  React.useEffect(() => {
+    if (packedLayoutData && packedLayoutData.length > 0) {
+      let partsForColorMap: InputPart[] = [];
+      try {
+        const parsedParts = JSON.parse(partsListData);
+        if (Array.isArray(parsedParts)) {
+            partsForColorMap = parsedParts;
+        } else {
+            console.warn("Parsed partsListData is not an array. Using fallback for color map.");
+        }
+      } catch {
+        // Fallback: try to derive unique part names from packedLayoutData for color mapping
+        console.warn("Failed to parse partsListData. Using fallback for color map generation.");
+        const uniquePartDefs = new Map<string, InputPart>();
+        packedLayoutData.forEach(sheet => {
+          sheet.parts.forEach(part => {
+            const key = part.originalName || part.name;
+            if (!uniquePartDefs.has(key)) {
+              uniquePartDefs.set(key, {
+                name: part.name,
+                originalName: part.originalName,
+                width: part.originalWidth || part.width,
+                height: part.originalHeight || part.height,
+                qty: 1, 
+              });
+            }
+          });
+        });
+        partsForColorMap = Array.from(uniquePartDefs.values());
+      }
+
+      const newPartColorMap = generatePartColorMap(partsForColorMap);
+      setPartColorMap(newPartColorMap); 
+      setVisualizedLayout(renderSVGs(packedLayoutData, newPartColorMap));
+    } else {
+      setVisualizedLayout(null);
+      setPartColorMap(new Map());
+    }
+  }, [packedLayoutData, partsListData, generatePartColorMap, renderSVGs]);
+
 
   const handleClientSideNesting = async () => {
     setIsLoading(true);
@@ -204,7 +245,7 @@ export default function SpecialFeaturePage() {
       }
 
       for (const rawPart of inputPartsRaw) {
-        if (
+         if (
           typeof rawPart.name !== 'string' ||
           typeof rawPart.width !== 'number' || !(rawPart.width > 0) ||
           typeof rawPart.height !== 'number' || !(rawPart.height > 0) ||
@@ -218,7 +259,7 @@ export default function SpecialFeaturePage() {
           height: rawPart.height,
           qty: rawPart.qty,
           material: rawPart.material,
-          originalName: rawPart.name,
+          originalName: rawPart.name, 
           originalWidth: rawPart.width,
           originalHeight: rawPart.height,
         });
@@ -228,9 +269,6 @@ export default function SpecialFeaturePage() {
         throw new Error("No parts provided in the list.");
       }
       
-      const pcm = generatePartColorMap(validatedInputParts);
-      setPartColorMap(pcm);
-
       if (selectedClientAlgorithm === 'rectpack2d') {
         toast({ title: "Processing...", description: "Using Rectpack2D (Potpack Client-Side)." });
         await new Promise(resolve => setTimeout(resolve, 100)); 
@@ -255,13 +293,13 @@ export default function SpecialFeaturePage() {
         let sheetId = 1;
 
         while (remainingPartsToPack.length > 0 && sheetId <= MAX_SHEETS_PER_JOB) {
-          const partsForCurrentSheetAttempt = [...remainingPartsToPack];
-          const stats: PotpackStats = potpack(partsForCurrentSheetAttempt);
+          const partsForCurrentSheetAttempt = [...remainingPartsToPack]; // potpack mutates this array
+          const stats: PotpackStats = potpack(partsForCurrentSheetAttempt); // Mutates partsForCurrentSheetAttempt
           
           const currentSheetParts: PackedPart[] = [];
           const stillRemainingAfterSheet: PotpackBox[] = [];
 
-          for (const packedBox of partsForCurrentSheetAttempt) {
+          for (const packedBox of partsForCurrentSheetAttempt) { // Iterate over the mutated array
             if (packedBox.x !== undefined && packedBox.y !== undefined &&
                 (packedBox.x + packedBox.w) <= DEFAULT_SHEET_WIDTH &&
                 (packedBox.y + packedBox.h) <= DEFAULT_SHEET_HEIGHT) {
@@ -278,7 +316,7 @@ export default function SpecialFeaturePage() {
                 originalHeight: packedBox.originalHeight,
               });
             } else {
-              delete packedBox.x; delete packedBox.y; 
+              delete packedBox.x; delete packedBox.y; // Ensure it's marked as not packed for next sheet
               stillRemainingAfterSheet.push(packedBox);
             }
           }
@@ -339,24 +377,6 @@ export default function SpecialFeaturePage() {
       setIsLoading(false);
     }
   };
-
-  React.useEffect(() => {
-    if (packedLayoutData && packedLayoutData.length > 0) {
-      let partsForColorMap: InputPart[] = [];
-      try {
-          partsForColorMap = JSON.parse(partsListData);
-      } catch { /* ignore */ }
-      
-      if(partsForColorMap.length > 0){
-         const pcm = generatePartColorMap(partsForColorMap);
-         setPartColorMap(pcm);
-      }
-      setVisualizedLayout(renderSVGs(packedLayoutData, partColorMap));
-    } else {
-      setVisualizedLayout(null);
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps 
-  }, [packedLayoutData, partColorMap]); 
 
 
   const handleServerSideNesting = async () => {
