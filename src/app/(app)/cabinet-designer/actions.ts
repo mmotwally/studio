@@ -1,53 +1,59 @@
 
 'use server';
 
-import type { CalculatedCabinet, CabinetCalculationInput, CabinetPart, AccessoryItem, CabinetTemplateData, PartDefinition, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer, DrawerPartCalculation, CustomFormulaEntry, FormulaDimensionType, AccessoryDefinition, TemplateAccessoryEntry } from './types';
-import { PREDEFINED_ACCESSORIES } from './types';
+import type { CalculatedCabinet, CabinetCalculationInput, CabinetPart, AccessoryItem, CabinetTemplateData, PartDefinition, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer, DrawerPartCalculation, CustomFormulaEntry, FormulaDimensionType, AccessoryDefinitionDB, PredefinedAccessory, MaterialDefinitionDB, PredefinedMaterialSimple, TemplateAccessoryEntry } from './types';
+import { PREDEFINED_ACCESSORIES, PREDEFINED_MATERIALS } from './types';
 import { openDb } from '@/lib/database';
 import { revalidatePath } from 'next/cache';
+import { Database } from 'sqlite';
 
-// --- Configuration Constants (would ideally come from database/settings or template parameters) ---
-const PANEL_THICKNESS = 18; // mm -> PT (Default, will be overridden by template if custom template provides PT)
-const BACK_PANEL_THICKNESS = 3; // mm -> BPT
-const BACK_PANEL_OFFSET = 10; // mm inset from back edge of carcass -> BPO
-const DOOR_GAP = 2; // mm total side/vertical gap for a door (e.g., 1mm each side/top/bottom) -> DG
-const DOOR_GAP_CENTER = 3; // mm gap between two doors -> DCG
-const TOP_RAIL_DEPTH = 80; // mm width of top rails -> TRD
+// --- Configuration Constants (Defaults, can be overridden by template parameters or material definitions) ---
+const DEFAULT_PANEL_THICKNESS = 18; // mm -> PT
+const DEFAULT_BACK_PANEL_THICKNESS = 3; // mm -> BPT
+const DEFAULT_BACK_PANEL_OFFSET = 10; // mm inset from back edge of carcass -> BPO
+const DEFAULT_DOOR_GAP = 2; // mm total side/vertical gap for a door -> DG
+const DEFAULT_DOOR_GAP_CENTER = 3; // mm gap between two doors -> DCG
+const DEFAULT_TOP_RAIL_DEPTH = 80; // mm width of top rails -> TRD
 
-// Material Costs (placeholders, would come from a MaterialDefinition database)
-const COST_PER_SQM_PANEL_MM = 25.0 / (1000*1000); // e.g., $25 per square meter for 18mm MDF/Plywood
-const COST_PER_SQM_BACK_PANEL_MM = 10.0 / (1000*1000); // e.g., $10 per square meter for 3mm HDF
-const COST_PER_METER_EDGE_BAND = 0.5;
-
-// Create a map for quick lookup of predefined accessory costs and names
-const PREDEFINED_ACCESSORIES_MAP: Map<string, AccessoryDefinition> = new Map(
-  PREDEFINED_ACCESSORIES.map(acc => [acc.id, acc])
-);
+// Material Costs (Fallbacks, will be overridden by MaterialDefinitionDB if available)
+const FALLBACK_COST_PER_SQM_PANEL_MM = 25.0 / (1000*1000); 
+const FALLBACK_COST_PER_SQM_BACK_PANEL_MM = 10.0 / (1000*1000); 
+const FALLBACK_COST_PER_METER_EDGE_BAND = 0.5;
 
 
-/**
- * Evaluates a simple formula string.
- * THIS IS A VERY BASIC PLACEHOLDER. A real implementation would need a robust math expression parser.
- */
+// Helper to build a combined map of predefined and DB-defined accessories
+async function getCombinedAccessoryMap(db: Database): Promise<Map<string, {name: string, unitCost: number}>> {
+    const combinedMap = new Map<string, {name: string, unitCost: number}>();
+    PREDEFINED_ACCESSORIES.forEach(acc => combinedMap.set(acc.id, { name: acc.name, unitCost: acc.unitCost }));
+    
+    const customAccessories = await getAccessoryDefinitionsAction(db); // Pass db instance
+    customAccessories.forEach(acc => combinedMap.set(acc.id, { name: acc.name, unitCost: acc.unitCost }));
+    return combinedMap;
+}
+
+// Helper to build a combined map of predefined and DB-defined materials
+async function getCombinedMaterialMap(db: Database): Promise<Map<string, {name: string, costPerSqm?: number | null, thickness?: number | null }>> {
+    const combinedMap = new Map<string, {name: string, costPerSqm?: number | null, thickness?: number | null}>();
+    PREDEFINED_MATERIALS.forEach(mat => combinedMap.set(mat.id, { name: mat.name, costPerSqm: mat.costPerSqm, thickness: mat.thickness }));
+
+    const customMaterials = await getMaterialDefinitionsAction(db); // Pass db instance
+    customMaterials.forEach(mat => combinedMap.set(mat.id, { name: mat.name, costPerSqm: mat.costPerSqm, thickness: mat.thickness }));
+    return combinedMap;
+}
+
+
 function evaluateFormula(formula: string | undefined, params: { W: number, H: number, D: number, [key: string]: number | undefined }): number {
   if (typeof formula !== 'string' || !formula.trim()) {
-    return 0; // Or handle as an error, perhaps default to a known parameter if it makes sense
+    return 0; 
   }
-  // Make parameters available in the eval scope. DANGEROUS with real user input.
-  // Extract known main dimensions and spread the rest of the template parameters
   const { W, H, D, ...templateParams } = params;
   const evalScope = { W, H, D, ...templateParams };
 
   try {
-    // Extremely simplified and unsafe for general use.
-    // A proper library like math.js or a custom parser is needed.
-    // Basic check for allowed chars (alphanumeric, math operators, parens, decimal point, space)
-    // This regex is still very permissive for an `eval` call.
-    if (formula.match(/^[a-zA-Z0-9.+\-*/\s()_]*$/)) { // Added underscore for param names
-      // Construct the evaluation string by defining variables in the scope
+    if (formula.match(/^[a-zA-Z0-9.+\-*/\s()_]*$/)) { 
       let evalString = '';
       for (const key in evalScope) {
-        if (evalScope[key] !== undefined && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) { // Ensure valid JS variable names
+        if (evalScope[key] !== undefined && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) { 
           evalString += `const ${key} = ${evalScope[key]}; `;
         }
       }
@@ -63,14 +69,11 @@ function evaluateFormula(formula: string | undefined, params: { W: number, H: nu
     throw new Error("Invalid characters in formula for backend evaluation.");
   } catch (e) {
     console.error(`Error evaluating formula "${formula}" with params ${JSON.stringify(params)}:`, e);
-    return 0; // Or throw error
+    return 0; 
   }
 }
 
 
-/**
- * Calculates the parts and estimated cost for a given cabinet.
- */
 export async function calculateCabinetDetails(
   input: CabinetCalculationInput
 ): Promise<{ success: boolean; data?: CalculatedCabinet; error?: string }> {
@@ -79,53 +82,59 @@ export async function calculateCabinetDetails(
     return { success: false, error: 'Dimensions must be positive numbers.' };
   }
   
+  const db = await openDb();
+  const accessoryDefinitionsMap = await getCombinedAccessoryMap(db);
+  const materialDefinitionsMap = await getCombinedMaterialMap(db);
+  
   let templateToUse = input.customTemplate;
 
-  // If customTemplate is not directly provided, but cabinetType refers to a DB template ID, try to load it.
-  if (!templateToUse && input.cabinetType && input.cabinetType !== 'standard_base_2_door') { // Add more predefined checks if needed
+  if (!templateToUse && input.cabinetType && input.cabinetType !== 'standard_base_2_door') { 
     const dbTemplate = await getCabinetTemplateByIdAction(input.cabinetType);
     if (dbTemplate) {
       templateToUse = dbTemplate;
     }
   }
 
-
   const W = input.width;
   const H = input.height;
   const D = input.depth;
 
   const parts: CabinetPart[] = [];
-  let totalPanelArea_sqmm = 0;
-  let totalBackPanelArea_sqmm = 0;
+  let totalMaterialCost = 0;
   let totalEdgeBandLength_mm = 0;
+  // Specific panel area tracking for summary, not directly for cost if materials have own costs
+  let totalPanelArea_sqmm = 0; 
+  let totalBackPanelArea_sqmm = 0;
 
-  // --- LOGIC FOR CUSTOM TEMPLATES (from input or DB) ---
+
   if (templateToUse) {
     const template = templateToUse;
-    // Combine main dimensions with template-specific parameters
     const formulaParams = {
       W, H, D,
-      ...template.parameters // PT, BPT, BPO, DG, DCG, TRD, B, DW, DD, DH, Clearance etc.
+      ...template.parameters,
+      PT: template.parameters.PT || DEFAULT_PANEL_THICKNESS,
+      BPT: template.parameters.BPT || DEFAULT_BACK_PANEL_THICKNESS,
+      BPO: template.parameters.BPO || DEFAULT_BACK_PANEL_OFFSET,
     };
-
-    // Ensure PT is available, either from template or a default if not set.
-    const currentPanelThickness = template.parameters.PT || PANEL_THICKNESS;
-    const currentBackPanelThickness = template.parameters.BPT || BACK_PANEL_THICKNESS;
 
     for (const partDef of template.parts) {
       const quantity = evaluateFormula(partDef.quantityFormula, formulaParams);
-      if (quantity <= 0) continue; // Skip if quantity is zero or less
+      if (quantity <= 0) continue; 
 
       const partWidth = evaluateFormula(partDef.widthFormula, formulaParams);
       const partHeight = evaluateFormula(partDef.heightFormula, formulaParams);
       
+      const materialInfo = materialDefinitionsMap.get(partDef.materialId);
       let partThickness: number;
+
       if (partDef.thicknessFormula) {
         partThickness = evaluateFormula(partDef.thicknessFormula, formulaParams);
-      } else if (partDef.partType === 'Back Panel' && template.parameters.BPT !== undefined) {
-         partThickness = evaluateFormula('BPT', formulaParams);
+      } else if (materialInfo?.thickness) {
+        partThickness = materialInfo.thickness;
+      } else if (partDef.partType === 'Back Panel') {
+         partThickness = formulaParams.BPT;
       } else {
-        partThickness = evaluateFormula('PT', formulaParams); 
+        partThickness = formulaParams.PT; 
       }
       
       if (partWidth <=0 || partHeight <=0 || partThickness <=0) {
@@ -133,8 +142,8 @@ export async function calculateCabinetDetails(
         continue;
       }
 
-      const material = `${partThickness.toFixed(0)}mm ${partDef.partType === 'Back Panel' ? 'HDF/Plywood' : 'Panel'}`; 
-
+      const materialDisplayName = materialInfo ? `${materialInfo.name} (${partThickness.toFixed(0)}mm)` : `${partThickness.toFixed(0)}mm Panel (Unknown Material ID: ${partDef.materialId})`;
+      
       let edgeBandingLength = 0;
       const appliedEdges: string[] = [];
       if (partDef.edgeBanding) {
@@ -152,78 +161,74 @@ export async function calculateCabinetDetails(
         width: partWidth,
         height: partHeight,
         thickness: partThickness,
-        material: material, 
+        material: materialDisplayName, 
         notes: partDef.notes || '',
         edgeBanding: appliedEdges.length > 0 ? { front: partDef.edgeBanding?.front ? partHeight : 0, back: partDef.edgeBanding?.back ? partHeight : 0, top: partDef.edgeBanding?.top ? partWidth : 0, bottom: partDef.edgeBanding?.bottom ? partWidth : 0 } : undefined,
         grainDirection: partDef.grainDirection,
       });
 
+      const partAreaSqMM = partWidth * partHeight;
+      const materialCostPerSqMM = (materialInfo?.costPerSqm ?? (partDef.partType === 'Back Panel' ? FALLBACK_COST_PER_SQM_BACK_PANEL_MM * DEFAULT_BACK_PANEL_THICKNESS : FALLBACK_COST_PER_SQM_PANEL_MM * DEFAULT_PANEL_THICKNESS)) / (1000*1000);
+      totalMaterialCost += quantity * partAreaSqMM * materialCostPerSqMM;
+
       if (partDef.partType === 'Back Panel') {
-        totalBackPanelArea_sqmm += (quantity * partWidth * partHeight);
+        totalBackPanelArea_sqmm += (quantity * partAreaSqMM);
       } else {
-        totalPanelArea_sqmm += (quantity * partWidth * partHeight);
+        totalPanelArea_sqmm += (quantity * partAreaSqMM);
       }
     }
     
     const accessories: AccessoryItem[] = [];
-    // Add accessories defined in template.accessories
     if (template.accessories && Array.isArray(template.accessories)) {
-        for (const accDef of template.accessories) {
-            const accQty = Math.round(evaluateFormula(accDef.quantityFormula, formulaParams));
+        for (const accEntry of template.accessories) {
+            const accQty = Math.round(evaluateFormula(accEntry.quantityFormula, formulaParams));
             if (accQty <= 0) continue;
 
-            const predefinedAcc = PREDEFINED_ACCESSORIES_MAP.get(accDef.accessoryId);
-            if (predefinedAcc) {
+            const accDefinition = accessoryDefinitionsMap.get(accEntry.accessoryId);
+            if (accDefinition) {
                 accessories.push({
-                    id: accDef.accessoryId,
-                    name: predefinedAcc.name,
+                    id: accEntry.accessoryId,
+                    name: accDefinition.name,
                     quantity: accQty,
-                    unitCost: predefinedAcc.unitCost,
-                    totalCost: accQty * predefinedAcc.unitCost,
-                    notes: accDef.notes,
+                    unitCost: accDefinition.unitCost,
+                    totalCost: accQty * accDefinition.unitCost,
+                    notes: accEntry.notes,
                 });
             } else {
-                console.warn(`Accessory with ID "${accDef.accessoryId}" not found in predefined list. Skipping.`);
-                // Fallback: add with placeholder cost/name if you want to still include it
-                // accessories.push({
-                //     id: accDef.accessoryId,
-                //     name: accDef.accessoryId.replace(/_/g, ' ').split('-').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ') + " (Custom)",
-                //     quantity: accQty,
-                //     unitCost: 0.01, // Placeholder cost
-                //     totalCost: accQty * 0.01,
-                //     notes: accDef.notes,
-                // });
+                 accessories.push({
+                    id: accEntry.accessoryId,
+                    name: accEntry.accessoryId.replace(/_/g, ' ').split('-').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ') + " (Custom/Unknown)",
+                    quantity: accQty,
+                    unitCost: 0.01, 
+                    totalCost: accQty * 0.01,
+                    notes: accEntry.notes || "Accessory definition not found.",
+                });
             }
         }
     } else {
-        // Fallback for older templates or if accessories block is missing - basic door/shelf hardware
+        // Fallback for older templates or if accessories block is missing
         if (template.parts.some(p => p.partType === 'Door' || p.partType === 'Doors')) {
             const doorCount = template.parts.reduce((sum, p) => (p.partType === 'Door' || p.partType === 'Doors') ? sum + evaluateFormula(p.quantityFormula, formulaParams) : sum, 0);
-            const hingeAcc = PREDEFINED_ACCESSORIES_MAP.get("HINGE_STD_FO");
-            const handleAcc = PREDEFINED_ACCESSORIES_MAP.get("HANDLE_STD_PULL");
-            if(hingeAcc) accessories.push({ id: hingeAcc.id, name: hingeAcc.name, quantity: doorCount, unitCost: hingeAcc.unitCost, totalCost: hingeAcc.unitCost * doorCount });
-            if(handleAcc) accessories.push({ id: handleAcc.id, name: handleAcc.name, quantity: doorCount, unitCost: handleAcc.unitCost, totalCost: handleAcc.unitCost * doorCount });
+            const hingeDef = accessoryDefinitionsMap.get("HINGE_STD_FO");
+            const handleDef = accessoryDefinitionsMap.get("HANDLE_STD_PULL");
+            if(hingeDef) accessories.push({ id: hingeDef.id, name: hingeDef.name, quantity: doorCount * 2, unitCost: hingeDef.unitCost, totalCost: hingeDef.unitCost * doorCount * 2 });
+            if(handleDef) accessories.push({ id: handleDef.id, name: handleDef.name, quantity: doorCount, unitCost: handleDef.unitCost, totalCost: handleDef.unitCost * doorCount });
         }
         if (template.parts.some(p => p.partType === 'Fixed Shelf' || p.partType === 'Mobile Shelf')) {
             const shelfCount = template.parts.reduce((sum, p) => (p.partType === 'Fixed Shelf' || p.partType === 'Mobile Shelf') ? sum + evaluateFormula(p.quantityFormula, formulaParams) : sum, 0);
-             const shelfPinAcc = PREDEFINED_ACCESSORIES_MAP.get("SHELF_PIN_STD");
-            if(shelfPinAcc) accessories.push({ id: shelfPinAcc.id, name: shelfPinAcc.name, quantity: shelfCount * 4, unitCost: shelfPinAcc.unitCost, totalCost: shelfPinAcc.unitCost * shelfCount * 4 });
+            const shelfPinDef = accessoryDefinitionsMap.get("SHELF_PIN_STD");
+            if(shelfPinDef) accessories.push({ id: shelfPinDef.id, name: shelfPinDef.name, quantity: shelfCount * 4, unitCost: shelfPinDef.unitCost, totalCost: shelfPinDef.unitCost * shelfCount * 4 });
         }
     }
 
-
     const totalAccessoryCost = accessories.reduce((sum, acc) => sum + acc.totalCost, 0);
-    const estimatedPanelMaterialCost = totalPanelArea_sqmm * (COST_PER_SQM_PANEL_MM / currentPanelThickness * currentPanelThickness); 
-    const estimatedBackPanelMaterialCost = totalBackPanelArea_sqmm * (COST_PER_SQM_BACK_PANEL_MM / currentBackPanelThickness * currentBackPanelThickness); 
-    const estimatedEdgeBandCost = (totalEdgeBandLength_mm / 1000) * COST_PER_METER_EDGE_BAND;
-
-    const estimatedMaterialCost = estimatedPanelMaterialCost + estimatedBackPanelMaterialCost + estimatedEdgeBandCost;
-    const estimatedTotalCost = estimatedMaterialCost + totalAccessoryCost;
+    const estimatedEdgeBandCost = (totalEdgeBandLength_mm / 1000) * FALLBACK_COST_PER_METER_EDGE_BAND;
+    const estimatedTotalCost = totalMaterialCost + estimatedEdgeBandCost + totalAccessoryCost;
 
     const calculatedCabinet: CalculatedCabinet = {
       parts,
       accessories,
-      estimatedMaterialCost: parseFloat(estimatedMaterialCost.toFixed(2)),
+      estimatedMaterialCost: parseFloat(totalMaterialCost.toFixed(2)),
       estimatedAccessoryCost: parseFloat(totalAccessoryCost.toFixed(2)),
       estimatedTotalCost: parseFloat(estimatedTotalCost.toFixed(2)),
       totalPanelAreaMM: totalPanelArea_sqmm,
@@ -234,109 +239,83 @@ export async function calculateCabinetDetails(
   }
   // --- LOGIC FOR HARDCODED 'standard_base_2_door' ---
   else if (input.cabinetType === 'standard_base_2_door') {
+    // (Existing hardcoded logic for standard_base_2_door remains largely unchanged, 
+    // but uses FALLBACK costs and DEFAULT thicknesses. 
+    // It could be refactored to use materialDefinitionsMap too if desired for consistency)
     if (input.width < 300 || input.width > 1200 || input.height < 500 || input.height > 900 || input.depth < 300 || input.depth > 700) {
       return { success: false, error: 'Dimensions are outside typical ranges for a standard base cabinet. Please check values (W:300-1200, H:500-900, D:300-700).' };
     }
-    const params = {
-      W, H, D,
-      PT: PANEL_THICKNESS, 
-      BPT: BACK_PANEL_THICKNESS,
-      BPO: BACK_PANEL_OFFSET,
-      TRD: TOP_RAIL_DEPTH,
-      DCG: DOOR_GAP_CENTER,
-      DG: DOOR_GAP
-    };
+    const params = { W, H, D, PT: DEFAULT_PANEL_THICKNESS, BPT: DEFAULT_BACK_PANEL_THICKNESS, BPO: DEFAULT_BACK_PANEL_OFFSET, TRD: DEFAULT_TOP_RAIL_DEPTH, DCG: DEFAULT_DOOR_GAP_CENTER, DG: DEFAULT_DOOR_GAP };
+    const currentPanelThickness = params.PT;
+    const currentBackPanelThickness = params.BPT;
 
-    const sidePanelQty = evaluateFormula("2", params);
-    const sidePanelWidth = evaluateFormula("D", params);
-    const sidePanelHeight = evaluateFormula("H", params);
-    const sidePanelThickness = evaluateFormula("PT", params);
-    parts.push({
-      name: 'Side Panel', partType: 'Side Panel', quantity: sidePanelQty, width: sidePanelWidth, height: sidePanelHeight, thickness: sidePanelThickness,
-      material: `${sidePanelThickness}mm Panel`, edgeBanding: { front: sidePanelHeight }
-    });
-    totalPanelArea_sqmm += (sidePanelQty * sidePanelWidth * sidePanelHeight);
+    // Side Panels
+    const sidePanelQty = 2;
+    const sidePanelWidth = params.D;
+    const sidePanelHeight = params.H;
+    parts.push({ name: 'Side Panel', partType: 'Side Panel', quantity: sidePanelQty, width: sidePanelWidth, height: sidePanelHeight, thickness: currentPanelThickness, material: `${currentPanelThickness}mm Panel`, edgeBanding: { front: sidePanelHeight }});
+    totalPanelArea_sqmm += sidePanelQty * sidePanelWidth * sidePanelHeight;
     totalEdgeBandLength_mm += sidePanelQty * sidePanelHeight;
 
-    const bottomPanelQty = evaluateFormula("1", params);
-    const bottomPanelWidth = evaluateFormula("W - 2*PT", params);
-    const bottomPanelDepth = evaluateFormula("D", params);
-    const bottomPanelThickness = evaluateFormula("PT", params);
-    parts.push({
-      name: 'Bottom Panel', partType: 'Bottom Panel', quantity: bottomPanelQty, width: bottomPanelWidth, height: bottomPanelDepth, thickness: bottomPanelThickness,
-      material: `${bottomPanelThickness}mm Panel`, edgeBanding: { front: bottomPanelWidth }
-    });
-    totalPanelArea_sqmm += (bottomPanelQty * bottomPanelWidth * bottomPanelDepth);
+    // Bottom Panel
+    const bottomPanelQty = 1;
+    const bottomPanelWidth = params.W - 2 * currentPanelThickness;
+    const bottomPanelDepth = params.D;
+    parts.push({ name: 'Bottom Panel', partType: 'Bottom Panel', quantity: bottomPanelQty, width: bottomPanelWidth, height: bottomPanelDepth, thickness: currentPanelThickness, material: `${currentPanelThickness}mm Panel`, edgeBanding: { front: bottomPanelWidth }});
+    totalPanelArea_sqmm += bottomPanelQty * bottomPanelWidth * bottomPanelDepth;
     totalEdgeBandLength_mm += bottomPanelQty * bottomPanelWidth;
 
-    const topRailQty = evaluateFormula("1", params);
-    const topRailLength = evaluateFormula("W - 2*PT", params);
-    const topRailDepthVal = evaluateFormula("TRD", params);
-    const topRailThickness = evaluateFormula("PT", params);
-    parts.push({ name: 'Top Rail (Front)', partType: 'Top Rail (Front)', quantity: topRailQty, width: topRailLength, height: topRailDepthVal, thickness: topRailThickness, material: `${topRailThickness}mm Panel`});
-    totalPanelArea_sqmm += (topRailQty * topRailLength * topRailDepthVal);
-    parts.push({ name: 'Top Rail (Back)', partType: 'Top Rail (Back)', quantity: topRailQty, width: topRailLength, height: topRailDepthVal, thickness: topRailThickness, material: `${topRailThickness}mm Panel`});
-    totalPanelArea_sqmm += (topRailQty * topRailLength * topRailDepthVal);
-
-    const shelfQty = evaluateFormula("1", params);
-    const shelfWidth = evaluateFormula("W - 2*PT", params);
-    const shelfDepth = evaluateFormula("D - BPO - BPT", params);
-    const shelfThickness = evaluateFormula("PT", params);
-    parts.push({
-      name: 'Shelf', partType: 'Fixed Shelf', quantity: shelfQty, width: shelfWidth, height: shelfDepth, thickness: shelfThickness,
-      material: `${shelfThickness}mm Panel`, notes: 'Adjust depth if back panel fitting differs', edgeBanding: { front: shelfWidth }
-    });
-    totalPanelArea_sqmm += (shelfQty * shelfWidth * shelfDepth);
+    // Top Rails
+    const topRailQty = 1; // Per front/back
+    const topRailLength = params.W - 2 * currentPanelThickness;
+    const topRailDepthVal = params.TRD;
+    parts.push({ name: 'Top Rail (Front)', partType: 'Top Rail (Front)', quantity: topRailQty, width: topRailLength, height: topRailDepthVal, thickness: currentPanelThickness, material: `${currentPanelThickness}mm Panel`});
+    totalPanelArea_sqmm += topRailQty * topRailLength * topRailDepthVal;
+    parts.push({ name: 'Top Rail (Back)', partType: 'Top Rail (Back)', quantity: topRailQty, width: topRailLength, height: topRailDepthVal, thickness: currentPanelThickness, material: `${currentPanelThickness}mm Panel`});
+    totalPanelArea_sqmm += topRailQty * topRailLength * topRailDepthVal;
+    
+    // Shelf
+    const shelfQty = 1;
+    const shelfWidth = params.W - 2*currentPanelThickness;
+    const shelfDepth = params.D - params.BPO - currentBackPanelThickness;
+    parts.push({ name: 'Shelf', partType: 'Fixed Shelf', quantity: shelfQty, width: shelfWidth, height: shelfDepth, thickness: currentPanelThickness, material: `${currentPanelThickness}mm Panel`, notes: 'Adjust depth if back panel fitting differs', edgeBanding: { front: shelfWidth }});
+    totalPanelArea_sqmm += shelfQty * shelfWidth * shelfDepth;
     totalEdgeBandLength_mm += shelfQty * shelfWidth;
 
-    const doorQty = evaluateFormula("2", params);
-    const doorHeight = evaluateFormula("H - DG", params);
-    const singleDoorWidth = evaluateFormula("(W - DG - DCG) / 2", params);
-    const doorThickness = evaluateFormula("PT", params);
-    parts.push({
-      name: 'Door', partType: 'Door', quantity: doorQty, width: singleDoorWidth, height: doorHeight, thickness: doorThickness,
-      material: `${doorThickness}mm Panel (Door Grade)`, edgeBanding: { front: singleDoorWidth, back: singleDoorWidth, top: doorHeight, bottom: doorHeight }
-    });
-    totalPanelArea_sqmm += (doorQty * singleDoorWidth * doorHeight);
-    totalEdgeBandLength_mm += doorQty * (singleDoorWidth * 2 + doorHeight * 2);
+    // Doors
+    const doorQty = 2;
+    const doorHeight = params.H - params.DG;
+    const singleDoorWidth = (params.W - params.DG - params.DCG) / 2;
+    parts.push({ name: 'Door', partType: 'Door', quantity: doorQty, width: singleDoorWidth, height: doorHeight, thickness: currentPanelThickness, material: `${currentPanelThickness}mm Panel (Door Grade)`, edgeBanding: { front: singleDoorWidth, back: singleDoorWidth, top: doorHeight, bottom: doorHeight } });
+    totalPanelArea_sqmm += doorQty * singleDoorWidth * doorHeight;
+    totalEdgeBandLength_mm += doorQty * (singleDoorWidth*2 + doorHeight*2);
 
-    const backPanelQty = evaluateFormula("1", params);
-    const backPanelWidth = evaluateFormula("W - 2*PT - 2", params); // Slightly smaller for fit
-    const backPanelHeight = evaluateFormula("H - 2*PT - 2", params); // Slightly smaller for fit
-    const backPanelActualThickness = evaluateFormula("BPT", params);
-    parts.push({
-      name: 'Back Panel', partType: 'Back Panel', quantity: backPanelQty, width: backPanelWidth, height: backPanelHeight, thickness: backPanelActualThickness,
-      material: `${backPanelActualThickness}mm HDF/Plywood`, notes: `Fits into a groove or is offset by ${BACK_PANEL_OFFSET}mm`
-    });
+    // Back Panel
+    const backPanelQty = 1;
+    const backPanelWidth = params.W - 2*currentPanelThickness - 2; // Slightly smaller for fit
+    const backPanelHeight = params.H - 2*currentPanelThickness - 2; // Slightly smaller for fit
+    parts.push({ name: 'Back Panel', partType: 'Back Panel', quantity: backPanelQty, width: backPanelWidth, height: backPanelHeight, thickness: currentBackPanelThickness, material: `${currentBackPanelThickness}mm HDF/Plywood`, notes: `Fits into a groove or is offset by ${params.BPO}mm`});
     totalBackPanelArea_sqmm += (backPanelQty * backPanelWidth * backPanelHeight);
-    
+
     const accessoriesStd: AccessoryItem[] = [];
-    const hingeAcc = PREDEFINED_ACCESSORIES_MAP.get("HINGE_STD_FO");
-    const handleAcc = PREDEFINED_ACCESSORIES_MAP.get("HANDLE_STD_PULL");
-    const shelfPinAcc = PREDEFINED_ACCESSORIES_MAP.get("SHELF_PIN_STD");
-
-    if(hingeAcc) accessoriesStd.push({ id: hingeAcc.id, name: hingeAcc.name, quantity: 2, unitCost: hingeAcc.unitCost, totalCost: hingeAcc.unitCost * 2 });
-    if(handleAcc) accessoriesStd.push({ id: handleAcc.id, name: handleAcc.name, quantity: 2, unitCost: handleAcc.unitCost, totalCost: handleAcc.unitCost * 2 });
-    if(shelfPinAcc) accessoriesStd.push({ id: shelfPinAcc.id, name: shelfPinAcc.name, quantity: 4, unitCost: shelfPinAcc.unitCost, totalCost: shelfPinAcc.unitCost * 4 });
-
+    const hingeDef = accessoryDefinitionsMap.get("HINGE_STD_FO");
+    const handleDef = accessoryDefinitionsMap.get("HANDLE_STD_PULL");
+    const shelfPinDef = accessoryDefinitionsMap.get("SHELF_PIN_STD");
+    if(hingeDef) accessoriesStd.push({ id: hingeDef.id, name: hingeDef.name, quantity: 4, unitCost: hingeDef.unitCost, totalCost: hingeDef.unitCost * 4 }); // 2 per door
+    if(handleDef) accessoriesStd.push({ id: handleDef.id, name: handleDef.name, quantity: 2, unitCost: handleDef.unitCost, totalCost: handleDef.unitCost * 2 });
+    if(shelfPinDef) accessoriesStd.push({ id: shelfPinDef.id, name: shelfPinDef.name, quantity: 4, unitCost: shelfPinDef.unitCost, totalCost: shelfPinDef.unitCost * 4 });
+    
     const totalAccessoryCostStd = accessoriesStd.reduce((sum, acc) => sum + acc.totalCost, 0);
-
-    const estimatedPanelMaterialCostStd = totalPanelArea_sqmm * COST_PER_SQM_PANEL_MM;
-    const estimatedBackPanelMaterialCostStd = totalBackPanelArea_sqmm * COST_PER_SQM_BACK_PANEL_MM;
-    const estimatedEdgeBandCostStd = (totalEdgeBandLength_mm / 1000) * COST_PER_METER_EDGE_BAND;
-
+    const estimatedPanelMaterialCostStd = totalPanelArea_sqmm * FALLBACK_COST_PER_SQM_PANEL_MM;
+    const estimatedBackPanelMaterialCostStd = totalBackPanelArea_sqmm * FALLBACK_COST_PER_SQM_BACK_PANEL_MM;
+    const estimatedEdgeBandCostStd = (totalEdgeBandLength_mm / 1000) * FALLBACK_COST_PER_METER_EDGE_BAND;
     const estimatedMaterialCostStd = estimatedPanelMaterialCostStd + estimatedBackPanelMaterialCostStd + estimatedEdgeBandCostStd;
     const estimatedTotalCostStd = estimatedMaterialCostStd + totalAccessoryCostStd;
 
-    const calculatedCabinetStd: CalculatedCabinet = {
-        parts, accessories: accessoriesStd, estimatedMaterialCost: parseFloat(estimatedMaterialCostStd.toFixed(2)),
-        estimatedAccessoryCost: parseFloat(totalAccessoryCostStd.toFixed(2)), estimatedTotalCost: parseFloat(estimatedTotalCostStd.toFixed(2)),
-        totalPanelAreaMM: totalPanelArea_sqmm, totalBackPanelAreaMM: totalBackPanelArea_sqmm,
-    };
-    return { success: true, data: calculatedCabinetStd };
+    return { success: true, data: { parts, accessories: accessoriesStd, estimatedMaterialCost: parseFloat(estimatedMaterialCostStd.toFixed(2)), estimatedAccessoryCost: parseFloat(totalAccessoryCostStd.toFixed(2)), estimatedTotalCost: parseFloat(estimatedTotalCostStd.toFixed(2)), totalPanelAreaMM: totalPanelArea_sqmm, totalBackPanelAreaMM: totalBackPanelArea_sqmm }};
+
   }
   else {
-    // Fallback for other predefined types not yet implemented for full formula calc or DB lookup
     return { success: false, error: `Selected cabinet type '${input.cabinetType}' calculation logic is not yet implemented beyond hardcoded or dynamic custom templates.` };
   }
 }
@@ -470,7 +449,7 @@ export async function saveCabinetTemplateAction(
 
     await db.run(
       `INSERT INTO cabinet_templates (id, name, type, previewImage, defaultDimensions, parameters, parts, accessories, createdAt, lastUpdated)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name = excluded.name,
          type = excluded.type,
@@ -479,7 +458,7 @@ export async function saveCabinetTemplateAction(
          parameters = excluded.parameters,
          parts = excluded.parts,
          accessories = excluded.accessories,
-         lastUpdated = datetime('now')`,
+         lastUpdated = excluded.lastUpdated`,
       id,
       templateData.name,
       templateData.type,
@@ -487,7 +466,9 @@ export async function saveCabinetTemplateAction(
       JSON.stringify(templateData.defaultDimensions),
       JSON.stringify(templateData.parameters),
       JSON.stringify(templateData.parts),
-      templateData.accessories ? JSON.stringify(templateData.accessories) : null
+      templateData.accessories ? JSON.stringify(templateData.accessories) : null,
+      templateData.createdAt || now, 
+      now 
     );
     revalidatePath('/cabinet-designer');
     return { success: true, id: id };
@@ -510,6 +491,8 @@ export async function getCabinetTemplatesAction(): Promise<CabinetTemplateData[]
       parameters: JSON.parse(row.parameters),
       parts: JSON.parse(row.parts),
       accessories: row.accessories ? JSON.parse(row.accessories) : [],
+      createdAt: row.createdAt,
+      lastUpdated: row.lastUpdated,
     }));
   } catch (error) {
     console.error("Failed to get cabinet templates:", error);
@@ -532,6 +515,8 @@ export async function getCabinetTemplateByIdAction(templateId: string): Promise<
       parameters: JSON.parse(row.parameters),
       parts: JSON.parse(row.parts),
       accessories: row.accessories ? JSON.parse(row.accessories) : [],
+      createdAt: row.createdAt,
+      lastUpdated: row.lastUpdated,
     };
   } catch (error) {
     console.error(`Failed to get cabinet template ${templateId}:`, error);
@@ -577,7 +562,7 @@ export async function saveCustomFormulaAction(
       description || null,
       createdAt
     );
-    revalidatePath('/cabinet-designer'); // To refresh dropdowns if they show custom formulas
+    revalidatePath('/cabinet-designer'); 
     return { success: true, id: id };
   } catch (error) {
     console.error("Failed to save custom formula:", error);
@@ -618,6 +603,104 @@ export async function deleteCustomFormulaAction(id: string): Promise<{ success: 
   } catch (error) {
     console.error("Failed to delete custom formula:", error);
     return { success: false, error: (error as Error).message };
+  }
+}
+
+// --- Material Definition Actions ---
+export async function saveMaterialDefinitionAction(
+  data: Omit<MaterialDefinitionDB, 'id' | 'createdAt' | 'lastUpdated'> & { id?: string }
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  const db = await openDb();
+  try {
+    const now = new Date().toISOString();
+    const id = data.id || crypto.randomUUID();
+
+    await db.run(
+      `INSERT INTO material_definitions (id, name, type, costPerSqm, costPerMeter, thickness, defaultSheetWidth, defaultSheetHeight, hasGrain, notes, createdAt, lastUpdated)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         type = excluded.type,
+         costPerSqm = excluded.costPerSqm,
+         costPerMeter = excluded.costPerMeter,
+         thickness = excluded.thickness,
+         defaultSheetWidth = excluded.defaultSheetWidth,
+         defaultSheetHeight = excluded.defaultSheetHeight,
+         hasGrain = excluded.hasGrain,
+         notes = excluded.notes,
+         lastUpdated = excluded.lastUpdated`,
+      id, data.name, data.type, data.costPerSqm, data.costPerMeter, data.thickness, data.defaultSheetWidth, data.defaultSheetHeight, data.hasGrain ? 1 : 0, data.notes,
+      data.id ? undefined : now, // Only set createdAt if it's a new record
+      now
+    );
+    revalidatePath('/cabinet-designer'); // Or specific settings page
+    return { success: true, id: id };
+  } catch (error) {
+    console.error("Failed to save material definition:", error);
+    if (error instanceof Error && error.message.includes("UNIQUE constraint failed: material_definitions.name")) {
+       return { success: false, error: `A material definition with the name "${data.name}" already exists.` };
+    }
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+export async function getMaterialDefinitionsAction(dbInstance?: Database): Promise<MaterialDefinitionDB[]> {
+  const db = dbInstance || await openDb();
+  try {
+    const rows = await db.all<any[]>("SELECT * FROM material_definitions ORDER BY name ASC");
+    return rows.map(row => ({
+      ...row,
+      hasGrain: Boolean(row.hasGrain),
+    }));
+  } catch (error) {
+    console.error("Failed to get material definitions:", error);
+    return [];
+  }
+}
+
+// --- Accessory Definition Actions ---
+export async function saveAccessoryDefinitionAction(
+  data: Omit<AccessoryDefinitionDB, 'id' | 'createdAt' | 'lastUpdated'> & { id?: string }
+): Promise<{ success: boolean; id?: string; error?: string }> {
+  const db = await openDb();
+  try {
+    const now = new Date().toISOString();
+    const id = data.id || crypto.randomUUID();
+
+    await db.run(
+      `INSERT INTO accessory_definitions (id, name, type, unitCost, description, supplierId, sku, createdAt, lastUpdated)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(id) DO UPDATE SET
+         name = excluded.name,
+         type = excluded.type,
+         unitCost = excluded.unitCost,
+         description = excluded.description,
+         supplierId = excluded.supplierId,
+         sku = excluded.sku,
+         lastUpdated = excluded.lastUpdated`,
+      id, data.name, data.type, data.unitCost, data.description, data.supplierId, data.sku,
+      data.id ? undefined : now,
+      now
+    );
+    revalidatePath('/cabinet-designer'); // Or specific settings page
+    return { success: true, id: id };
+  } catch (error) {
+    console.error("Failed to save accessory definition:", error);
+     if (error instanceof Error && error.message.includes("UNIQUE constraint failed: accessory_definitions.name")) {
+       return { success: false, error: `An accessory definition with the name "${data.name}" already exists.` };
+    }
+    return { success: false, error: (error as Error).message };
+  }
+}
+
+export async function getAccessoryDefinitionsAction(dbInstance?: Database): Promise<AccessoryDefinitionDB[]> {
+  const db = dbInstance || await openDb();
+  try {
+    const rows = await db.all<any[]>("SELECT * FROM accessory_definitions ORDER BY name ASC");
+    return rows;
+  } catch (error) {
+    console.error("Failed to get accessory definitions:", error);
+    return [];
   }
 }
 

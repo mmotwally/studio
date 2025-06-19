@@ -76,20 +76,56 @@ export interface CabinetCalculationInput {
 
 // --- Structures for Database-Driven Cabinet Templates ---
 
-export interface MaterialDefinition {
-  id: string; 
-  name: string; 
-  type: "panel" | "edge_band" | "other";
-  costPerSqm?: number; 
-  costPerMeter?: number; 
-  thickness?: number; // mm, for panels
-  defaultSheetWidth?: number; 
-  defaultSheetHeight?: number; 
-  hasGrain?: boolean; 
+// For user-defined material types via UI
+export interface MaterialDefinitionDB {
+  id: string;
+  name: string;
+  type: "panel" | "edge_band" | "other"; // e.g. panel, edge_band
+  costPerSqm?: number | null;
+  costPerMeter?: number | null; // for edge banding
+  thickness?: number | null; // mm, for panels
+  defaultSheetWidth?: number | null;
+  defaultSheetHeight?: number | null;
+  hasGrain: boolean; // 0 or 1 in DB, boolean here
+  notes?: string | null;
+  createdAt: string;
+  lastUpdated: string;
 }
 
-// Updated AccessoryDefinition for predefined accessories with costs
-export interface AccessoryDefinition {
+// For hardcoded PREDEFINED_MATERIALS in types.ts (simple version)
+export interface PredefinedMaterialSimple {
+  id: string;
+  name: string;
+  hasGrain?: boolean;
+  // If you want to hardcode costs for these too, add them here
+  costPerSqm?: number; 
+  thickness?: number;
+}
+
+
+export const PREDEFINED_MATERIALS: PredefinedMaterialSimple[] = [
+    { id: "STD_PANEL_18MM", name: "Standard Panel 18mm", costPerSqm: 25.0, thickness: 18 },
+    { id: "STD_BACK_PANEL_3MM", name: "Standard Back Panel 3mm", costPerSqm: 10.0, thickness: 3 },
+    { id: "DOOR_GRADE_PANEL_18MM", name: "Door Grade Panel 18mm", costPerSqm: 30.0, thickness: 18, hasGrain: true },
+    { id: "SHELF_PANEL_18MM", name: "Shelf Panel 18mm", costPerSqm: 22.0, thickness: 18 },
+    { id: "OAK_VENEER_18MM", name: "Oak Veneer Panel 18mm", hasGrain: true, costPerSqm: 45.0, thickness: 18 },
+];
+
+// For user-defined accessory types via UI
+export interface AccessoryDefinitionDB {
+  id: string;
+  name: string;
+  type: "hinge" | "drawer_slide" | "handle" | "shelf_pin" | "leg" | "screw" | "other";
+  unitCost: number;
+  description?: string | null;
+  supplierId?: string | null; // Optional: link to a supplier
+  sku?: string | null; // Optional: supplier SKU
+  createdAt: string;
+  lastUpdated: string;
+}
+
+// For hardcoded PREDEFINED_ACCESSORIES in types.ts
+export interface PredefinedAccessory {
   id: string; 
   name: string;
   type: "hinge" | "drawer_slide" | "handle" | "shelf_pin" | "leg" | "screw" | "other";
@@ -97,13 +133,13 @@ export interface AccessoryDefinition {
   description?: string;
 }
 
-export const PREDEFINED_ACCESSORIES: AccessoryDefinition[] = [
-  { id: "HINGE_STD_FO", name: "Hinge, Standard Full Overlay (Pair)", type: "hinge", unitCost: 1.5 * 2, description: "Standard cabinet hinge for full overlay doors, sold as a pair." },
+export const PREDEFINED_ACCESSORIES: PredefinedAccessory[] = [
+  { id: "HINGE_STD_FO", name: "Hinge, Standard Full Overlay", type: "hinge", unitCost: 1.5, description: "Standard cabinet hinge for full overlay doors." },
   { id: "HANDLE_STD_PULL", name: "Handle, Standard Pull (128mm)", type: "handle", unitCost: 3.0, description: "Common metal pull handle, 128mm hole spacing." },
-  { id: "SHELF_PIN_STD", name: "Shelf Pin, Standard 5mm (Each)", type: "shelf_pin", unitCost: 0.1, description: "Standard 5mm metal shelf support pin." },
-  { id: "DRAWER_SLIDE_BLUM_STD", name: "Drawer Slide, Blum Standard (Pair, 500mm)", type: "drawer_slide", unitCost: 12.0, description: "Blum standard full extension drawer slide, 500mm." },
+  { id: "SHELF_PIN_STD", name: "Shelf Pin, Standard 5mm", type: "shelf_pin", unitCost: 0.1, description: "Standard 5mm metal shelf support pin." },
+  { id: "DRAWER_SLIDE_BLUM_STD", name: "Drawer Slide, Blum Standard (500mm)", type: "drawer_slide", unitCost: 12.0, description: "Blum standard full extension drawer slide, 500mm." },
   { id: "LEG_ADJUSTABLE_PLASTIC", name: "Leg, Adjustable Plastic (100-150mm)", type: "leg", unitCost: 1.2, description: "Adjustable plastic cabinet leg." },
-  { id: "SCREW_CONFIRMAT_7X50", name: "Screw, Confirmat 7x50mm (Each)", type: "screw", unitCost: 0.05, description: "Confirmat screw for strong cabinet joinery." },
+  { id: "SCREW_CONFIRMAT_7X50", name: "Screw, Confirmat 7x50mm", type: "screw", unitCost: 0.05, description: "Confirmat screw for strong cabinet joinery." },
 ];
 
 
@@ -118,24 +154,24 @@ export interface PartDefinition {
   partId: string; 
   nameLabel: string; 
   partType: CabinetPartType; 
-  cabinetContext?: CabinetTypeContext; // Context like Base, Wall, Drawer
+  cabinetContext?: CabinetTypeContext; 
   quantityFormula: string; 
   widthFormula: string; 
-  widthFormulaKey?: string; // Key if selected from predefined or ID of custom formula
+  widthFormulaKey?: string; 
   heightFormula: string; 
-  heightFormulaKey?: string; // Key if selected from predefined or ID of custom formula
-  materialId: string; 
+  heightFormulaKey?: string; 
+  materialId: string; // Can refer to PredefinedMaterialSimple.id or MaterialDefinitionDB.id
   thicknessFormula?: string; 
-  thicknessFormulaKey?: string; // Key if selected from predefined or ID of custom formula
-  quantityFormulaKey?: string; // Key if selected from predefined or ID of custom formula
+  thicknessFormulaKey?: string; 
+  quantityFormulaKey?: string; 
   edgeBanding?: EdgeBandingAssignment;
   grainDirection?: 'with' | 'reverse' | 'none' | null; 
   notes?: string;
 }
 
 export interface TemplateAccessoryEntry {
-  id: string; // Unique ID for this entry in the list
-  accessoryId: string; // Reference to PREDEFINED_ACCESSORIES.id
+  id: string; 
+  accessoryId: string; // Can refer to PredefinedAccessory.id or AccessoryDefinitionDB.id
   quantityFormula: string;
   notes?: string;
 }
@@ -144,7 +180,7 @@ export interface TemplateAccessoryEntry {
 export interface CabinetTemplateData {
   id: string; 
   name: string; 
-  type: "base" | "wall" | "tall" | "custom"; // Main type of cabinet template
+  type: "base" | "wall" | "tall" | "custom"; 
   previewImage?: string;
   defaultDimensions: {
     width: number;
@@ -152,79 +188,65 @@ export interface CabinetTemplateData {
     depth: number;
   };
   parameters: { 
-    PT: number; // PanelThickness
-    BPT?: number; // BackPanelThickness
-    BPO?: number; // BackPanelOffset / Back Panel Gap (from user as B)
-    DG?: number; // DoorGap (overall)
-    DCG?: number; // DoorCenterGap (between two doors)
-    TRD?: number; // TopRailDepth
-    B?: number; // Back Panel Gap (user added)
-    
-    // Drawer Specific Parameters (can be part of a drawer sub-assembly type later)
-    DW?: number; // Drawer Width (overall, often opening width)
-    DD?: number; // Drawer Depth (overall, often slide length or side panel depth)
-    DH?: number; // Drawer Height (often side panel height)
-    Clearance?: number; // Drawer slide clearance (total)
-    // TKH?: number; // Toe Kick Height (if applicable to the main cabinet type)
+    PT: number; 
+    BPT?: number; 
+    BPO?: number; 
+    DG?: number; 
+    DCG?: number; 
+    TRD?: number; 
+    B?: number; 
+    DW?: number; 
+    DD?: number; 
+    DH?: number; 
+    Clearance?: number; 
   };
   parts: PartDefinition[];
   accessories?: TemplateAccessoryEntry[];
+  createdAt?: string; 
+  lastUpdated?: string; 
 }
-
-// Example of predefined materials (would come from DB)
-export const PREDEFINED_MATERIALS: Array<{id: string; name: string; hasGrain?: boolean}> = [
-    { id: "Material1", name: "Material 1" },
-    { id: "Material2", name: "Material 2" },
-    { id: "Material3", name: "Material 3" },
-    { id: "MaterialGrain1", name: "Material Grain 1", hasGrain: true },
-    { id: "MaterialGrain2", name: "Material Grain 2", hasGrain: true },
-    { id: "MaterialGrain3", name: "Material Grain 3", hasGrain: true },
-];
 
 
 export interface PredefinedFormula {
-  key: string; // A unique key for predefined formulas (e.g., 'SIDE_BASE_STD_H')
-  name: string; // User-friendly name for the dropdown
+  key: string; 
+  name: string; 
   description: string;
   example?: string;
   partType: CabinetPartType | CabinetPartType[] | []; 
   context: CabinetTypeContext[] | null; 
   dimension: FormulaDimensionType; 
-  formula: string; // The actual formula string
+  formula: string; 
 }
 
 export interface CustomFormulaEntry {
-  id: string; // UUID from database
-  name: string; // User-defined name
-  formulaString: string; // The actual formula string
+  id: string; 
+  name: string; 
+  formulaString: string; 
   dimensionType: FormulaDimensionType;
-  description?: string;
+  description?: string | null;
   createdAt: string;
-  // Optional: part_types and cabinet_contexts could be added here if needed for filtering
-  // For UI consistency with PredefinedFormula, we might add a 'key' field equal to 'id'
-  // and a 'formula' field equal to 'formulaString' when merging lists.
 }
 
 export type CombinedFormulaItem = Omit<PredefinedFormula, 'key'> & {
-  id: string; // For Predefined, this could be the 'key'. For Custom, it's the DB 'id'.
-  isCustom: boolean; // Flag to distinguish
+  id: string; 
+  isCustom: boolean; 
 };
 
 
 // --- Drawer Set Calculator Types ---
 export interface DrawerPartCalculation {
-  name: string;         // "Side Panel", "Back Panel", "Bottom Panel", "Drawer Front"
+  name: string;         
   quantity: number;
   width: number;
-  height: number;       // For side panels, this is the 'depth' of the drawer box. For other panels, it's height.
-  thickness: number;    // Typically 'T'
+  height: number;       
+  thickness: number;    
   notes?: string;
 }
 
 export interface CalculatedDrawer {
   drawerNumber: number;
-  overallFrontHeight: number; // The height of the decorative drawer front
-  boxHeight: number;          // The height of the drawer box itself (sides, back) - This is drawerBoxSideHeight from input
+  overallFrontHeight: number; 
+  boxHeight: number;          
   parts: DrawerPartCalculation[];
 }
 
@@ -232,12 +254,12 @@ export interface DrawerSetCalculatorInput {
   cabinetInternalHeight: number;
   cabinetWidth: number;
   numDrawers: number;
-  drawerReveal: number;        // Gap between drawer fronts
-  panelThickness: number;      // T
-  drawerSlideClearanceTotal: number; // Total clearance for slides (e.g., 13mm for 6.5mm per side)
-  drawerBoxSideDepth: number;  // User-defined depth of the drawer box sides
-  drawerBoxSideHeight: number; // User-defined height of the drawer box sides (e.g., 100mm, 150mm)
-  customDrawerFrontHeights?: number[]; // Optional list of individual front heights
+  drawerReveal: number;        
+  panelThickness: number;      
+  drawerSlideClearanceTotal: number; 
+  drawerBoxSideDepth: number;  
+  drawerBoxSideHeight: number; 
+  customDrawerFrontHeights?: number[]; 
 }
 
 export interface DrawerSetCalculatorResult {
@@ -246,5 +268,13 @@ export interface DrawerSetCalculatorResult {
   calculatedDrawers: CalculatedDrawer[];
   totalFrontsHeightWithReveals?: number; 
   cabinetInternalHeight?: number; 
+}
+
+// UI Select Item Type
+export interface SelectItem {
+  value: string;
+  label: string;
+  disabled?: boolean;
+  [key: string]: any; // For additional properties like cost, thickness, etc.
 }
 
