@@ -40,16 +40,95 @@ export default function SpecialFeaturePage() {
   const [selectedClientAlgorithm, setSelectedClientAlgorithm] = React.useState<string>('rectpack2d');
   const [packedLayoutData, setPackedLayoutData] = React.useState<SheetLayout[] | null>(null);
   const [visualizedLayout, setVisualizedLayout] = React.useState<React.ReactNode | null>(null);
+  const [partColorMap, setPartColorMap] = React.useState<Map<string, string>>(new Map());
+
+  const generatePartColorMap = (parts: InputPart[]): Map<string, string> => {
+    const map = new Map<string, string>();
+    let colorIndex = 0;
+    parts.forEach(part => {
+      if (!map.has(part.name)) {
+        map.set(part.name, PART_COLORS[colorIndex % PART_COLORS.length]);
+        colorIndex++;
+      }
+    });
+    return map;
+  };
+  
+  const renderSVGs = (layoutData: SheetLayout[], pcm: Map<string, string>) => {
+    if (!layoutData) return null;
+    return layoutData.map((sheet, index) => (
+      <div key={`sheet-${index}`} className="mb-6 p-3 border rounded-lg shadow-sm bg-white">
+        <h4 className="font-bold text-base mb-2 text-gray-700">
+          Sheet {sheet.id} <span className="font-normal text-sm">(Dimensions: {sheet.dimensions.w} x {sheet.dimensions.h} mm)</span>
+          <span className={`ml-2 text-sm font-semibold ${sheet.efficiency && sheet.efficiency < 70 ? 'text-orange-600' : 'text-green-600'}`}>
+            Efficiency: {sheet.efficiency?.toFixed(1) || 'N/A'}%
+          </span>
+        </h4>
+        <svg 
+            width="100%" 
+            viewBox={`-5 -5 ${sheet.dimensions.w + 10} ${sheet.dimensions.h + 10}`} 
+            className="border border-gray-300 rounded"
+            preserveAspectRatio="xMidYMid meet"
+        >
+          <rect x="0" y="0" width={sheet.dimensions.w} height={sheet.dimensions.h} fill="#f7fafc" stroke="#e2e8f0" strokeWidth="2"/>
+          {sheet.parts.map((part, pIndex) => {
+            const colorKey = part.originalName || part.name.substring(0, part.name.lastIndexOf('_')) || part.name;
+            const partColor = pcm.get(colorKey) || 'rgba(128, 128, 128, 0.7)';
+            
+            const displayName = part.originalName || part.name;
+            const displayWidth = part.originalWidth || part.width;
+            const displayHeight = part.originalHeight || part.height;
+
+            // Basic font size adjustment
+            const textLength = Math.max(displayName.length, `${displayWidth}x${displayHeight}`.length);
+            let fontSize = 10;
+            if (displayWidth < textLength * 5 || displayHeight < 25) fontSize = 8;
+            if (displayWidth < textLength * 3 || displayHeight < 18) fontSize = 6;
+            if (fontSize < 6) fontSize = 6; // Minimum font size
+
+            return (
+              <g key={`part-${sheet.id}-${pIndex}`} transform={`translate(${part.x ?? 0}, ${part.y ?? 0})`}>
+                <rect 
+                  x={KERF_ALLOWANCE / 2} 
+                  y={KERF_ALLOWANCE / 2}
+                  width={displayWidth}  
+                  height={displayHeight} 
+                  fill={partColor}
+                  stroke="rgba(0,0,0,0.5)" 
+                  strokeWidth="1"
+                />
+                <clipPath id={`clip-${sheet.id}-${pIndex}`}>
+                     <rect x={KERF_ALLOWANCE/2 + 2} y={KERF_ALLOWANCE/2 + 2} width={Math.max(0, displayWidth - 4)} height={Math.max(0, displayHeight - 4)} />
+                </clipPath>
+                <text 
+                    x={(KERF_ALLOWANCE / 2) + (displayWidth / 2)} 
+                    y={(KERF_ALLOWANCE / 2) + (displayHeight / 2) - (fontSize * 0.1)} // Adjusted for two lines
+                    fontSize={fontSize} 
+                    fill="black"
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    clipPath={`url(#clip-${sheet.id}-${pIndex})`}
+                    style={{ pointerEvents: 'none' }}
+                >
+                   <tspan x={(KERF_ALLOWANCE / 2) + (displayWidth / 2)} dy={displayHeight > fontSize * 2.5 ? "-0.4em" : "0em"}>{displayName}</tspan>
+                   {displayHeight > fontSize * 2.5 && (<tspan x={(KERF_ALLOWANCE / 2) + (displayWidth / 2)} dy="1.2em">{`${displayWidth}x${displayHeight}`}</tspan>)}
+                </text>
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+    ));
+  };
+
 
   const handleClientSideNesting = async () => {
     setIsLoading(true);
     setActionResult(null);
     setPackedLayoutData(null);
     setVisualizedLayout(null);
-    toast({ title: "Processing...", description: `Using ${selectedClientAlgorithm} algorithm.` });
-
-    await new Promise(resolve => setTimeout(resolve, 100)); 
-
+    
+    let validatedInputParts: InputPart[] = [];
     try {
       let inputPartsRaw: any[];
       try {
@@ -62,7 +141,6 @@ export default function SpecialFeaturePage() {
         throw new Error("Parts list must be a JSON array.");
       }
 
-      const validatedInputParts: InputPart[] = [];
       for (const rawPart of inputPartsRaw) {
         if (
           typeof rawPart.name !== 'string' ||
@@ -79,16 +157,13 @@ export default function SpecialFeaturePage() {
         throw new Error("No parts provided in the list.");
       }
       
-      const partColorMap = new Map<string, string>();
-      let colorIndex = 0;
-      validatedInputParts.forEach(part => {
-        if (!partColorMap.has(part.name)) {
-          partColorMap.set(part.name, PART_COLORS[colorIndex % PART_COLORS.length]);
-          colorIndex++;
-        }
-      });
+      const pcm = generatePartColorMap(validatedInputParts);
+      setPartColorMap(pcm);
 
       if (selectedClientAlgorithm === 'rectpack2d') {
+        toast({ title: "Processing...", description: "Using Rectpack2D (Potpack Client-Side)." });
+        await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async
+
         const allPartsToPack: PotpackBox[] = [];
         validatedInputParts.forEach(part => {
           for (let i = 0; i < part.qty; i++) {
@@ -131,8 +206,7 @@ export default function SpecialFeaturePage() {
                 originalHeight: packedBox.originalHeight,
               });
             } else {
-              delete packedBox.x;
-              delete packedBox.y;
+              delete packedBox.x; delete packedBox.y; // Clear potpack properties
               stillRemainingAfterSheet.push(packedBox);
             }
           }
@@ -141,7 +215,6 @@ export default function SpecialFeaturePage() {
             let actualUsedWidth = 0;
             let actualUsedHeight = 0;
             let totalPartAreaOnSheet = 0;
-
             currentSheetParts.forEach(p => {
                 if (p.x !== undefined && p.y !== undefined && p.originalWidth && p.originalHeight) {
                     actualUsedWidth = Math.max(actualUsedWidth, p.x + p.originalWidth + KERF_ALLOWANCE);
@@ -149,10 +222,8 @@ export default function SpecialFeaturePage() {
                     totalPartAreaOnSheet += (p.originalWidth + KERF_ALLOWANCE) * (p.originalHeight + KERF_ALLOWANCE);
                 }
             });
-            
             const sheetArea = DEFAULT_SHEET_WIDTH * DEFAULT_SHEET_HEIGHT;
             const currentSheetEfficiency = (totalPartAreaOnSheet / sheetArea) * 100;
-
             packedSheets.push({
               id: sheetId,
               dimensions: { w: DEFAULT_SHEET_WIDTH, h: DEFAULT_SHEET_HEIGHT },
@@ -163,97 +234,31 @@ export default function SpecialFeaturePage() {
             });
             sheetId++;
           } else if (stillRemainingAfterSheet.length > 0) {
-            toast({ title: "Packing Incomplete", description: "Some remaining parts could not be packed onto a new sheet. This might be due to size constraints.", variant: "default" });
+            toast({ title: "Packing Incomplete (Potpack)", description: "Some remaining parts could not be packed onto a new sheet.", variant: "default" });
             break; 
           }
           remainingPartsToPack = stillRemainingAfterSheet;
         }
         
         if (remainingPartsToPack.length > 0 && sheetId > MAX_SHEETS_PER_JOB) {
-             toast({ title: "Max Sheets Reached", description: `Packing stopped after ${MAX_SHEETS_PER_JOB} sheets. Some parts may remain.`, variant: "default" });
+             toast({ title: "Max Sheets Reached (Potpack)", description: `Packing stopped after ${MAX_SHEETS_PER_JOB} sheets. Some parts may remain.`, variant: "default" });
         }
-
         setPackedLayoutData(packedSheets);
         setActionResult(`Potpack (Client) processed ${allPartsToPack.length} total part instances onto ${packedSheets.length} sheets.`);
         toast({ title: "Client Nesting (Potpack)", description: "Parts processed successfully." });
 
       } else if (selectedClientAlgorithm === 'deepnest') {
+        toast({ title: "Processing...", description: "Using Simulated FFDH (Server-Side)." });
         const result = await runDeepnestAlgorithmAction(partsListData);
         if (result.success && result.layout) {
           setPackedLayoutData(result.layout);
           setActionResult(result.message);
-          toast({ title: "Deepnest (Conceptual Backend Call)", description: result.message });
+          toast({ title: "Deepnest (Simulated FFDH via Server)", description: result.message });
         } else {
+          setPackedLayoutData(result.layout || null); // Show partial layout if any
           throw new Error(result.message || "Deepnest conceptual backend call failed.");
         }
       }
-
-      // Common visualization logic after data is set by either algorithm
-      if (packedLayoutData || (selectedClientAlgorithm === 'deepnest' && (await runDeepnestAlgorithmAction(partsListData)).layout)) {
-          const dataToVisualize = selectedClientAlgorithm === 'deepnest' ? (await runDeepnestAlgorithmAction(partsListData)).layout : packedLayoutData;
-          if(dataToVisualize) {
-            const svgs = dataToVisualize.map((sheet, index) => (
-              <div key={`sheet-${index}`} className="mb-6 p-3 border rounded-lg shadow-sm bg-white">
-                <h4 className="font-bold text-base mb-2 text-gray-700">
-                  Sheet {sheet.id} <span className="font-normal text-sm">(Dimensions: {sheet.dimensions.w} x {sheet.dimensions.h} mm)</span>
-                  <span className={`ml-2 text-sm font-semibold ${sheet.efficiency && sheet.efficiency < 70 ? 'text-orange-600' : 'text-green-600'}`}>
-                    Efficiency: {sheet.efficiency?.toFixed(1) || 'N/A'}%
-                  </span>
-                </h4>
-                <svg 
-                    width="100%" 
-                    viewBox={`-5 -5 ${sheet.dimensions.w + 10} ${sheet.dimensions.h + 10}`} 
-                    className="border border-gray-300 rounded"
-                    preserveAspectRatio="xMidYMid meet"
-                >
-                  <rect x="0" y="0" width={sheet.dimensions.w} height={sheet.dimensions.h} fill="#f7fafc" stroke="#e2e8f0" strokeWidth="2"/>
-                  {sheet.parts.map((part, pIndex) => {
-                    const partColor = partColorMap.get(part.material || part.name.substring(0, part.name.lastIndexOf('_')) || part.name) || 'rgba(128, 128, 128, 0.7)';
-                    const partName = part.originalName || part.name.substring(0, part.name.lastIndexOf('_')) || part.name;
-                    const partWidth = part.originalWidth || part.width;
-                    const partHeight = part.originalHeight || part.height;
-                    const textLength = Math.max(partName.length, `${partWidth}x${partHeight}`.length);
-                    let fontSize = 12;
-                    if (partWidth < textLength * 6 || partHeight < 30) fontSize = 8;
-                    if (partWidth < textLength * 4 || partHeight < 20) fontSize = 6;
-
-                    return (
-                      <g key={`part-${pIndex}`} transform={`translate(${part.x ?? 0}, ${part.y ?? 0})`}>
-                        <rect 
-                          x={KERF_ALLOWANCE / 2} 
-                          y={KERF_ALLOWANCE / 2}
-                          width={partWidth}  
-                          height={partHeight} 
-                          fill={partColor}
-                          stroke="rgba(0,0,0,0.5)" 
-                          strokeWidth="1"
-                        />
-                        <clipPath id={`clip-${sheet.id}-${pIndex}`}>
-                             <rect x={KERF_ALLOWANCE/2 + 2} y={KERF_ALLOWANCE/2 + 2} width={partWidth - 4} height={partHeight - 4} />
-                        </clipPath>
-                        <text 
-                            x={(KERF_ALLOWANCE / 2) + (partWidth / 2)} 
-                            y={(KERF_ALLOWANCE / 2) + (partHeight / 2) - (fontSize * 0.2)}
-                            fontSize={fontSize} 
-                            fill="black"
-                            textAnchor="middle"
-                            dominantBaseline="middle"
-                            clipPath={`url(#clip-${sheet.id}-${pIndex})`}
-                            style={{ pointerEvents: 'none' }}
-                        >
-                           <tspan x={(KERF_ALLOWANCE / 2) + (partWidth / 2)} dy="-0.2em">{partName}</tspan>
-                           <tspan x={(KERF_ALLOWANCE / 2) + (partWidth / 2)} dy="1.2em">{`${partWidth}x${partHeight}`}</tspan>
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
-            ));
-            setVisualizedLayout(<div>{svgs}</div>);
-          }
-      }
-
 
     } catch (error: any) {
       setActionResult(`Error: ${error.message}`);
@@ -262,6 +267,14 @@ export default function SpecialFeaturePage() {
       setIsLoading(false);
     }
   };
+
+  React.useEffect(() => {
+    if (packedLayoutData) {
+      setVisualizedLayout(renderSVGs(packedLayoutData, partColorMap));
+    } else {
+      setVisualizedLayout(null);
+    }
+  }, [packedLayoutData, partColorMap]);
 
 
   const handleServerSideNesting = async () => {
@@ -349,16 +362,16 @@ export default function SpecialFeaturePage() {
         <CardContent className="space-y-6 p-6">
           <Tabs defaultValue="client-nesting" className="w-full">
             <TabsList className="grid w-full grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
-              <TabsTrigger value="client-nesting"><LayoutList className="mr-2" />Client-Side Nesting</TabsTrigger>
-              <TabsTrigger value="server-nesting"><Server className="mr-2" />Server-Side Nesting</TabsTrigger>
+              <TabsTrigger value="client-nesting"><LayoutList className="mr-2" />Client/Server Hybrid Nesting</TabsTrigger>
+              <TabsTrigger value="server-nesting"><Server className="mr-2" />Server-Side Nesting (Legacy)</TabsTrigger>
               <TabsTrigger value="export-desktop"><Download className="mr-2" />Export for Desktop</TabsTrigger>
               <TabsTrigger value="general-utils"><Sparkles className="mr-2" />Other Utilities</TabsTrigger>
             </TabsList>
 
             <TabsContent value="client-nesting" className="mt-4 p-4 border rounded-md">
-              <CardTitle className="text-lg mb-2">Client-Side Nesting</CardTitle>
+              <CardTitle className="text-lg mb-2">Client/Server Hybrid Nesting</CardTitle>
               <CardDescription className="mb-4">
-                Visualize parts nested onto sheets. Good for quick previews. Select an algorithm below.
+                Visualize parts nested onto sheets. Select an algorithm to see its conceptual results.
               </CardDescription>
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -368,8 +381,8 @@ export default function SpecialFeaturePage() {
                       <SelectValue placeholder="Select algorithm" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="rectpack2d">Rectpack2D (via Potpack)</SelectItem>
-                      <SelectItem value="deepnest">Deepnest.io (Conceptual Backend Call)</SelectItem>
+                      <SelectItem value="rectpack2d">Rectpack2D (Potpack - Client Side)</SelectItem>
+                      <SelectItem value="deepnest">FFDH Simulation (Server Side)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -382,7 +395,7 @@ export default function SpecialFeaturePage() {
                 />
                 <Button onClick={handleClientSideNesting} disabled={isLoading || !partsListData.trim()}>
                   {isLoading ? <Loader2 className="mr-2 animate-spin" /> : <LayoutList className="mr-2" />}
-                  {isLoading ? 'Nesting...' : 'Visualize Nesting (Client)'}
+                  {isLoading ? 'Nesting...' : 'Visualize Nesting'}
                 </Button>
                  {actionResult && (
                     <Alert variant="default" className="mt-4 text-xs">
@@ -395,15 +408,15 @@ export default function SpecialFeaturePage() {
             </TabsContent>
 
             <TabsContent value="server-nesting" className="mt-4 p-4 border rounded-md">
-              <CardTitle className="text-lg mb-2">Server-Side Nesting</CardTitle>
+              <CardTitle className="text-lg mb-2">Server-Side Nesting (Legacy/Placeholder)</CardTitle>
               <CardDescription className="mb-4">
-                Leverage more powerful server resources for complex nesting algorithms. (Conceptual)
+                Conceptual placeholder for a different server-side nesting algorithm.
               </CardDescription>
               <Alert variant="default" className="mb-4 bg-sky-50 border-sky-200 text-sky-700">
                 <Info className="h-4 w-4" />
                 <AlertTitle>Conceptual Implementation</AlertTitle>
                 <AlertDescription>
-                  This tab demonstrates calling a server action that would perform advanced nesting.
+                  This tab demonstrates calling a generic server action. The "Client/Server Hybrid Nesting" tab now handles the "Deepnest" conceptual call.
                 </AlertDescription>
               </Alert>
               <div className="space-y-3">
@@ -416,7 +429,7 @@ export default function SpecialFeaturePage() {
                 />
                 <Button onClick={handleServerSideNesting} disabled={isLoading || !partsListData.trim()}>
                   {isLoading ? <Loader2 className="mr-2 animate-spin"/> : <Server className="mr-2" /> }
-                  {isLoading ? 'Calculating...' : 'Calculate Nesting (Server)'}
+                  {isLoading ? 'Calculating...' : 'Calculate Nesting (Server - Legacy)'}
                 </Button>
               </div>
             </TabsContent>
@@ -460,7 +473,7 @@ export default function SpecialFeaturePage() {
             </TabsContent>
           </Tabs>
 
-          {actionResult && selectedClientAlgorithm !== 'rectpack2d' && selectedClientAlgorithm !== 'deepnest' && (
+          {actionResult && !(selectedClientAlgorithm === 'rectpack2d' && packedLayoutData) && !(selectedClientAlgorithm === 'deepnest' && packedLayoutData) && (
             <div className="mt-6 p-4 border rounded-md bg-muted w-full">
               <p className="text-sm font-semibold">Action Result:</p>
               <pre className="text-xs text-muted-foreground whitespace-pre-wrap overflow-x-auto">{actionResult}</pre>
@@ -469,16 +482,16 @@ export default function SpecialFeaturePage() {
 
           {visualizedLayout && (
              <div className="mt-6 p-4 border rounded-lg bg-gray-50 w-full shadow">
-              <p className="text-lg font-semibold mb-3 text-gray-800">Visualized Layout:</p>
+              <p className="text-lg font-semibold mb-3 text-gray-800">Visualized Layout ({selectedClientAlgorithm === 'rectpack2d' ? 'Potpack - Client' : 'FFDH Sim - Server'}):</p>
               <div className="max-h-[70vh] overflow-auto p-2 bg-gray-100 rounded">
                 {visualizedLayout}
               </div>
             </div>
           )}
           
-          {packedLayoutData && (selectedClientAlgorithm === 'rectpack2d' || selectedClientAlgorithm === 'deepnest') && (
+          {packedLayoutData && (
             <div className="mt-6 p-4 border rounded-md bg-muted w-full">
-              <p className="text-sm font-semibold">Packed Layout Data ({selectedClientAlgorithm === 'rectpack2d' ? 'Potpack Client' : 'Deepnest Server'}):</p>
+              <p className="text-sm font-semibold">Packed Layout Data ({selectedClientAlgorithm === 'rectpack2d' ? 'Potpack Client' : 'FFDH Sim - Server'}):</p>
               <div className="max-h-96 overflow-auto">
                 <pre className="text-xs text-muted-foreground whitespace-pre-wrap overflow-x-auto bg-background/50 p-2 rounded-sm mt-1 font-mono">
                   {JSON.stringify(packedLayoutData, null, 2)}
