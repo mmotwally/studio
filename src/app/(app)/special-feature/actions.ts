@@ -66,12 +66,12 @@ export async function exportCutListForDesktopAction(partsData: string): Promise<
 }
 
 
-// Simulated FFDH (First Fit Decreasing Height) with 90-degree rotation, respecting material-specific sheet sizes
+// Simulated FFDH (First Fit Decreasing Height) with 90-degree rotation, respecting material-specific sheet sizes and grain direction
 export async function runDeepnestAlgorithmAction(
   partsDataString: string,
   materialSheetConfigString: string
 ): Promise<{ success: boolean; message: string; layout?: SheetLayout[] }> {
-  console.log("runDeepnestAlgorithmAction (Server-Side FFDH with Material Sizes & Rotation) called.");
+  console.log("runDeepnestAlgorithmAction (Server-Side FFDH with Material Sizes, Rotation & Grain) called.");
   
   let inputParts: InputPart[];
   let materialSheetConfig: Record<string, { width: number; height: number }>;
@@ -92,6 +92,10 @@ export async function runDeepnestAlgorithmAction(
       ) {
         throw new Error("Each part must have a 'name' (string), 'material' (string, optional), and positive numeric 'width', 'height', and 'qty'. Invalid part: " + JSON.stringify(part));
       }
+       // Ensure original dimensions are present, defaulting from width/height if not
+      part.originalName = part.originalName || part.name;
+      part.originalWidth = part.originalWidth || part.width;
+      part.originalHeight = part.originalHeight || part.height;
     }
     materialSheetConfig = JSON.parse(materialSheetConfigString);
     if (typeof materialSheetConfig !== 'object' || materialSheetConfig === null) throw new Error("Material sheet config must be a JSON object.");
@@ -108,7 +112,7 @@ export async function runDeepnestAlgorithmAction(
   // Group parts by material
   const partsByMaterial = new Map<string, InputPart[]>();
   inputParts.forEach(part => {
-    const materialKey = part.material || "Default_Material"; // Use a default if material is not specified
+    const materialKey = part.material || "Default_Material"; 
     if (!partsByMaterial.has(materialKey)) {
       partsByMaterial.set(materialKey, []);
     }
@@ -126,23 +130,23 @@ export async function runDeepnestAlgorithmAction(
     const currentMaterialSheetHeight = sheetConfig.height;
 
     const allPartInstancesForMaterial: Array<{
-      id: string;
+      id: string; // Unique ID for this instance
       originalName: string;
       originalWidth: number;
       originalHeight: number;
-      packed: boolean;
       material?: string;
+      packed: boolean;
     }> = [];
 
     materialParts.forEach(part => {
       for (let i = 0; i < part.qty; i++) {
         allPartInstancesForMaterial.push({
-          id: `${part.name}_${i + 1}_${material.replace(/\s+/g, '_')}`, // Ensure unique ID across materials
-          originalName: part.name,
-          originalWidth: part.width,
-          originalHeight: part.height,
-          packed: false,
+          id: `${part.originalName}_${i + 1}_${material.replace(/\s+/g, '_')}`, 
+          originalName: part.originalName!,
+          originalWidth: part.originalWidth!,
+          originalHeight: part.originalHeight!,
           material: part.material,
+          packed: false,
         });
       }
     });
@@ -157,7 +161,7 @@ export async function runDeepnestAlgorithmAction(
     });
 
     let sheetsUsedForMaterial = 0;
-    while (allPartInstancesForMaterial.some(p => !p.packed) && sheetsUsedForMaterial < MAX_SHEETS_PER_JOB) { // MAX_SHEETS_PER_JOB acts per material here
+    while (allPartInstancesForMaterial.some(p => !p.packed) && sheetsUsedForMaterial < MAX_SHEETS_PER_JOB) { 
       const currentSheetParts: PackedPart[] = [];
       let currentX = 0;
       let currentY = 0;
@@ -168,6 +172,11 @@ export async function runDeepnestAlgorithmAction(
 
         let placedOnSheet = false;
         let placedPartData: PackedPart | null = null;
+        
+        const isGrainSensitive = part.material?.toLowerCase().includes('grain');
+        const isSquare = part.originalWidth === part.originalHeight;
+        const canRotate = !isGrainSensitive || isSquare;
+
 
         // Try original orientation
         const effWidthOrig = part.originalWidth + KERF_ALLOWANCE;
@@ -177,12 +186,13 @@ export async function runDeepnestAlgorithmAction(
           placedPartData = { ...part, x: currentX, y: currentY, width: part.originalWidth, height: part.originalHeight, isRotated: false, qty:1 };
           placedOnSheet = true;
         } else if (currentY + currentRowMaxHeight + effHeightOrig <= currentMaterialSheetHeight && effWidthOrig <= currentMaterialSheetWidth) {
+          // Try to place on a new "level" or "skyline" in the current sheet
           placedPartData = { ...part, x: 0, y: currentY + currentRowMaxHeight, width: part.originalWidth, height: part.originalHeight, isRotated: false, qty:1 };
           placedOnSheet = true;
         }
 
-        // Try rotated orientation
-        if (!placedOnSheet && part.originalWidth !== part.originalHeight) { // Avoid rotating squares unnecessarily
+        // Try rotated orientation if allowed and not already placed
+        if (!placedOnSheet && canRotate && !isSquare) { 
           const effWidthRot = part.originalHeight + KERF_ALLOWANCE;
           const effHeightRot = part.originalWidth + KERF_ALLOWANCE;
 
@@ -190,6 +200,7 @@ export async function runDeepnestAlgorithmAction(
             placedPartData = { ...part, x: currentX, y: currentY, width: part.originalHeight, height: part.originalWidth, isRotated: true, qty:1 };
             placedOnSheet = true;
           } else if (currentY + currentRowMaxHeight + effHeightRot <= currentMaterialSheetHeight && effWidthRot <= currentMaterialSheetWidth) {
+            // Try to place on a new "level" or "skyline" in the current sheet (rotated)
             placedPartData = { ...part, x: 0, y: currentY + currentRowMaxHeight, width: part.originalHeight, height: part.originalWidth, isRotated: true, qty:1 };
             placedOnSheet = true;
           }
@@ -217,9 +228,12 @@ export async function runDeepnestAlgorithmAction(
         let actualUsedHeightOnSheet = 0;
         let totalPartAreaOnSheet = 0;
         currentSheetParts.forEach(p => {
+            // Use originalWidth/Height for area calculation to reflect the part's true area
             totalPartAreaOnSheet += (p.originalWidth! + KERF_ALLOWANCE) * (p.originalHeight! + KERF_ALLOWANCE);
-            const packedWidthWithKerf = (p.isRotated ? p.originalHeight! : p.originalWidth!) + KERF_ALLOWANCE;
-            const packedHeightWithKerf = (p.isRotated ? p.originalWidth! : p.originalHeight!) + KERF_ALLOWANCE;
+            // Use placed width/height for bounding box calculation
+            const packedWidthWithKerf = p.width! + KERF_ALLOWANCE;
+            const packedHeightWithKerf = p.height! + KERF_ALLOWANCE;
+
             if (p.x !== undefined && p.y !== undefined) {
               actualUsedWidthOnSheet = Math.max(actualUsedWidthOnSheet, p.x + packedWidthWithKerf);
               actualUsedHeightOnSheet = Math.max(actualUsedHeightOnSheet, p.y + packedHeightWithKerf);
@@ -247,7 +261,7 @@ export async function runDeepnestAlgorithmAction(
     totalPartsNotPacked += allPartInstancesForMaterial.filter(p => !p.packed).length;
   } // End for (material of partsByMaterial)
 
-  const finalMessage = `Server FFDH (Rotation, Material Sizes): Processed ${totalPartsProcessed} part instances. 
+  const finalMessage = `Server FFDH (Rotation, Grain, Material Sizes): Processed ${totalPartsProcessed} part instances. 
     ${allPackedSheets.length} sheets used. ${totalPartsNotPacked} parts could not be packed.`;
   
   if (totalPartsNotPacked > 0) {
@@ -260,3 +274,5 @@ export async function runDeepnestAlgorithmAction(
     layout: allPackedSheets,
   };
 }
+
+    
