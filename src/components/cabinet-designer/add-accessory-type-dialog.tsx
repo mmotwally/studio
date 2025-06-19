@@ -27,10 +27,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { type AccessoryTypeFormValues, accessoryTypeFormSchema } from "@/app/(app)/cabinet-designer/accessory-type-schema";
 import { saveAccessoryDefinitionAction } from "@/app/(app)/cabinet-designer/actions";
-import { getSuppliersForSelect } from "@/app/(app)/settings/suppliers/actions"; // Assuming you have this
+import { getSuppliersForSelect } from "@/app/(app)/settings/suppliers/actions";
 import type { SelectItem as GenericSelectItem } from "@/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 
+// Define a unique, non-empty string for the "None" option
+const EMPTY_SUPPLIER_VALUE_PLACEHOLDER = "__EMPTY_SUPPLIER_VALUE__";
 
 interface AddAccessoryTypeDialogProps {
   setOpen: (open: boolean) => void;
@@ -50,7 +52,7 @@ export function AddAccessoryTypeDialog({ setOpen, onAccessoryTypeAdded }: AddAcc
       type: "other",
       unitCost: 0.01,
       description: "",
-      supplierId: undefined,
+      supplierId: undefined, // Default to undefined for optional field
       sku: "",
     },
   });
@@ -138,16 +140,22 @@ export function AddAccessoryTypeDialog({ setOpen, onAccessoryTypeAdded }: AddAcc
               <FormField control={form.control} name="description"
                 render={({ field }) => (
                   <FormItem><FormLabel>Description</FormLabel>
-                    <FormControl><Textarea placeholder="Optional description..." {...field} /></FormControl>
+                    <FormControl><Textarea placeholder="Optional description..." {...field} value={field.value ?? ""} /></FormControl>
                     <FormMessage />
                   </FormItem>)} />
               <FormField control={form.control} name="supplierId"
                 render={({ field }) => (
                   <FormItem><FormLabel>Supplier (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value || ""} disabled={isLoadingSuppliers}>
+                    <Select
+                      onValueChange={(value) => {
+                        field.onChange(value === EMPTY_SUPPLIER_VALUE_PLACEHOLDER ? null : value);
+                      }}
+                      value={field.value ?? ""} // If form value is null/undefined, Select's value is "", triggering placeholder
+                      disabled={isLoadingSuppliers}>
                       <FormControl><SelectTrigger><SelectValue placeholder={isLoadingSuppliers ? "Loading..." : "Select a supplier"} /></SelectTrigger></FormControl>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        {/* This "None" item is for explicit clearing if user wants to select it. */}
+                        <SelectItem value={EMPTY_SUPPLIER_VALUE_PLACEHOLDER}>None</SelectItem>
                         {suppliers.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
                       </SelectContent>
                     </Select>
@@ -156,7 +164,7 @@ export function AddAccessoryTypeDialog({ setOpen, onAccessoryTypeAdded }: AddAcc
               <FormField control={form.control} name="sku"
                 render={({ field }) => (
                   <FormItem><FormLabel>SKU (Optional)</FormLabel>
-                    <FormControl><Input placeholder="Supplier SKU or part number" {...field} /></FormControl>
+                    <FormControl><Input placeholder="Supplier SKU or part number" {...field} value={field.value ?? ""} /></FormControl>
                     <FormMessage />
                   </FormItem>)} />
             </div>
