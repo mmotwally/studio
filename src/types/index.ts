@@ -1,5 +1,4 @@
 
-
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavItem {
@@ -115,7 +114,7 @@ export interface InventoryItemExport {
   locationShelf?: string | null;
   supplierName?: string;
   unitName?: string;
-  imageUrl?: string | null;
+  // imageUrl?: string | null; // Duplicate removed
 }
 
 
@@ -607,14 +606,15 @@ export interface InputPart {
   height: number;
   qty: number;
   material?: string; 
-  originalName?: string; // Added for preserving original name during processing
-  originalWidth?: number; // Added for preserving original width
-  originalHeight?: number; // Added for preserving original height
+  originalName?: string; 
+  originalWidth?: number; 
+  originalHeight?: number; 
 }
 
 export interface PackedPart extends InputPart { 
   x?: number;
   y?: number;
+  isRotated?: boolean; // True if the part was placed in a rotated (90deg) orientation
 }
 
 export interface SheetLayout {
@@ -626,15 +626,16 @@ export interface SheetLayout {
   efficiency?: number; 
 }
 
+// For potpack (client-side)
 export interface PotpackBox {
-  w: number;
-  h: number;
-  x?: number;
-  y?: number;
-  name?: string; 
-  originalName?: string; 
-  originalWidth?: number; 
-  originalHeight?: number; 
+  w: number; // effective width (original + kerf)
+  h: number; // effective height (original + kerf)
+  x?: number; // output by potpack
+  y?: number; // output by potpack
+  name?: string; // To track the part, e.g., "PartA_1"
+  originalName?: string; // e.g., "PartA"
+  originalWidth?: number; // Original dimension before kerf
+  originalHeight?: number; // Original dimension before kerf
   material?: string;
   [key: string]: any; 
 }
@@ -646,8 +647,8 @@ export interface PotpackStats {
 }
 
 export interface NestingJob {
-  id: string; // Unique ID for the job (e.g., timestamp or UUID)
-  name: string; // User-friendly name (e.g., "Project Kitchen Base Cabinets - 2023-10-26")
-  timestamp: string; // ISO string of when it was saved
-  parts: InputPart[]; // The actual list of parts for nesting
+  id: string; 
+  name: string; 
+  timestamp: string; 
+  parts: InputPart[]; 
 }

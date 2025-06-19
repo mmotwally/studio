@@ -12,10 +12,10 @@ import { Sparkles, LayoutList, Server, Download, Info, Loader2, Trash2, UploadCl
 import * as React from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import potpack from 'potpack';
+import potpack from 'potpack'; // For client-side Rectpack2D
 import type { InputPart, PackedPart, SheetLayout, PotpackBox, PotpackStats, NestingJob } from '@/types';
 import { performServerSideNestingAction, exportCutListForDesktopAction, runDeepnestAlgorithmAction, performSpecialServerAction } from './actions';
-import { Separator } from '@/components/ui/separator';
+import { Separator } from '@/components/ui/separator'; // Added import
 
 const KERF_ALLOWANCE = 3; 
 const DEFAULT_SHEET_WIDTH = 2440;
@@ -25,7 +25,8 @@ const PART_COLORS = [
   "rgba(173, 216, 230, 0.7)", "rgba(144, 238, 144, 0.7)", "rgba(255, 182, 193, 0.7)", 
   "rgba(255, 255, 224, 0.7)", "rgba(211, 211, 211, 0.7)", "rgba(240, 128, 128, 0.7)",
   "rgba(175, 238, 238, 0.7)", "rgba(255, 218, 185, 0.7)", "rgba(221, 160, 221, 0.7)",
-  "rgba(245, 222, 179, 0.7)",
+  "rgba(245, 222, 179, 0.7)", "rgba(204, 204, 255, 0.7)", "rgba(255, 230, 204, 0.7)",
+  "rgba(204, 255, 204, 0.7)", "rgba(255, 204, 255, 0.7)", "rgba(230, 204, 255, 0.7)" 
 ];
 const MAX_SHEETS_PER_JOB = 50; 
 
@@ -62,13 +63,13 @@ export default function SpecialFeaturePage() {
       setAvailableNestingJobs([]);
       toast({ title: "Error", description: "Could not load saved nesting jobs.", variant: "destructive"});
     }
-  }, [toast]); // toast is stable
+  }, [toast]); 
 
   React.useEffect(() => {
     loadNestingJobsFromStorage();
   }, [loadNestingJobsFromStorage]);
 
-  const handleLoadSelectedNestingJob = () => {
+  const handleLoadSelectedNestingJob = React.useCallback(() => {
     if (!selectedNestingJobId) {
       toast({ title: "No Job Selected", description: "Please select a job from the dropdown to load.", variant: "default" });
       return;
@@ -92,9 +93,9 @@ export default function SpecialFeaturePage() {
       console.error("Error loading selected job:", e);
       toast({ title: "Error", description: "Could not load the selected job parts.", variant: "destructive"});
     }
-  };
+  }, [selectedNestingJobId, toast]);
 
-  const handleClearNestingJobs = () => {
+  const handleClearNestingJobs = React.useCallback(() => {
     try {
       localStorage.removeItem(LOCAL_STORAGE_NESTING_JOBS_KEY);
       setAvailableNestingJobs([]);
@@ -104,23 +105,26 @@ export default function SpecialFeaturePage() {
     } catch (e) {
       toast({ title: "Error", description: "Could not clear saved nesting jobs.", variant: "destructive" });
     }
-  };
+  }, [toast]);
   
   const generatePartColorMap = React.useCallback((parts: InputPart[]): Map<string, string> => {
     const map = new Map<string, string>();
     let colorIndex = 0;
-    parts.forEach(part => {
-      const colorKey = part.originalName || part.name; 
-      if (!map.has(colorKey)) {
-        map.set(colorKey, PART_COLORS[colorIndex % PART_COLORS.length]);
+    const uniquePartNames = new Set<string>();
+    parts.forEach(part => uniquePartNames.add(part.originalName || part.name));
+    
+    uniquePartNames.forEach(name => {
+      if (!map.has(name)) {
+        map.set(name, PART_COLORS[colorIndex % PART_COLORS.length]);
         colorIndex++;
       }
     });
     return map;
-  }, []); // PART_COLORS is stable
+  }, []);
 
   const renderSVGs = React.useCallback((layoutData: SheetLayout[], pcm: Map<string, string>) => {
-    if (!layoutData || layoutData.length === 0 || pcm.size === 0) return null;
+    if (!layoutData || layoutData.length === 0 ) return null; // pcm check removed to allow rendering even if map is briefly empty
+    
     return layoutData.map((sheet, index) => (
       <div key={`sheet-${index}`} className="mb-6 p-3 border rounded-lg shadow-sm bg-white">
         <h4 className="font-bold text-base mb-2 text-gray-700">
@@ -138,16 +142,19 @@ export default function SpecialFeaturePage() {
           <rect x="0" y="0" width={sheet.dimensions.w} height={sheet.dimensions.h} fill="#f7fafc" stroke="#e2e8f0" strokeWidth="2"/>
           {sheet.parts.map((part, pIndex) => {
             const colorKey = part.originalName || part.name.substring(0, part.name.lastIndexOf('_')) || part.name;
-            const partColor = pcm.get(colorKey) || 'rgba(128, 128, 128, 0.7)';
+            const partColor = pcm.get(colorKey) || 'rgba(128, 128, 128, 0.7)'; // Fallback color
             
-            const displayName = part.originalName || part.name;
-            const displayWidth = part.originalWidth || part.width;
-            const displayHeight = part.originalHeight || part.height;
+            // Use part.width and part.height from PackedPart as these are the dimensions to be drawn
+            const displayWidth = part.width;
+            const displayHeight = part.height;
 
             let fontSize = 10;
             if (displayWidth < 70 || displayHeight < 30) fontSize = 8;
             if (displayWidth < 50 || displayHeight < 20) fontSize = 6;
-            if (displayWidth * displayHeight < 1000) fontSize = 5;
+            if (displayWidth * displayHeight < 1000 && (displayWidth < 30 || displayHeight < 30)) fontSize = 5;
+
+
+            const labelText = `${part.originalName || part.name} (${part.originalWidth}x${part.originalHeight}${part.isRotated ? ' R' : ''})`;
 
             return (
               <g key={`part-${sheet.id}-${pIndex}`} transform={`translate(${part.x ?? 0}, ${part.y ?? 0})`}>
@@ -173,8 +180,9 @@ export default function SpecialFeaturePage() {
                     clipPath={`url(#clip-${sheet.id}-${pIndex})`}
                     style={{ pointerEvents: 'none' }}
                 >
-                   <tspan x={(KERF_ALLOWANCE / 2) + (displayWidth / 2)} dy={displayHeight > fontSize * 2.5 ? "-0.4em" : "0em"}>{displayName}</tspan>
-                   {displayHeight > fontSize * 2.5 && (<tspan x={(KERF_ALLOWANCE / 2) + (displayWidth / 2)} dy="1.2em">{`${displayWidth}x${displayHeight}`}</tspan>)}
+                   {/* Display original name and original dimensions, indicate rotation */}
+                   <tspan x={(KERF_ALLOWANCE / 2) + (displayWidth / 2)} dy={displayHeight > fontSize * 2.5 ? "-0.4em" : "0em"}>{part.originalName || part.name}</tspan>
+                   {displayHeight > fontSize * 2.5 && (<tspan x={(KERF_ALLOWANCE / 2) + (displayWidth / 2)} dy="1.2em">{`${part.originalWidth}x${part.originalHeight}${part.isRotated ? ' (R)' : ''}`}</tspan>)}
                 </text>
               </g>
             );
@@ -182,7 +190,7 @@ export default function SpecialFeaturePage() {
         </svg>
       </div>
     ));
-  }, []); // KERF_ALLOWANCE is stable
+  }, []); 
 
   React.useEffect(() => {
     if (packedLayoutData && packedLayoutData.length > 0) {
@@ -190,13 +198,21 @@ export default function SpecialFeaturePage() {
       try {
         const parsedParts = JSON.parse(partsListData);
         if (Array.isArray(parsedParts)) {
-            partsForColorMap = parsedParts;
+            partsForColorMap = parsedParts.map(p => ({
+                name: p.name,
+                width: p.width,
+                height: p.height,
+                qty: p.qty,
+                material: p.material,
+                originalName: p.originalName || p.name, // Ensure originalName exists
+                originalWidth: p.originalWidth || p.width,
+                originalHeight: p.originalHeight || p.height,
+            }));
         } else {
             console.warn("Parsed partsListData is not an array. Using fallback for color map.");
         }
       } catch {
-        // Fallback: try to derive unique part names from packedLayoutData for color mapping
-        console.warn("Failed to parse partsListData. Using fallback for color map generation.");
+        console.warn("Failed to parse partsListData. Using fallback for color map generation from packed data.");
         const uniquePartDefs = new Map<string, InputPart>();
         packedLayoutData.forEach(sheet => {
           sheet.parts.forEach(part => {
@@ -204,7 +220,7 @@ export default function SpecialFeaturePage() {
             if (!uniquePartDefs.has(key)) {
               uniquePartDefs.set(key, {
                 name: part.name,
-                originalName: part.originalName,
+                originalName: part.originalName || part.name,
                 width: part.originalWidth || part.width,
                 height: part.originalHeight || part.height,
                 qty: 1, 
@@ -214,7 +230,6 @@ export default function SpecialFeaturePage() {
         });
         partsForColorMap = Array.from(uniquePartDefs.values());
       }
-
       const newPartColorMap = generatePartColorMap(partsForColorMap);
       setPartColorMap(newPartColorMap); 
       setVisualizedLayout(renderSVGs(packedLayoutData, newPartColorMap));
@@ -225,7 +240,7 @@ export default function SpecialFeaturePage() {
   }, [packedLayoutData, partsListData, generatePartColorMap, renderSVGs]);
 
 
-  const handleClientSideNesting = async () => {
+  const handleClientSideNesting = React.useCallback(async () => {
     setIsLoading(true);
     setActionResult(null);
     setPackedLayoutData(null);
@@ -259,9 +274,9 @@ export default function SpecialFeaturePage() {
           height: rawPart.height,
           qty: rawPart.qty,
           material: rawPart.material,
-          originalName: rawPart.name, 
-          originalWidth: rawPart.width,
-          originalHeight: rawPart.height,
+          originalName: rawPart.originalName || rawPart.name, 
+          originalWidth: rawPart.originalWidth || rawPart.width,
+          originalHeight: rawPart.originalHeight || rawPart.height,
         });
       }
 
@@ -280,9 +295,9 @@ export default function SpecialFeaturePage() {
               w: part.width + KERF_ALLOWANCE, 
               h: part.height + KERF_ALLOWANCE,
               name: `${part.name}_${i + 1}`,
-              originalName: part.originalName,
-              originalWidth: part.originalWidth,
-              originalHeight: part.originalHeight,
+              originalName: part.originalName, // Pass original name
+              originalWidth: part.originalWidth, // Pass original width
+              originalHeight: part.originalHeight, // Pass original height
               material: part.material
             });
           }
@@ -293,13 +308,13 @@ export default function SpecialFeaturePage() {
         let sheetId = 1;
 
         while (remainingPartsToPack.length > 0 && sheetId <= MAX_SHEETS_PER_JOB) {
-          const partsForCurrentSheetAttempt = [...remainingPartsToPack]; // potpack mutates this array
-          const stats: PotpackStats = potpack(partsForCurrentSheetAttempt); // Mutates partsForCurrentSheetAttempt
+          const partsForCurrentSheetAttempt = [...remainingPartsToPack]; 
+          const stats: PotpackStats = potpack(partsForCurrentSheetAttempt); 
           
           const currentSheetParts: PackedPart[] = [];
           const stillRemainingAfterSheet: PotpackBox[] = [];
 
-          for (const packedBox of partsForCurrentSheetAttempt) { // Iterate over the mutated array
+          for (const packedBox of partsForCurrentSheetAttempt) { 
             if (packedBox.x !== undefined && packedBox.y !== undefined &&
                 (packedBox.x + packedBox.w) <= DEFAULT_SHEET_WIDTH &&
                 (packedBox.y + packedBox.h) <= DEFAULT_SHEET_HEIGHT) {
@@ -314,9 +329,10 @@ export default function SpecialFeaturePage() {
                 originalName: packedBox.originalName,
                 originalWidth: packedBox.originalWidth,
                 originalHeight: packedBox.originalHeight,
+                isRotated: false, // Potpack doesn't rotate
               });
             } else {
-              delete packedBox.x; delete packedBox.y; // Ensure it's marked as not packed for next sheet
+              delete packedBox.x; delete packedBox.y; 
               stillRemainingAfterSheet.push(packedBox);
             }
           }
@@ -327,9 +343,9 @@ export default function SpecialFeaturePage() {
             let totalPartAreaOnSheet = 0;
             currentSheetParts.forEach(p => {
                 if (p.x !== undefined && p.y !== undefined && p.originalWidth && p.originalHeight) {
+                    totalPartAreaOnSheet += (p.originalWidth + KERF_ALLOWANCE) * (p.originalHeight + KERF_ALLOWANCE);
                     actualUsedWidth = Math.max(actualUsedWidth, p.x + p.originalWidth + KERF_ALLOWANCE);
                     actualUsedHeight = Math.max(actualUsedHeight, p.y + p.originalHeight + KERF_ALLOWANCE);
-                    totalPartAreaOnSheet += (p.originalWidth + KERF_ALLOWANCE) * (p.originalHeight + KERF_ALLOWANCE);
                 }
             });
             const sheetArea = DEFAULT_SHEET_WIDTH * DEFAULT_SHEET_HEIGHT;
@@ -340,11 +356,11 @@ export default function SpecialFeaturePage() {
               parts: currentSheetParts,
               packedAreaWidth: actualUsedWidth,
               packedAreaHeight: actualUsedHeight,
-              efficiency: currentSheetEfficiency,
+              efficiency: parseFloat(currentSheetEfficiency.toFixed(1)),
             });
             sheetId++;
           } else if (stillRemainingAfterSheet.length > 0) {
-            toast({ title: "Packing Incomplete (Potpack)", description: "Some remaining parts could not be packed onto a new sheet. They may be too large.", variant: "default" });
+            toast({ title: "Packing Incomplete (Potpack)", description: `Some remaining parts (${stillRemainingAfterSheet.length}) could not be packed. They may be too large.`, variant: "default" });
             break; 
           }
           remainingPartsToPack = stillRemainingAfterSheet;
@@ -358,12 +374,12 @@ export default function SpecialFeaturePage() {
         toast({ title: "Client Nesting (Potpack)", description: "Parts processed successfully." });
 
       } else if (selectedClientAlgorithm === 'deepnest') {
-        toast({ title: "Processing...", description: "Using Simulated FFDH (Server-Side)." });
+        toast({ title: "Processing...", description: "Using Simulated FFDH (Server-Side with Rotation)." });
         const result = await runDeepnestAlgorithmAction(partsListData);
         if (result.success && result.layout) {
           setPackedLayoutData(result.layout);
           setActionResult(result.message);
-          toast({ title: "Deepnest (Simulated FFDH via Server)", description: result.message });
+          toast({ title: "Deepnest (FFDH Sim - Server)", description: result.message });
         } else {
           setPackedLayoutData(result.layout || null); 
           throw new Error(result.message || "Deepnest (FFDH Sim) backend call failed.");
@@ -376,10 +392,10 @@ export default function SpecialFeaturePage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [partsListData, selectedClientAlgorithm, toast]);
 
 
-  const handleServerSideNesting = async () => {
+  const handleServerSideNesting = React.useCallback(async () => {
     setIsLoading(true);
     setActionResult(null);
     setPackedLayoutData(null);
@@ -395,9 +411,9 @@ export default function SpecialFeaturePage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [partsListData, toast]);
 
-  const handleExportForDesktop = async () => {
+  const handleExportForDesktop = React.useCallback(async () => {
     setIsLoading(true);
     setActionResult(null);
     setPackedLayoutData(null);
@@ -423,9 +439,9 @@ export default function SpecialFeaturePage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [partsListData, toast]);
 
-  const handleGenericSpecialFunction = async () => {
+  const handleGenericSpecialFunction = React.useCallback(async () => {
     setIsLoading(true);
     setActionResult(null);
     setPackedLayoutData(null);
@@ -442,7 +458,7 @@ export default function SpecialFeaturePage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [toast]);
   
 
   return (
@@ -513,8 +529,8 @@ export default function SpecialFeaturePage() {
                       <SelectValue placeholder="Select algorithm" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="rectpack2d">Rectpack2D (Potpack - Client Side)</SelectItem>
-                      <SelectItem value="deepnest">Simulated FFDH (Server Side)</SelectItem>
+                      <SelectItem value="rectpack2d">Rectpack2D (Potpack - Client Side, No Rotation)</SelectItem>
+                      <SelectItem value="deepnest">Simulated FFDH (Server Side, With Rotation)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -636,4 +652,3 @@ export default function SpecialFeaturePage() {
     </>
   );
 }
-    
