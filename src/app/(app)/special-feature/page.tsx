@@ -13,12 +13,24 @@ import * as React from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import potpack from 'potpack';
-import type { InputPart, PotpackBox, PotpackStats, SheetLayout, PackedPart } from '@/types';
+import type { InputPart, PackedPart, SheetLayout, PotpackBox, PotpackStats } from '@/types'; // Ensure Potpack types are imported
 import { performServerSideNestingAction, exportCutListForDesktopAction, runDeepnestAlgorithmAction, performSpecialServerAction } from './actions';
 
-const KERF_ALLOWANCE = 3; // e.g., 3mm for saw blade width
+const KERF_ALLOWANCE = 3; 
 const DEFAULT_SHEET_WIDTH = 2440;
 const DEFAULT_SHEET_HEIGHT = 1220;
+
+// Simple color palette for parts - can be expanded
+const PART_COLORS = [
+  "rgba(173, 216, 230, 0.7)", // lightblue
+  "rgba(144, 238, 144, 0.7)", // lightgreen
+  "rgba(255, 182, 193, 0.7)", // lightpink
+  "rgba(255, 255, 224, 0.7)", // lightyellow
+  "rgba(211, 211, 211, 0.7)", // lightgrey
+  "rgba(240, 128, 128, 0.7)", // lightcoral
+  "rgba(175, 238, 238, 0.7)", // paleturquoise
+  "rgba(255, 218, 185, 0.7)", // peachpuff
+];
 
 export default function SpecialFeaturePage() {
   const { toast } = useToast();
@@ -29,7 +41,6 @@ export default function SpecialFeaturePage() {
   const [packedLayoutData, setPackedLayoutData] = React.useState<SheetLayout[] | null>(null);
   const [visualizedLayout, setVisualizedLayout] = React.useState<React.ReactNode | null>(null);
 
-
   const handleClientSideNesting = async () => {
     setIsLoading(true);
     setActionResult(null);
@@ -37,40 +48,58 @@ export default function SpecialFeaturePage() {
     setVisualizedLayout(null);
     toast({ title: "Processing...", description: `Using ${selectedClientAlgorithm} algorithm.` });
 
-    await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async for UI update
+    await new Promise(resolve => setTimeout(resolve, 100)); 
 
     if (selectedClientAlgorithm === 'rectpack2d') {
       try {
-        let inputParts: InputPart[] = [];
+        let inputPartsRaw: any[] = [];
         try {
-          inputParts = JSON.parse(partsListData);
+          inputPartsRaw = JSON.parse(partsListData);
         } catch (e) {
-          throw new Error("Invalid JSON format for parts list.");
+          throw new Error("Invalid JSON format for parts list. Please provide an array of parts.");
         }
 
-        if (!Array.isArray(inputParts)) {
+        if (!Array.isArray(inputPartsRaw)) {
           throw new Error("Parts list must be a JSON array.");
         }
 
-        const isValidParts = inputParts.every(part =>
-          typeof part.name === 'string' &&
-          typeof part.width === 'number' && part.width > 0 &&
-          typeof part.height === 'number' && part.height > 0 &&
-          typeof part.qty === 'number' && part.qty > 0
-        );
-
-        if (!isValidParts) {
-          throw new Error("Each part in the list must have a 'name' (string), and positive numeric 'width', 'height', and 'qty'.");
+        const inputParts: InputPart[] = [];
+        for (const rawPart of inputPartsRaw) {
+          if (
+            typeof rawPart.name !== 'string' ||
+            typeof rawPart.width !== 'number' || !(rawPart.width > 0) ||
+            typeof rawPart.height !== 'number' || !(rawPart.height > 0) ||
+            typeof rawPart.qty !== 'number' || !(rawPart.qty > 0)
+          ) {
+            throw new Error("Each part must have a 'name' (string), and positive numeric 'width', 'height', and 'qty'.");
+          }
+          inputParts.push(rawPart as InputPart);
         }
+
+        if (inputParts.length === 0) {
+          throw new Error("No parts provided in the list.");
+        }
+        
+        // Assign colors to unique part names
+        const partColorMap = new Map<string, string>();
+        let colorIndex = 0;
+        inputParts.forEach(part => {
+          if (!partColorMap.has(part.name)) {
+            partColorMap.set(part.name, PART_COLORS[colorIndex % PART_COLORS.length]);
+            colorIndex++;
+          }
+        });
 
         const allPartsToPack: PotpackBox[] = [];
         inputParts.forEach(part => {
           for (let i = 0; i < part.qty; i++) {
             allPartsToPack.push({
-              w: part.width + KERF_ALLOWANCE, // Add kerf for packing
+              w: part.width + KERF_ALLOWANCE, 
               h: part.height + KERF_ALLOWANCE,
-              name: `${part.name}_${i + 1}`,
-              original: part // Keep a reference to original for rendering
+              name: `${part.name}_${i + 1}`, // Unique name for each instance
+              originalName: part.name, // Keep original name for color mapping
+              originalWidth: part.width,
+              originalHeight: part.height,
             });
           }
         });
@@ -78,50 +107,68 @@ export default function SpecialFeaturePage() {
         const packedSheets: SheetLayout[] = [];
         let remainingPartsToPack = [...allPartsToPack];
         let sheetId = 1;
-        const MAX_SHEETS = 50; // Safety break for demo
+        const MAX_SHEETS = 50;
 
         while (remainingPartsToPack.length > 0 && sheetId <= MAX_SHEETS) {
-          const stats: PotpackStats = potpack(remainingPartsToPack); // Potpack modifies the array in place!
+          const partsForCurrentSheetAttempt = [...remainingPartsToPack]; // potpack modifies the array
+          const stats: PotpackStats = potpack(partsForCurrentSheetAttempt);
           
           const currentSheetParts: PackedPart[] = [];
           const stillRemainingAfterSheet: PotpackBox[] = [];
 
-          for (const part of remainingPartsToPack) {
+          for (const part of partsForCurrentSheetAttempt) { // Iterate over the array potpack modified
             if (part.x !== undefined && part.y !== undefined &&
-                part.x + part.w <= DEFAULT_SHEET_WIDTH &&
-                part.y + part.h <= DEFAULT_SHEET_HEIGHT) {
+                (part.x + part.w) <= DEFAULT_SHEET_WIDTH &&
+                (part.y + part.h) <= DEFAULT_SHEET_HEIGHT) {
               currentSheetParts.push({
                 name: part.name!,
-                width: part.w - KERF_ALLOWANCE, // Render actual part size
-                height: part.h - KERF_ALLOWANCE,
-                qty: 1, // Each object is an individual part now
+                width: part.originalWidth!, 
+                height: part.originalHeight!,
+                qty: 1, 
                 x: part.x,
                 y: part.y,
-                material: part.original?.material
+                material: part.originalName, // Using originalName for color lookup
               });
             } else {
-              // Reset x, y for parts not packed on this sheet or that overflowed
-              delete part.x;
+              delete part.x; // Reset for next attempt if not packed or overflowed
               delete part.y;
               stillRemainingAfterSheet.push(part);
             }
           }
           
           if (currentSheetParts.length > 0) {
+             // Calculate actual used area on *this* sheet by finding max x+w and y+h of parts *on this sheet*
+            let actualUsedWidth = 0;
+            let actualUsedHeight = 0;
+            let totalPartAreaOnSheet = 0;
+
+            currentSheetParts.forEach(p => {
+                if (p.x !== undefined && p.y !== undefined) {
+                    actualUsedWidth = Math.max(actualUsedWidth, p.x + p.width + KERF_ALLOWANCE);
+                    actualUsedHeight = Math.max(actualUsedHeight, p.y + p.height + KERF_ALLOWANCE);
+                    totalPartAreaOnSheet += (p.width + KERF_ALLOWANCE) * (p.height + KERF_ALLOWANCE);
+                }
+            });
+            
+            // Potpack's stats.w and stats.h are for the *bin it thought it needed*.
+            // If it packed into a bin smaller than DEFAULT_SHEET_WIDTH/HEIGHT,
+            // efficiency should be against the part of the sheet *it actually used*.
+            // Or, if we always use full sheets, efficiency is against DEFAULT_SHEET_WIDTH/HEIGHT.
+            // For simplicity in display, let's use efficiency against the full sheet.
+            const sheetArea = DEFAULT_SHEET_WIDTH * DEFAULT_SHEET_HEIGHT;
+            const currentSheetEfficiency = (totalPartAreaOnSheet / sheetArea) * 100;
+
             packedSheets.push({
               id: sheetId,
               dimensions: { w: DEFAULT_SHEET_WIDTH, h: DEFAULT_SHEET_HEIGHT },
               parts: currentSheetParts,
-              packedAreaWidth: stats.w, // potpack stats are for the bin it used
-              packedAreaHeight: stats.h,
-              efficiency: stats.fill * 100,
+              packedAreaWidth: actualUsedWidth, // Potpack's stats.w might be for a smaller theoretical bin
+              packedAreaHeight: actualUsedHeight, // Potpack's stats.h
+              efficiency: currentSheetEfficiency,
             });
             sheetId++;
           } else if (stillRemainingAfterSheet.length > 0) {
-            // No parts were packed on this attempt, but some remain.
-            // This might happen if remaining parts are too large for a new sheet.
-            // Or if potpack couldn't fit anything.
-            toast({ title: "Packing Incomplete", description: "Some remaining parts could not be packed onto a new sheet.", variant: "default" });
+            toast({ title: "Packing Incomplete", description: "Some remaining parts could not be packed onto a new sheet. This might be due to size constraints.", variant: "default" });
             break; 
           }
           remainingPartsToPack = stillRemainingAfterSheet;
@@ -131,40 +178,72 @@ export default function SpecialFeaturePage() {
              toast({ title: "Max Sheets Reached", description: `Packing stopped after ${MAX_SHEETS} sheets. Some parts may remain.`, variant: "default" });
         }
 
-
         setPackedLayoutData(packedSheets);
         setActionResult(`Potpack processed ${allPartsToPack.length} total part instances onto ${packedSheets.length} sheets.`);
         
-        // Generate SVG visualization
         const svgs = packedSheets.map((sheet, index) => (
-          <div key={`sheet-${index}`} className="mb-4 p-2 border rounded-md">
-            <h4 className="font-semibold mb-2">Sheet {sheet.id} (Efficiency: {sheet.efficiency?.toFixed(2) || 'N/A'}%)</h4>
-            <svg width={DEFAULT_SHEET_WIDTH / 5} height={DEFAULT_SHEET_HEIGHT / 5} viewBox={`0 0 ${DEFAULT_SHEET_WIDTH} ${DEFAULT_SHEET_HEIGHT}`} className="border bg-gray-50">
-              <rect x="0" y="0" width={DEFAULT_SHEET_WIDTH} height={DEFAULT_SHEET_HEIGHT} fill="#f0f0f0" stroke="#ccc" strokeWidth="2"/>
-              {sheet.parts.map((part, pIndex) => (
-                <g key={`part-${pIndex}`}>
-                  <rect 
-                    x={part.x} 
-                    y={part.y} 
-                    width={part.width}  // Use actual part width (kerf already accounted for in packing)
-                    height={part.height} // Use actual part height
-                    fill="rgba(173, 216, 230, 0.7)" // lightblue with transparency
-                    stroke="blue" 
-                    strokeWidth="1"
-                  />
-                  <text x={(part.x ?? 0) + 5} y={(part.y ?? 0) + 15} fontSize="12" fill="black">
-                    {part.name.substring(0, part.name.lastIndexOf('_'))}
-                  </text>
-                   <text x={(part.x ?? 0) + 5} y={(part.y ?? 0) + 30} fontSize="10" fill="#555">
-                    {part.width}x{part.height}
-                  </text>
-                </g>
-              ))}
+          <div key={`sheet-${index}`} className="mb-6 p-3 border rounded-lg shadow-sm bg-white">
+            <h4 className="font-bold text-base mb-2 text-gray-700">
+              Sheet {sheet.id} <span className="font-normal text-sm">(Dimensions: {sheet.dimensions.w} x {sheet.dimensions.h} mm)</span>
+              <span className={`ml-2 text-sm font-semibold ${sheet.efficiency && sheet.efficiency < 70 ? 'text-orange-600' : 'text-green-600'}`}>
+                Efficiency: {sheet.efficiency?.toFixed(1) || 'N/A'}%
+              </span>
+            </h4>
+            <svg 
+                width="100%" 
+                viewBox={`-5 -5 ${sheet.dimensions.w + 10} ${sheet.dimensions.h + 10}`} 
+                className="border border-gray-300 rounded"
+                preserveAspectRatio="xMidYMid meet"
+            >
+              {/* Sheet Outline */}
+              <rect x="0" y="0" width={sheet.dimensions.w} height={sheet.dimensions.h} fill="#f7fafc" stroke="#e2e8f0" strokeWidth="2"/>
+              
+              {sheet.parts.map((part, pIndex) => {
+                const partColor = partColorMap.get(part.material || part.name) || 'rgba(128, 128, 128, 0.7)'; // Fallback grey
+                const partName = part.name.substring(0, part.name.lastIndexOf('_')) || part.name; // Remove instance suffix
+                
+                // Basic text scaling attempt (very simple)
+                const textLength = Math.max(partName.length, `${part.width}x${part.height}`.length);
+                let fontSize = 12;
+                if (part.width < textLength * 6 || part.height < 30) fontSize = 8;
+                if (part.width < textLength * 4 || part.height < 20) fontSize = 6;
+
+
+                return (
+                  <g key={`part-${pIndex}`} transform={`translate(${part.x ?? 0}, ${part.y ?? 0})`}>
+                    <rect 
+                      x={KERF_ALLOWANCE / 2} // Center part within its kerf-allocated space visually
+                      y={KERF_ALLOWANCE / 2}
+                      width={part.width}  
+                      height={part.height} 
+                      fill={partColor}
+                      stroke="rgba(0,0,0,0.5)" 
+                      strokeWidth="1"
+                    />
+                    {/* ClipPath to keep text within part boundaries */}
+                    <clipPath id={`clip-${sheet.id}-${pIndex}`}>
+                         <rect x={KERF_ALLOWANCE/2 + 2} y={KERF_ALLOWANCE/2 + 2} width={part.width - 4} height={part.height - 4} />
+                    </clipPath>
+                    <text 
+                        x={(KERF_ALLOWANCE / 2) + (part.width / 2)} 
+                        y={(KERF_ALLOWANCE / 2) + (part.height / 2) - (fontSize * 0.2)} // Adjust for two lines
+                        fontSize={fontSize} 
+                        fill="black"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        clipPath={`url(#clip-${sheet.id}-${pIndex})`}
+                        style={{ pointerEvents: 'none' }}
+                    >
+                       <tspan x={(KERF_ALLOWANCE / 2) + (part.width / 2)} dy="-0.2em">{partName}</tspan>
+                       <tspan x={(KERF_ALLOWANCE / 2) + (part.width / 2)} dy="1.2em">{`${part.width}x${part.height}`}</tspan>
+                    </text>
+                  </g>
+                );
+              })}
             </svg>
           </div>
         ));
         setVisualizedLayout(<div>{svgs}</div>);
-
 
         toast({ title: "Client Nesting (Potpack)", description: "Parts processed and layout visualized." });
 
@@ -237,7 +316,6 @@ export default function SpecialFeaturePage() {
     setVisualizedLayout(null);
     toast({ title: "Processing...", description: "Performing generic action." });
     try {
-      // Example input, adjust as needed
       const exampleInput = { parameter1: "test", parameter2: 123 };
       const result = await performSpecialServerAction(exampleInput);
       setActionResult(`Generic Action Result: ${result.message}\nOutput: ${JSON.stringify(result.output, null, 2)}`);
@@ -278,7 +356,7 @@ export default function SpecialFeaturePage() {
             <TabsContent value="client-nesting" className="mt-4 p-4 border rounded-md">
               <CardTitle className="text-lg mb-2">Client-Side Nesting</CardTitle>
               <CardDescription className="mb-4">
-                Visualize parts nested onto sheets. Good for quick previews. Uses `potpack` library.
+                Visualize parts nested onto sheets. Good for quick previews. Select an algorithm below.
               </CardDescription>
               <div className="space-y-4">
                 <div className="space-y-2">
@@ -298,11 +376,11 @@ export default function SpecialFeaturePage() {
                   value={partsListData}
                   onChange={(e) => setPartsListData(e.target.value)}
                   rows={8}
-                  className="text-xs"
+                  className="text-xs font-mono"
                 />
                 <Button onClick={handleClientSideNesting} disabled={isLoading || !partsListData.trim()}>
-                  {isLoading && selectedClientAlgorithm === 'rectpack2d' ? <Loader2 className="mr-2 animate-spin" /> : <LayoutList className="mr-2" />}
-                  {isLoading && selectedClientAlgorithm === 'rectpack2d' ? 'Nesting...' : 'Visualize Nesting (Client)'}
+                  {isLoading ? <Loader2 className="mr-2 animate-spin" /> : <LayoutList className="mr-2" />}
+                  {isLoading ? 'Nesting...' : 'Visualize Nesting (Client)'}
                 </Button>
                  {actionResult && selectedClientAlgorithm === 'rectpack2d' && (
                     <Alert variant="default" className="mt-4 text-xs">
@@ -328,10 +406,11 @@ export default function SpecialFeaturePage() {
               </Alert>
               <div className="space-y-3">
                 <Textarea
-                  placeholder="Paste parts list here (e.g., JSON or CSV format)."
+                  placeholder="Paste parts list here (e.g., JSON or CSV format for server processing)."
                   value={partsListData}
                   onChange={(e) => setPartsListData(e.target.value)}
                   rows={6}
+                  className="text-xs font-mono"
                 />
                 <Button onClick={handleServerSideNesting} disabled={isLoading || !partsListData.trim()}>
                   {isLoading ? <Loader2 className="mr-2 animate-spin"/> : <Server className="mr-2" /> }
@@ -358,7 +437,7 @@ export default function SpecialFeaturePage() {
                   value={partsListData}
                   onChange={(e) => setPartsListData(e.target.value)}
                   rows={6}
-                  className="text-xs"
+                  className="text-xs font-mono"
                 />
                 <Button onClick={handleExportForDesktop} disabled={isLoading || !partsListData.trim()}>
                   {isLoading ? <Loader2 className="mr-2 animate-spin" /> : <Download className="mr-2" />}
@@ -379,7 +458,7 @@ export default function SpecialFeaturePage() {
             </TabsContent>
           </Tabs>
 
-          {actionResult && selectedClientAlgorithm !== 'rectpack2d' && ( // Only show general actionResult if not rectpack2d (which has its own summary spot)
+          {actionResult && selectedClientAlgorithm !== 'rectpack2d' && (
             <div className="mt-6 p-4 border rounded-md bg-muted w-full">
               <p className="text-sm font-semibold">Action Result:</p>
               <pre className="text-xs text-muted-foreground whitespace-pre-wrap overflow-x-auto">{actionResult}</pre>
@@ -387,9 +466,9 @@ export default function SpecialFeaturePage() {
           )}
 
           {visualizedLayout && (
-             <div className="mt-6 p-4 border rounded-md bg-background w-full">
-              <p className="text-sm font-semibold mb-2">Visualized Layout:</p>
-              <div className="max-h-[500px] overflow-auto">
+             <div className="mt-6 p-4 border rounded-lg bg-gray-50 w-full shadow">
+              <p className="text-lg font-semibold mb-3 text-gray-800">Visualized Layout:</p>
+              <div className="max-h-[70vh] overflow-auto p-2 bg-gray-100 rounded">
                 {visualizedLayout}
               </div>
             </div>
@@ -399,7 +478,7 @@ export default function SpecialFeaturePage() {
             <div className="mt-6 p-4 border rounded-md bg-muted w-full">
               <p className="text-sm font-semibold">Packed Layout Data (Potpack):</p>
               <div className="max-h-96 overflow-auto">
-                <pre className="text-xs text-muted-foreground whitespace-pre-wrap overflow-x-auto bg-background/50 p-2 rounded-sm mt-1">
+                <pre className="text-xs text-muted-foreground whitespace-pre-wrap overflow-x-auto bg-background/50 p-2 rounded-sm mt-1 font-mono">
                   {JSON.stringify(packedLayoutData, null, 2)}
                 </pre>
               </div>
@@ -409,4 +488,5 @@ export default function SpecialFeaturePage() {
       </Card>
     </>
   );
-}
+
+    
