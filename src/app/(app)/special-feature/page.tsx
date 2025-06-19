@@ -13,30 +13,8 @@ import * as React from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { performSpecialServerAction, performServerSideNestingAction, exportCutListForDesktopAction, runDeepnestAlgorithmAction } from './actions';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import potpack from 'potpack'; // Using potpack as a client-side packer
-
-interface InputPart {
-  name: string;
-  width: number;
-  height: number;
-  qty: number;
-  // material?: string; // Not used by potpack directly, but good for context
-}
-
-interface PackedPart extends InputPart {
-  x?: number;
-  y?: number;
-  // Potpack might add 'bin' if multiple bins were supported directly, but we handle multi-sheet manually
-}
-
-interface SheetLayout {
-  id: number;
-  dimensions: { w: number; h: number };
-  parts: PackedPart[];
-  packedAreaWidth?: number;
-  packedAreaHeight?: number;
-  efficiency?: number;
-}
+import potpack from 'potpack';
+import type { PotpackBox, PotpackStats, InputPart, PackedPart, SheetLayout } from '@/types';
 
 
 const KERF_ALLOWANCE = 3; // mm, adjust as needed
@@ -85,18 +63,29 @@ export default function SpecialFeaturePage() {
     setActionResult(null);
     setPackedLayoutData(null);
 
-    if (selectedClientAlgorithm === 'rectpack2d') {
+    if (selectedClientAlgorithm === 'rectpack2d') { // potpack logic
       try {
         const inputParts: InputPart[] = JSON.parse(partsListData);
-        if (!Array.isArray(inputParts) || !inputParts.every(p => typeof p.width === 'number' && typeof p.height === 'number' && typeof p.qty === 'number')) {
-          throw new Error("Invalid parts list format. Expected JSON array of objects with name, width, height, qty.");
+
+        if (!Array.isArray(inputParts)) {
+            throw new Error("Invalid parts list format: Expected an array.");
+        }
+        for (const p of inputParts) {
+            if (
+                typeof p.name !== 'string' ||
+                typeof p.width !== 'number' || p.width <= 0 ||
+                typeof p.height !== 'number' || p.height <= 0 ||
+                typeof p.qty !== 'number' || p.qty <= 0
+            ) {
+                throw new Error("Invalid part structure. Each part must have name (string), and positive width, height, qty (numbers).");
+            }
         }
 
-        let allIndividualParts: { w: number, h: number, name: string, original: InputPart }[] = [];
+        let allIndividualParts: PotpackBox[] = [];
         inputParts.forEach(part => {
           for (let i = 0; i < part.qty; i++) {
-            allIndividualParts.push({ 
-              w: part.width + KERF_ALLOWANCE, 
+            allIndividualParts.push({
+              w: part.width + KERF_ALLOWANCE,
               h: part.height + KERF_ALLOWANCE,
               name: `${part.name} #${i + 1}`,
               original: part
@@ -109,36 +98,34 @@ export default function SpecialFeaturePage() {
 
         while(allIndividualParts.length > 0) {
             sheetIndex++;
-            const currentSheetPartsToPack = [...allIndividualParts]; // potpack modifies the array
-            const stats = potpack(currentSheetPartsToPack); // stats: {w, h, fill}
+            const currentSheetPartsToPack = [...allIndividualParts]; 
+            const stats: PotpackStats = potpack(currentSheetPartsToPack); 
 
             const packedPartsForThisSheet: PackedPart[] = [];
-            const remainingPartsForNextAttempt: typeof allIndividualParts = [];
+            const remainingPartsForNextAttempt: PotpackBox[] = [];
 
             let actualPackedWidth = 0;
             let actualPackedHeight = 0;
 
             currentSheetPartsToPack.forEach(p => {
-                if (p.x !== undefined && p.y !== undefined) { // Part was packed by potpack
-                    // Check if this part fits on *this current physical sheet*
-                    if ((p.x + p.w) <= DEFAULT_SHEET_WIDTH && (p.y + p.h) <= DEFAULT_SHEET_HEIGHT) {
+                if (p.x !== undefined && p.y !== undefined) { 
+                    if ((p.x + p.w) <= DEFAULT_SHEET_WIDTH && (p.y + p.h) <= DEFAULT_SHEET_HEIGHT) { 
                         packedPartsForThisSheet.push({
-                            name: p.name,
-                            width: p.original.width, // Store original dimensions
-                            height: p.original.height,
-                            qty: 1, // Represents a single instance
+                            name: p.name!, 
+                            width: p.original!.width, 
+                            height: p.original!.height,
+                            qty: 1, 
                             x: p.x,
                             y: p.y,
+                            material: p.original!.material 
                         });
                         actualPackedWidth = Math.max(actualPackedWidth, p.x + p.w);
                         actualPackedHeight = Math.max(actualPackedHeight, p.y + p.h);
                     } else {
-                        // Part was "packed" by potpack but overflows current sheet dimensions
-                        remainingPartsForNextAttempt.push(p); 
+                        remainingPartsForNextAttempt.push({ w: p.w, h: p.h, name: p.name, original: p.original });
                     }
                 } else {
-                    // Part was not packed by potpack in this attempt
-                    remainingPartsForNextAttempt.push(p);
+                    remainingPartsForNextAttempt.push({ w: p.w, h: p.h, name: p.name, original: p.original });
                 }
             });
             
@@ -147,31 +134,28 @@ export default function SpecialFeaturePage() {
                     id: sheetIndex,
                     dimensions: { w: DEFAULT_SHEET_WIDTH, h: DEFAULT_SHEET_HEIGHT },
                     parts: packedPartsForThisSheet,
-                    packedAreaWidth: actualPackedWidth,
-                    packedAreaHeight: actualPackedHeight,
+                    packedAreaWidth: actualPackedWidth > 0 ? actualPackedWidth - KERF_ALLOWANCE : 0, 
+                    packedAreaHeight: actualPackedHeight > 0 ? actualPackedHeight - KERF_ALLOWANCE : 0,
                     efficiency: (packedPartsForThisSheet.reduce((sum, p) => sum + (p.width * p.height), 0) / (DEFAULT_SHEET_WIDTH * DEFAULT_SHEET_HEIGHT)) * 100,
                 });
             }
             
-            allIndividualParts = remainingPartsForNextAttempt.map(p => ({ // Prepare for next iteration
-                w: p.w, h: p.h, name: p.name, original: p.original
-            }));
+            allIndividualParts = remainingPartsForNextAttempt; 
 
             if (packedPartsForThisSheet.length === 0 && allIndividualParts.length > 0) {
-                 // This means no parts could be packed onto a new sheet, could be due to parts being too large
                 toast({ title: "Nesting Warning", description: "Some parts might be too large to fit on a new sheet or no further packing possible.", variant: "default"});
-                // Add remaining unbale to pack parts to a "failed to pack list"
-                // For simplicity, we'll break here. A more robust solution would list them.
+                setActionResult(`Could not pack remaining ${allIndividualParts.length} parts. Check dimensions.`);
                 break; 
             }
-             if (packedSheets.length > 20 && allIndividualParts.length > 0) { // Safety break
-                toast({ title: "Nesting Limit", description: "Reached maximum sheet limit for this conceptual demo.", variant: "default"});
+             if (sheetIndex > 20 && allIndividualParts.length > 0) { 
+                toast({ title: "Nesting Limit", description: "Reached maximum sheet limit (20) for this conceptual demo.", variant: "default"});
+                setActionResult(`Nesting stopped after 20 sheets. Remaining parts: ${allIndividualParts.length}`);
                 break;
             }
         }
 
         setPackedLayoutData(packedSheets);
-        const resultMsg = `Client-Side Nesting (Rectpack2D/potpack) complete. ${packedSheets.length} sheet(s) used. See details below.`;
+        const resultMsg = `Client-Side Nesting (potpack) complete. ${packedSheets.length} sheet(s) used. ${allIndividualParts.length > 0 ? `${allIndividualParts.length} parts remaining.` : ''}`;
         setActionResult(resultMsg);
         toast({ title: "Nesting Complete", description: resultMsg });
 
@@ -182,7 +166,6 @@ export default function SpecialFeaturePage() {
       }
     } else if (selectedClientAlgorithm === 'deepnest') {
       try {
-        // Validate JSON structure conceptually before sending
         JSON.parse(partsListData); 
         const result = await runDeepnestAlgorithmAction(partsListData);
         if (result.success) {
@@ -296,7 +279,7 @@ export default function SpecialFeaturePage() {
                 <AlertTitle>Implementation Status</AlertTitle>
                 <AlertDescription>
                   Rectpack2D uses `potpack` for client-side packing. Deepnest.io calls a conceptual backend action.
-                  Input JSON format: `[{"name":"Part A", "width":100, "height":50, "qty":2}, ...]`
+                  Input JSON format: `[{"name":"Part A", "width":100, "height":50, "qty":2, "material":"Plywood"}, ...]`
                 </AlertDescription>
               </Alert>
               <div className="space-y-4">
@@ -313,14 +296,14 @@ export default function SpecialFeaturePage() {
                   </Select>
                 </div>
                 <Textarea
-                  placeholder={`Paste parts list here (JSON array). Example:\n[{"name":"Top", "width":500, "height":300, "qty":1},\n {"name":"Side", "width":300, "height":700, "qty":2}]`}
+                  placeholder={`Paste parts list here (JSON array). Example:\n[{"name":"Top", "width":500, "height":300, "qty":1, "material":"MDF"},\n {"name":"Side", "width":300, "height":700, "qty":2, "material":"Plywood"}]`}
                   value={partsListData}
                   onChange={(e) => setPartsListData(e.target.value)}
                   rows={6}
                 />
                 <Button onClick={handleClientSideNesting} disabled={isLoading || !partsListData.trim()}>
-                  {isLoading && selectedClientAlgorithm === 'rectpack2d' ? <Loader2 className="mr-2 animate-spin" /> : <LayoutList className="mr-2" />}
-                  {isLoading && selectedClientAlgorithm === 'rectpack2d' ? 'Packing...' : 'Visualize Nesting (Client)'}
+                  {isLoading && (selectedClientAlgorithm === 'rectpack2d' || selectedClientAlgorithm === 'deepnest') ? <Loader2 className="mr-2 animate-spin" /> : <LayoutList className="mr-2" />}
+                  {isLoading && (selectedClientAlgorithm === 'rectpack2d' || selectedClientAlgorithm === 'deepnest') ? 'Processing...' : 'Visualize Nesting (Client)'}
                 </Button>
               </div>
             </TabsContent>
@@ -397,7 +380,7 @@ export default function SpecialFeaturePage() {
           )}
           {packedLayoutData && selectedClientAlgorithm === 'rectpack2d' && (
             <div className="mt-6 p-4 border rounded-md bg-muted w-full">
-              <p className="text-sm font-semibold">Packed Layout Data (Rectpack2D/potpack):</p>
+              <p className="text-sm font-semibold">Packed Layout Data (potpack - Client-Side):</p>
               <div className="max-h-96 overflow-auto">
                 {packedLayoutData.map(sheet => (
                   <div key={sheet.id} className="mb-4 p-2 border rounded-sm">
@@ -416,4 +399,3 @@ export default function SpecialFeaturePage() {
     </>
   );
 }
-    

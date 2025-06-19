@@ -598,14 +598,38 @@ export interface DrawerSetCalculatorResult {
 }
 // End Cabinet Designer Types
 
-// Type for devtools/potpack (ensure it matches library if using stricter types)
+// Types for Special Feature / Nesting
+export interface InputPart {
+  name: string;
+  width: number;
+  height: number;
+  qty: number;
+  material?: string; // Optional, for context
+}
+
+export interface PackedPart extends InputPart {
+  x?: number;
+  y?: number;
+  // Potpack might add 'bin' if multiple bins were supported directly, but we handle multi-sheet manually
+}
+
+export interface SheetLayout {
+  id: number;
+  dimensions: { w: number; h: number }; // Sheet dimensions
+  parts: PackedPart[]; // Parts packed onto this sheet
+  packedAreaWidth?: number; // Actual width used by packed parts
+  packedAreaHeight?: number; // Actual height used by packed parts
+  efficiency?: number; // Percentage of sheet area used by parts
+}
+
+// Type for devtools/potpack
 export interface PotpackBox {
   w: number;
   h: number;
   x?: number;
   y?: number;
   name?: string; // Custom property for tracking
-  original?: any; // Custom property for tracking
+  original?: InputPart; // Link back to the original part definition
   [key: string]: any; // Allow other properties
 }
 export interface PotpackStats {
