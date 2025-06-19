@@ -23,7 +23,7 @@ import type {
     CabinetCalculationInput, CalculatedCabinet, CabinetPart, CabinetTemplateData, PartDefinition, CabinetPartType, CabinetTypeContext,
     DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer as SingleCalculatedDrawer, TemplateAccessoryEntry,
     MaterialDefinitionDB, AccessoryDefinitionDB, PredefinedMaterialSimple, PredefinedAccessory, SelectItem as GenericSelectItem, AccessoryItem,
-    InputPart, NestingJob // Added InputPart and NestingJob
+    InputPart, NestingJob
 } from './types';
 import { PREDEFINED_MATERIALS, PREDEFINED_ACCESSORIES } from './types';
 import { Separator } from '@/components/ui/separator';
@@ -156,6 +156,7 @@ export default function CabinetDesignerPage() {
   const [projectCalculationResult, setProjectCalculationResult] = React.useState<ProjectCalculationResult | null>(null);
   const [isCalculatingProject, setIsCalculatingProject] = React.useState(false);
   const [latestCalculatedProjectPartsForNesting, setLatestCalculatedProjectPartsForNesting] = React.useState<InputPart[]>([]);
+  const [customNestingJobName, setCustomNestingJobName] = React.useState<string>("");
 
 
   const [customMaterialTypes, setCustomMaterialTypes] = React.useState<MaterialDefinitionDB[]>([]);
@@ -660,8 +661,8 @@ export default function CabinetDesignerPage() {
       let existingJobs: NestingJob[] = existingJobsString ? JSON.parse(existingJobsString) : [];
       
       const now = new Date();
-      const jobName = `Project Parts - ${format(now, "yyyy-MM-dd HH:mm:ss")}`;
-      const jobId = `nestJob_${now.getTime()}`;
+      const jobName = customNestingJobName.trim() !== "" ? customNestingJobName.trim() : `Project Parts - ${format(now, "yyyy-MM-dd HH:mm:ss")}`;
+      const jobId = `nestJob_${now.getTime()}_${jobName.replace(/\s+/g, '_').slice(0,20)}`; // Add part of name to ID for easier debugging
 
       const newJob: NestingJob = {
         id: jobId,
@@ -675,6 +676,7 @@ export default function CabinetDesignerPage() {
 
       localStorage.setItem("cabinetDesignerNestingJobs", JSON.stringify(existingJobs));
       toast({ title: "Project Parts Saved", description: `"${jobName}" saved for nesting tool. You can now load it in Advanced Tools.`, });
+      setCustomNestingJobName(""); // Clear the input field after saving
     } catch (e) {
       console.error("Error saving project for nesting:", e);
       toast({ title: "Error Saving for Nesting", description: "Could not save parts to localStorage.", variant: "destructive" });
@@ -757,21 +759,33 @@ export default function CabinetDesignerPage() {
                 <div><Label htmlFor={`project_height_${item.id}`} className="text-xs">H (mm)</Label><Input id={`project_height_${item.id}`} type="number" value={item.height} onChange={(e) => handleProjectItemChange(item.id, 'height', parseInt(e.target.value, 10) || 0)} className="h-9 text-xs"/></div>
                 <div><Label htmlFor={`project_depth_${item.id}`} className="text-xs">D (mm)</Label><Input id={`project_depth_${item.id}`} type="number" value={item.depth} onChange={(e) => handleProjectItemChange(item.id, 'depth', parseInt(e.target.value, 10) || 0)} className="h-9 text-xs"/></div></div></Card>))}
            <Button onClick={handleAddProjectItem} variant="outline" size="sm" className="mt-3"><PlusCircle className="mr-2 h-4 w-4" /> Add Cabinet to Project</Button><Separator className="my-4" />
-            <div className="flex flex-wrap gap-2">
-                <Button onClick={handleCalculateProject} className="flex-grow sm:flex-grow-0" disabled={isCalculatingProject || projectCabinetItems.length === 0}>
+            <div className="space-y-3">
+                <Button onClick={handleCalculateProject} className="w-full sm:w-auto" disabled={isCalculatingProject || projectCabinetItems.length === 0}>
                     {isCalculatingProject ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Calculator className="mr-2 h-4 w-4" />}
                     {isCalculatingProject ? "Calculating Project..." : "Calculate Entire Project"}
                 </Button>
-                <Button 
-                    onClick={handleSaveProjectForNesting} 
-                    variant="secondary" 
-                    className="flex-grow sm:flex-grow-0"
-                    disabled={isCalculatingProject || latestCalculatedProjectPartsForNesting.length === 0}>
-                    <SendToBack className="mr-2 h-4 w-4" />
-                    Save Parts for Nesting Tool
-                </Button>
+                {latestCalculatedProjectPartsForNesting.length > 0 && (
+                  <div className="p-4 border rounded-md bg-muted/40 space-y-3">
+                    <Label htmlFor="nestingJobName" className="font-medium">Nesting Job Name (Optional)</Label>
+                    <Input 
+                        id="nestingJobName" 
+                        value={customNestingJobName} 
+                        onChange={(e) => setCustomNestingJobName(e.target.value)} 
+                        placeholder={`Default: Project Parts - ${format(new Date(), "yyyy-MM-dd HH:mm")}`}
+                        className="text-sm h-9"
+                    />
+                    <Button 
+                        onClick={handleSaveProjectForNesting} 
+                        variant="secondary" 
+                        className="w-full sm:w-auto"
+                        disabled={isCalculatingProject}>
+                        <SendToBack className="mr-2 h-4 w-4" />
+                        Save Parts for Nesting Tool
+                    </Button>
+                    <p className="text-xs text-muted-foreground">Saves the aggregated parts list to be loaded in "Advanced Tools".</p>
+                  </div>
+                )}
             </div>
-           <p className="text-xs text-muted-foreground mt-2">Note: Calculate project first. Then, "Save Parts for Nesting Tool" makes the aggregated parts list available in "Advanced Tools".</p>
            
            {isCalculatingProject && (<div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2">Calculating project estimates...</p></div>)}
            {projectCalculationResult && !isCalculatingProject && (
