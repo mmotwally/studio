@@ -188,10 +188,15 @@ export interface ReportFilter {
   departmentId?: string;
 }
 
-export type SelectItem = {
+export interface SelectItem {
   value: string;
   label: string;
-};
+  // Allow for additional properties like lastPurchasePrice etc.
+  lastPurchasePrice?: number | null;
+  unitCost?: number | null;
+  quantity?: number;
+  unitName?: string | null;
+}
 
 
 // Requisition Module Types
@@ -478,3 +483,135 @@ export type GeneratedReportData =
   | RequisitionSummaryItem[] 
   | PurchaseOrderSummaryItem[]
   | null;
+
+// Types for Cabinet Designer
+export type CabinetPartType =
+  | 'Side Panel' | 'Bottom Panel' | 'Top Panel' | 'Back Panel' | 'Double Back Panel'
+  | 'Door' | 'Doors' | 'Drawer Front' | 'Drawer Back' | 'Drawer Side' | 'Drawer Counter Front'
+  | 'Drawer Bottom' | 'Mobile Shelf' | 'Fixed Shelf' | 'Upright' | 'Front Panel'
+  | 'Top Rail (Front)' | 'Top Rail (Back)' | 'Bottom Rail (Front)' | 'Bottom Rail (Back)'
+  | 'Stretcher' | 'Toe Kick';
+
+export type CabinetTypeContext = 'Base' | 'Wall' | 'Drawer' | 'General';
+export type FormulaDimensionType = 'Width' | 'Height' | 'Quantity' | 'Thickness';
+
+export interface CabinetPart {
+  name: string;
+  partType: CabinetPartType;
+  quantity: number;
+  width: number;
+  height: number;
+  thickness: number;
+  material: string;
+  grainDirection?: 'with' | 'reverse' | 'none' | null;
+  notes?: string;
+  edgeBanding?: { front?: number; back?: number; top?: number; bottom?: number; };
+}
+
+export interface AccessoryItem {
+  id: string;
+  name: string;
+  quantity: number;
+  unitCost: number;
+  totalCost: number;
+  notes?: string;
+}
+
+export interface CalculatedCabinet {
+  parts: CabinetPart[];
+  accessories: AccessoryItem[];
+  estimatedMaterialCost: number;
+  estimatedAccessoryCost: number;
+  estimatedTotalCost: number;
+  totalPanelAreaMM: number;
+  totalBackPanelAreaMM: number;
+}
+
+export interface CabinetCalculationInput {
+  cabinetType: string;
+  width: number;
+  height: number;
+  depth: number;
+  customTemplate?: CabinetTemplateData;
+}
+
+export interface MaterialDefinitionDB {
+  id: string; name: string; type: "panel" | "edge_band" | "other";
+  costPerSqm?: number | null; costPerMeter?: number | null; thickness?: number | null;
+  defaultSheetWidth?: number | null; defaultSheetHeight?: number | null;
+  hasGrain: boolean; notes?: string | null; createdAt: string; lastUpdated: string;
+}
+export interface PredefinedMaterialSimple { id: string; name: string; hasGrain?: boolean; costPerSqm?: number; thickness?: number; }
+
+export interface AccessoryDefinitionDB {
+  id: string; name: string; type: "hinge" | "drawer_slide" | "handle" | "shelf_pin" | "leg" | "screw" | "other";
+  unitCost: number; description?: string | null; supplierId?: string | null; sku?: string | null;
+  createdAt: string; lastUpdated: string;
+}
+export interface PredefinedAccessory { id: string; name: string; type: "hinge" | "drawer_slide" | "handle" | "shelf_pin" | "leg" | "screw" | "other"; unitCost: number; description?: string;}
+
+export interface EdgeBandingAssignment { front?: boolean; back?: boolean; top?: boolean; bottom?: boolean; }
+
+export interface PartDefinition {
+  partId: string; nameLabel: string; partType: CabinetPartType; cabinetContext?: CabinetTypeContext;
+  quantityFormula: string; quantityFormulaKey?: string;
+  widthFormula: string; widthFormulaKey?: string;
+  heightFormula: string; heightFormulaKey?: string;
+  materialId: string;
+  thicknessFormula?: string; thicknessFormulaKey?: string;
+  edgeBanding?: EdgeBandingAssignment;
+  grainDirection?: 'with' | 'reverse' | 'none' | null; notes?: string;
+}
+
+export interface TemplateAccessoryEntry {
+  id: string; accessoryId: string; quantityFormula: string; notes?: string;
+}
+
+export interface CabinetTemplateData {
+  id: string; name: string; type: "base" | "wall" | "tall" | "custom"; previewImage?: string;
+  defaultDimensions: { width: number; height: number; depth: number; };
+  parameters: { PT: number; BPT?: number; BPO?: number; DG?: number; DCG?: number; TRD?: number; B?: number; DW?: number; DD?: number; DH?: number; Clearance?: number; };
+  parts: PartDefinition[]; accessories?: TemplateAccessoryEntry[]; createdAt?: string; lastUpdated?: string;
+}
+
+export interface PredefinedFormula {
+  key: string; name: string; description: string; example?: string;
+  partType: CabinetPartType | CabinetPartType[] | []; context: CabinetTypeContext[] | null;
+  dimension: FormulaDimensionType; formula: string;
+}
+export interface CustomFormulaEntry {
+  id: string; name: string; formulaString: string; dimensionType: FormulaDimensionType;
+  description?: string | null; createdAt: string;
+}
+export type CombinedFormulaItem = Omit<PredefinedFormula, 'key'> & { id: string; isCustom: boolean; };
+
+export interface DrawerPartCalculation { name: string; quantity: number; width: number; height: number; thickness: number; notes?: string; }
+export interface CalculatedDrawer { drawerNumber: number; overallFrontHeight: number; boxHeight: number; parts: DrawerPartCalculation[]; }
+export interface DrawerSetCalculatorInput {
+  cabinetInternalHeight: number; cabinetWidth: number; numDrawers: number; drawerReveal: number;
+  panelThickness: number; drawerSlideClearanceTotal: number; drawerBoxSideDepth: number;
+  drawerBoxSideHeight: number; customDrawerFrontHeights?: number[];
+}
+export interface DrawerSetCalculatorResult {
+  success: boolean; message?: string; calculatedDrawers: CalculatedDrawer[];
+  totalFrontsHeightWithReveals?: number; cabinetInternalHeight?: number;
+}
+// End Cabinet Designer Types
+
+// Type for devtools/potpack (ensure it matches library if using stricter types)
+export interface PotpackBox {
+  w: number;
+  h: number;
+  x?: number;
+  y?: number;
+  name?: string; // Custom property for tracking
+  original?: any; // Custom property for tracking
+  [key: string]: any; // Allow other properties
+}
+export interface PotpackStats {
+  w: number; // width of overall bounding box
+  h: number; // height of overall bounding box
+  fill: number; // percentage of space filled
+  [key: string]: any;
+}
+
