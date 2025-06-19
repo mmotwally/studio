@@ -117,6 +117,13 @@ interface ProjectCabinetItem {
   depth: number;
 }
 
+interface ProjectCalculationResult {
+  totalCost: number;
+  totalPanelArea: number;
+  totalBackPanelArea: number;
+  individualCabinetResults: Array<{ name: string; cost: number; quantity: number }>;
+}
+
 export default function CabinetDesignerPage() {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = React.useState(false);
@@ -140,7 +147,11 @@ export default function CabinetDesignerPage() {
   const [drawerSetResult, setDrawerSetResult] = React.useState<DrawerSetCalculatorResult | null>(null);
   const [isCalculatingDrawers, setIsCalculatingDrawers] = React.useState(false);
   const [drawerCalcError, setDrawerCalcError] = React.useState<string | null>(null);
+  
   const [projectCabinetItems, setProjectCabinetItems] = React.useState<ProjectCabinetItem[]>([]);
+  const [projectCalculationResult, setProjectCalculationResult] = React.useState<ProjectCalculationResult | null>(null);
+  const [isCalculatingProject, setIsCalculatingProject] = React.useState(false);
+
 
   const [customMaterialTypes, setCustomMaterialTypes] = React.useState<MaterialDefinitionDB[]>([]);
   const [customAccessoryTypes, setCustomAccessoryTypes] = React.useState<AccessoryDefinitionDB[]>([]);
@@ -357,7 +368,7 @@ export default function CabinetDesignerPage() {
     try {
         const result = await saveCabinetTemplateAction(currentTemplate);
         if (result.success && result.id) {
-            toast({ title: "Template Saved to Database", description: `Template "${currentTemplate.name}" has been saved.` });
+            toast({ title: "Template Added (This Session)", description: `Template "${currentTemplate.name}" is ready for calculation. The backend will attempt dynamic calculation with its formulas. (Note: Complex formulas may have limitations.)` });
             const updatedTemplates = await fetchAndSetTemplates();
             const savedFullTemplate = updatedTemplates.find(t => t.id === result.id) || currentTemplate; // Prefer fresher data from DB
             setCalculationInput({
@@ -517,6 +528,78 @@ export default function CabinetDesignerPage() {
     );
   };
   
+  const handleCalculateProject = async () => {
+    if (projectCabinetItems.length === 0) {
+      toast({ title: "Project Empty", description: "Add some cabinets to the project first." });
+      return;
+    }
+    setIsCalculatingProject(true);
+    setProjectCalculationResult(null);
+    let cumulativeCost = 0;
+    let cumulativePanelArea = 0;
+    let cumulativeBackPanelArea = 0;
+    const individualResults: Array<{ name: string; cost: number; quantity: number }> = [];
+
+    try {
+      for (const projectItem of projectCabinetItems) {
+        let templateForCalc: CabinetTemplateData | undefined = undefined;
+        const isHardcoded = initialHardcodedCabinetTypes.some(hct => hct.value === projectItem.templateId);
+        
+        if (!isHardcoded) {
+          if (currentTemplate && currentTemplate.id === projectItem.templateId) {
+            templateForCalc = currentTemplate;
+          } else {
+            templateForCalc = dbTemplates.find(dbT => dbT.id === projectItem.templateId);
+          }
+          if (!templateForCalc) {
+              const fetchedTemplate = await getCabinetTemplateByIdAction(projectItem.templateId);
+              if (fetchedTemplate) templateForCalc = fetchedTemplate;
+          }
+        }
+        
+        const calcInput: CabinetCalculationInput = {
+          cabinetType: projectItem.templateId,
+          width: projectItem.width,
+          height: projectItem.height,
+          depth: projectItem.depth,
+          customTemplate: templateForCalc,
+        };
+
+        const result = await calculateCabinetDetails(calcInput);
+        if (result.success && result.data) {
+          const itemTotalCost = result.data.estimatedTotalCost * projectItem.quantity;
+          cumulativeCost += itemTotalCost;
+          cumulativePanelArea += (result.data.totalPanelAreaMM / (1000*1000)) * projectItem.quantity;
+          cumulativeBackPanelArea += (result.data.totalBackPanelAreaMM / (1000*1000)) * projectItem.quantity;
+          individualResults.push({
+            name: `${projectItem.templateName} (${projectItem.width}x${projectItem.height}x${projectItem.depth})`,
+            cost: itemTotalCost,
+            quantity: projectItem.quantity,
+          });
+        } else {
+          throw new Error(`Failed to calculate details for ${projectItem.templateName}: ${result.error || 'Unknown error'}`);
+        }
+      }
+      setProjectCalculationResult({
+        totalCost: cumulativeCost,
+        totalPanelArea: cumulativePanelArea,
+        totalBackPanelArea: cumulativeBackPanelArea,
+        individualCabinetResults: individualResults,
+      });
+      toast({ title: "Project Calculation Complete", description: "Summary costs and areas estimated." });
+    } catch (error) {
+      console.error("Project calculation failed:", error);
+      toast({
+        title: "Project Calculation Failed",
+        description: (error instanceof Error ? error.message : "An unknown error occurred during project calculation."),
+        variant: "destructive",
+      });
+      setProjectCalculationResult(null);
+    } finally {
+      setIsCalculatingProject(false);
+    }
+  };
+
   const isSelectedTemplateCustomDb = dbTemplates.some(t => t.id === calculationInput.cabinetType);
 
 
@@ -583,7 +666,7 @@ export default function CabinetDesignerPage() {
           {!isLoading && !calculatedData && !calculationError && (<div className="text-center py-10 text-muted-foreground"><Library className="mx-auto h-12 w-12 mb-4" /><p>Select type, enter dimensions, and click "Calculate".</p></div>)}
         </CardContent>
       </Card>
-      <Card className="lg:col-span-3 shadow-lg"><CardHeader><CardTitle className="flex items-center"><ListChecks className="mr-2 h-5 w-5 text-primary" />Project Planner</CardTitle><CardDescription>Add cabinet instances to your project.</CardDescription></CardHeader>
+      <Card className="lg:col-span-3 shadow-lg"><CardHeader><CardTitle className="flex items-center"><ListChecks className="mr-2 h-5 w-5 text-primary" />Project Planner</CardTitle><CardDescription>Add cabinet instances to your project and estimate overall costs and materials.</CardDescription></CardHeader>
         <CardContent className="space-y-4">{projectCabinetItems.map((item) => (<Card key={item.id} className="p-4 space-y-3 relative bg-muted/30"><Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10 h-7 w-7" onClick={() => handleRemoveProjectItem(item.id)}><XCircle className="h-4 w-4"/></Button>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 items-end">
                 <div className="sm:col-span-2 md:col-span-2"><Label htmlFor={`project_template_${item.id}`} className="text-xs">Template</Label><Select value={item.templateId} onValueChange={(value) => handleProjectItemChange(item.id, 'templateId', value)}><SelectTrigger id={`project_template_${item.id}`} className="h-9 text-xs"><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{selectableCabinetTypes.map(type => (<SelectItem key={type.value} value={type.value} className="text-xs">{type.label}</SelectItem>))}</SelectContent></Select></div>
@@ -591,8 +674,33 @@ export default function CabinetDesignerPage() {
                 <div><Label htmlFor={`project_width_${item.id}`} className="text-xs">W (mm)</Label><Input id={`project_width_${item.id}`} type="number" value={item.width} onChange={(e) => handleProjectItemChange(item.id, 'width', parseInt(e.target.value, 10) || 0)} className="h-9 text-xs"/></div>
                 <div><Label htmlFor={`project_height_${item.id}`} className="text-xs">H (mm)</Label><Input id={`project_height_${item.id}`} type="number" value={item.height} onChange={(e) => handleProjectItemChange(item.id, 'height', parseInt(e.target.value, 10) || 0)} className="h-9 text-xs"/></div>
                 <div><Label htmlFor={`project_depth_${item.id}`} className="text-xs">D (mm)</Label><Input id={`project_depth_${item.id}`} type="number" value={item.depth} onChange={(e) => handleProjectItemChange(item.id, 'depth', parseInt(e.target.value, 10) || 0)} className="h-9 text-xs"/></div></div></Card>))}
-           <Button onClick={handleAddProjectItem} variant="outline" size="sm" className="mt-3"><PlusCircle className="mr-2 h-4 w-4" /> Add Cabinet to Project</Button><Separator className="my-4" /><Button className="w-full md:w-auto" disabled>Calculate Entire Project (Conceptual)</Button>
-           <p className="text-xs text-muted-foreground">Note: Full project calculation (aggregating parts) is planned. Calculate each unique config individually.</p></CardContent></Card>
+           <Button onClick={handleAddProjectItem} variant="outline" size="sm" className="mt-3"><PlusCircle className="mr-2 h-4 w-4" /> Add Cabinet to Project</Button><Separator className="my-4" />
+           <Button onClick={handleCalculateProject} className="w-full md:w-auto" disabled={isCalculatingProject || projectCabinetItems.length === 0}>
+             {isCalculatingProject ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Calculator className="mr-2 h-4 w-4" />}
+             {isCalculatingProject ? "Calculating Project..." : "Calculate Entire Project"}
+           </Button>
+           <p className="text-xs text-muted-foreground mt-2">Note: Full project part aggregation is planned. This calculates overall costs and material areas.</p>
+           
+           {isCalculatingProject && (<div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2">Calculating project estimates...</p></div>)}
+           {projectCalculationResult && !isCalculatingProject && (
+             <div className="mt-4 p-4 border rounded-md bg-muted/40">
+               <h4 className="font-semibold text-md mb-3">Project Calculation Summary:</h4>
+               <div className="grid grid-cols-2 gap-2 text-sm">
+                 <p>Overall Estimated Cost:</p><p className="text-right font-medium">${projectCalculationResult.totalCost.toFixed(2)}</p>
+                 <p>Total Main Panel Area:</p><p className="text-right font-medium">{projectCalculationResult.totalPanelArea.toFixed(2)} m²</p>
+                 <p>Total Back Panel Area:</p><p className="text-right font-medium">{projectCalculationResult.totalBackPanelArea.toFixed(2)} m²</p>
+               </div>
+               <h5 className="font-semibold mt-4 mb-2">Individual Cabinet Costs:</h5>
+               <ul className="list-disc list-inside text-sm space-y-1">
+                 {projectCalculationResult.individualCabinetResults.map((res, idx) => (
+                   <li key={idx}>
+                     {res.quantity} x {res.name}: ${res.cost.toFixed(2)}
+                   </li>
+                 ))}
+               </ul>
+             </div>
+           )}
+           </CardContent></Card>
     </div>);
 
  const renderTemplateDefinitionView = () => {
@@ -694,3 +802,4 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
+
