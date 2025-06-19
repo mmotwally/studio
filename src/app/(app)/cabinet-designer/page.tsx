@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { FormItem, FormLabel, FormControl } from '@/components/ui/form';
 import { useToast } from "@/hooks/use-toast";
-import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer, Edit2, List } from 'lucide-react';
+import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer, Edit2, List, SendToBack } from 'lucide-react';
 import {
     calculateCabinetDetails, calculateDrawerSet, saveCabinetTemplateAction, getCabinetTemplatesAction, getCabinetTemplateByIdAction, deleteCabinetTemplateAction,
     getMaterialDefinitionsAction, getAccessoryDefinitionsAction
@@ -22,7 +22,8 @@ import {
 import type {
     CabinetCalculationInput, CalculatedCabinet, CabinetPart, CabinetTemplateData, PartDefinition, CabinetPartType, CabinetTypeContext,
     DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer as SingleCalculatedDrawer, TemplateAccessoryEntry,
-    MaterialDefinitionDB, AccessoryDefinitionDB, PredefinedMaterialSimple, PredefinedAccessory, SelectItem as GenericSelectItem, AccessoryItem
+    MaterialDefinitionDB, AccessoryDefinitionDB, PredefinedMaterialSimple, PredefinedAccessory, SelectItem as GenericSelectItem, AccessoryItem,
+    InputPart, NestingJob // Added InputPart and NestingJob
 } from './types';
 import { PREDEFINED_MATERIALS, PREDEFINED_ACCESSORIES } from './types';
 import { Separator } from '@/components/ui/separator';
@@ -35,6 +36,7 @@ import { AddAccessoryTypeDialog } from '@/components/cabinet-designer/add-access
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { PREDEFINED_FORMULAS } from './predefined-formulas';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { format } from 'date-fns';
 
 
 const initialHardcodedCabinetTypes = [
@@ -153,6 +155,7 @@ export default function CabinetDesignerPage() {
   const [projectCabinetItems, setProjectCabinetItems] = React.useState<ProjectCabinetItem[]>([]);
   const [projectCalculationResult, setProjectCalculationResult] = React.useState<ProjectCalculationResult | null>(null);
   const [isCalculatingProject, setIsCalculatingProject] = React.useState(false);
+  const [latestCalculatedProjectPartsForNesting, setLatestCalculatedProjectPartsForNesting] = React.useState<InputPart[]>([]);
 
 
   const [customMaterialTypes, setCustomMaterialTypes] = React.useState<MaterialDefinitionDB[]>([]);
@@ -533,6 +536,7 @@ export default function CabinetDesignerPage() {
     }
     setIsCalculatingProject(true);
     setProjectCalculationResult(null);
+    setLatestCalculatedProjectPartsForNesting([]); // Clear previous
     let cumulativeCost = 0;
     let cumulativePanelArea = 0;
     let cumulativeBackPanelArea = 0;
@@ -609,15 +613,28 @@ export default function CabinetDesignerPage() {
           throw new Error(`Failed to calculate details for ${projectItem.templateName}: ${result.error || 'Unknown error'}`);
         }
       }
+      
+      const finalAggregatedParts = Array.from(aggregatedPartsMap.values());
       setProjectCalculationResult({
         totalCost: cumulativeCost,
         totalPanelArea: cumulativePanelArea,
         totalBackPanelArea: cumulativeBackPanelArea,
         individualCabinetResults: individualResults,
-        aggregatedParts: Array.from(aggregatedPartsMap.values()),
+        aggregatedParts: finalAggregatedParts,
         aggregatedAccessories: Array.from(aggregatedAccessoriesMap.values()),
       });
-      toast({ title: "Project Calculation Complete", description: "Summary costs, areas, parts, and accessories estimated." });
+
+      // Transform and store for nesting tool
+      const partsForNesting: InputPart[] = finalAggregatedParts.map(p => ({
+        name: `${p.name} (${p.material}, ${p.thickness.toFixed(0)}mm)`, // More descriptive name for nesting
+        width: p.width,
+        height: p.height,
+        qty: p.quantity,
+        material: p.material, // Keep material info for potential future use in nesting (e.g., sheet type matching)
+      }));
+      setLatestCalculatedProjectPartsForNesting(partsForNesting);
+
+      toast({ title: "Project Calculation Complete", description: "Summary costs, areas, parts, and accessories estimated. Parts list ready for nesting tool." });
     } catch (error) {
       console.error("Project calculation failed:", error);
       toast({
@@ -626,10 +643,44 @@ export default function CabinetDesignerPage() {
         variant: "destructive",
       });
       setProjectCalculationResult(null);
+      setLatestCalculatedProjectPartsForNesting([]);
     } finally {
       setIsCalculatingProject(false);
     }
   };
+
+  const handleSaveProjectForNesting = () => {
+    if (latestCalculatedProjectPartsForNesting.length === 0) {
+      toast({ title: "No Parts", description: "Calculate a project first to generate parts for nesting.", variant: "default" });
+      return;
+    }
+
+    try {
+      const existingJobsString = localStorage.getItem("cabinetDesignerNestingJobs");
+      let existingJobs: NestingJob[] = existingJobsString ? JSON.parse(existingJobsString) : [];
+      
+      const now = new Date();
+      const jobName = `Project Parts - ${format(now, "yyyy-MM-dd HH:mm:ss")}`;
+      const jobId = `nestJob_${now.getTime()}`;
+
+      const newJob: NestingJob = {
+        id: jobId,
+        name: jobName,
+        timestamp: now.toISOString(),
+        parts: latestCalculatedProjectPartsForNesting,
+      };
+
+      existingJobs.unshift(newJob); // Add new job to the beginning
+      existingJobs = existingJobs.slice(0, 10); // Keep only the latest 10 jobs
+
+      localStorage.setItem("cabinetDesignerNestingJobs", JSON.stringify(existingJobs));
+      toast({ title: "Project Parts Saved", description: `"${jobName}" saved for nesting tool. You can now load it in Advanced Tools.`, });
+    } catch (e) {
+      console.error("Error saving project for nesting:", e);
+      toast({ title: "Error Saving for Nesting", description: "Could not save parts to localStorage.", variant: "destructive" });
+    }
+  };
+
 
   const isSelectedTemplateCustomDb = dbTemplates.some(t => t.id === calculationInput.cabinetType);
 
@@ -706,11 +757,21 @@ export default function CabinetDesignerPage() {
                 <div><Label htmlFor={`project_height_${item.id}`} className="text-xs">H (mm)</Label><Input id={`project_height_${item.id}`} type="number" value={item.height} onChange={(e) => handleProjectItemChange(item.id, 'height', parseInt(e.target.value, 10) || 0)} className="h-9 text-xs"/></div>
                 <div><Label htmlFor={`project_depth_${item.id}`} className="text-xs">D (mm)</Label><Input id={`project_depth_${item.id}`} type="number" value={item.depth} onChange={(e) => handleProjectItemChange(item.id, 'depth', parseInt(e.target.value, 10) || 0)} className="h-9 text-xs"/></div></div></Card>))}
            <Button onClick={handleAddProjectItem} variant="outline" size="sm" className="mt-3"><PlusCircle className="mr-2 h-4 w-4" /> Add Cabinet to Project</Button><Separator className="my-4" />
-           <Button onClick={handleCalculateProject} className="w-full md:w-auto" disabled={isCalculatingProject || projectCabinetItems.length === 0}>
-             {isCalculatingProject ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Calculator className="mr-2 h-4 w-4" />}
-             {isCalculatingProject ? "Calculating Project..." : "Calculate Entire Project"}
-           </Button>
-           <p className="text-xs text-muted-foreground mt-2">Note: This calculates overall costs, material areas, and aggregated parts/accessories lists. Nesting optimization is a separate step.</p>
+            <div className="flex flex-wrap gap-2">
+                <Button onClick={handleCalculateProject} className="flex-grow sm:flex-grow-0" disabled={isCalculatingProject || projectCabinetItems.length === 0}>
+                    {isCalculatingProject ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Calculator className="mr-2 h-4 w-4" />}
+                    {isCalculatingProject ? "Calculating Project..." : "Calculate Entire Project"}
+                </Button>
+                <Button 
+                    onClick={handleSaveProjectForNesting} 
+                    variant="secondary" 
+                    className="flex-grow sm:flex-grow-0"
+                    disabled={isCalculatingProject || latestCalculatedProjectPartsForNesting.length === 0}>
+                    <SendToBack className="mr-2 h-4 w-4" />
+                    Save Parts for Nesting Tool
+                </Button>
+            </div>
+           <p className="text-xs text-muted-foreground mt-2">Note: Calculate project first. Then, "Save Parts for Nesting Tool" makes the aggregated parts list available in "Advanced Tools".</p>
            
            {isCalculatingProject && (<div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2">Calculating project estimates...</p></div>)}
            {projectCalculationResult && !isCalculatingProject && (

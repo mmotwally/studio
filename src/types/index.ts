@@ -1,4 +1,5 @@
 
+
 import type { LucideIcon } from 'lucide-react';
 
 export interface NavItem {
@@ -605,45 +606,48 @@ export interface InputPart {
   width: number;
   height: number;
   qty: number;
-  material?: string; // Optional, for context for color mapping etc.
-  // These are added by potpack logic if name is modified for uniqueness
-  originalName?: string; 
-  originalWidth?: number; 
-  originalHeight?: number; 
+  material?: string; 
+  originalName?: string; // Added for preserving original name during processing
+  originalWidth?: number; // Added for preserving original width
+  originalHeight?: number; // Added for preserving original height
 }
 
-export interface PackedPart extends InputPart { // InputPart already has name, width, height, qty, material
+export interface PackedPart extends InputPart { 
   x?: number;
   y?: number;
-  // originalName, originalWidth, originalHeight might be redundant here if InputPart has them
-  // but useful if PackedPart is derived from a simpler source that only had w,h.
-  // For consistency, let's ensure they are available if needed for rendering.
 }
 
 export interface SheetLayout {
   id: number;
-  dimensions: { w: number; h: number }; // Sheet dimensions
-  parts: PackedPart[]; // Parts packed onto this sheet
-  packedAreaWidth?: number; // Actual width used by packed parts (from potpack stats or calculated)
-  packedAreaHeight?: number; // Actual height used by packed parts (from potpack stats or calculated)
-  efficiency?: number; // Percentage of sheet area used by parts
+  dimensions: { w: number; h: number }; 
+  parts: PackedPart[]; 
+  packedAreaWidth?: number; 
+  packedAreaHeight?: number; 
+  efficiency?: number; 
 }
 
-// Type for devtools/potpack
 export interface PotpackBox {
   w: number;
   h: number;
   x?: number;
   y?: number;
-  name?: string; // Potpack may not use this, but we can add it
-  originalName?: string; // Custom property
-  originalWidth?: number; // Custom property
-  originalHeight?: number; // Custom property
-  [key: string]: any; // Allow other properties
+  name?: string; 
+  originalName?: string; 
+  originalWidth?: number; 
+  originalHeight?: number; 
+  material?: string;
+  [key: string]: any; 
 }
 export interface PotpackStats {
-  w: number; // width of overall bounding box (bin width used)
-  h: number; // height of overall bounding box (bin height used)
-  fill: number; // percentage of space filled in the bin potpack calculated
+  w: number; 
+  h: number; 
+  fill: number; 
   [key: string]: any;
+}
+
+export interface NestingJob {
+  id: string; // Unique ID for the job (e.g., timestamp or UUID)
+  name: string; // User-friendly name (e.g., "Project Kitchen Base Cabinets - 2023-10-26")
+  timestamp: string; // ISO string of when it was saved
+  parts: InputPart[]; // The actual list of parts for nesting
 }

@@ -8,12 +8,12 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Sparkles, LayoutList, Server, Download, Info, Loader2 } from 'lucide-react';
+import { Sparkles, LayoutList, Server, Download, Info, Loader2, Trash2, UploadCloud, FileCheck2 } from 'lucide-react'; // Added icons
 import * as React from 'react';
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import potpack from 'potpack';
-import type { InputPart, PackedPart, SheetLayout, PotpackBox, PotpackStats } from '@/types';
+import type { InputPart, PackedPart, SheetLayout, PotpackBox, PotpackStats, NestingJob } from '@/types'; // Added NestingJob
 import { performServerSideNestingAction, exportCutListForDesktopAction, runDeepnestAlgorithmAction, performSpecialServerAction } from './actions';
 
 const KERF_ALLOWANCE = 3; 
@@ -21,16 +21,12 @@ const DEFAULT_SHEET_WIDTH = 2440;
 const DEFAULT_SHEET_HEIGHT = 1220;
 
 const PART_COLORS = [
-  "rgba(173, 216, 230, 0.7)", // lightblue
-  "rgba(144, 238, 144, 0.7)", // lightgreen
-  "rgba(255, 182, 193, 0.7)", // lightpink
-  "rgba(255, 255, 224, 0.7)", // lightyellow
-  "rgba(211, 211, 211, 0.7)", // lightgrey
-  "rgba(240, 128, 128, 0.7)", // lightcoral
-  "rgba(175, 238, 238, 0.7)", // paleturquoise
-  "rgba(255, 218, 185, 0.7)", // peachpuff
+  "rgba(173, 216, 230, 0.7)", "rgba(144, 238, 144, 0.7)", "rgba(255, 182, 193, 0.7)", 
+  "rgba(255, 255, 224, 0.7)", "rgba(211, 211, 211, 0.7)", "rgba(240, 128, 128, 0.7)",
+  "rgba(175, 238, 238, 0.7)", "rgba(255, 218, 185, 0.7)", "rgba(221, 160, 221, 0.7)", // Thistle
+  "rgba(245, 222, 179, 0.7)", // Wheat
 ];
-const MAX_SHEETS_PER_JOB = 50; // Safety limit
+const MAX_SHEETS_PER_JOB = 50; 
 
 export default function SpecialFeaturePage() {
   const { toast } = useToast();
@@ -42,12 +38,85 @@ export default function SpecialFeaturePage() {
   const [visualizedLayout, setVisualizedLayout] = React.useState<React.ReactNode | null>(null);
   const [partColorMap, setPartColorMap] = React.useState<Map<string, string>>(new Map());
 
+  // State for loading jobs from Cabinet Designer
+  const [availableNestingJobs, setAvailableNestingJobs] = React.useState<{value: string, label: string}[]>([]);
+  const [selectedNestingJobId, setSelectedNestingJobId] = React.useState<string>("");
+
+  const LOCAL_STORAGE_NESTING_JOBS_KEY = "cabinetDesignerNestingJobs";
+
+  const loadNestingJobsFromStorage = React.useCallback(() => {
+    try {
+      const jobsString = localStorage.getItem(LOCAL_STORAGE_NESTING_JOBS_KEY);
+      if (jobsString) {
+        const jobs: NestingJob[] = JSON.parse(jobsString);
+        setAvailableNestingJobs(
+          jobs.map(job => ({
+            value: job.id,
+            label: `${job.name} (${new Date(job.timestamp).toLocaleDateString()})`
+          }))
+        );
+      } else {
+        setAvailableNestingJobs([]);
+      }
+    } catch (e) {
+      console.error("Error loading nesting jobs from localStorage:", e);
+      setAvailableNestingJobs([]);
+      toast({ title: "Error", description: "Could not load saved nesting jobs.", variant: "destructive"});
+    }
+  }, [toast]);
+
+  React.useEffect(() => {
+    loadNestingJobsFromStorage();
+  }, [loadNestingJobsFromStorage]);
+
+  const handleLoadSelectedNestingJob = () => {
+    if (!selectedNestingJobId) {
+      toast({ title: "No Job Selected", description: "Please select a job from the dropdown to load.", variant: "default" });
+      return;
+    }
+    try {
+      const jobsString = localStorage.getItem(LOCAL_STORAGE_NESTING_JOBS_KEY);
+      if (jobsString) {
+        const jobs: NestingJob[] = JSON.parse(jobsString);
+        const foundJob = jobs.find(job => job.id === selectedNestingJobId);
+        if (foundJob) {
+          setPartsListData(JSON.stringify(foundJob.parts, null, 2));
+          toast({ title: "Job Loaded", description: `Parts for "${foundJob.name}" loaded into textarea.`});
+          setPackedLayoutData(null); // Clear previous layout
+          setVisualizedLayout(null);
+          setActionResult(null);
+        } else {
+          toast({ title: "Error", description: "Selected job not found in storage. It might have been cleared.", variant: "destructive"});
+        }
+      }
+    } catch (e) {
+      console.error("Error loading selected job:", e);
+      toast({ title: "Error", description: "Could not load the selected job parts.", variant: "destructive"});
+    }
+  };
+
+  const handleClearNestingJobs = () => {
+    try {
+      localStorage.removeItem(LOCAL_STORAGE_NESTING_JOBS_KEY);
+      setAvailableNestingJobs([]);
+      setSelectedNestingJobId("");
+      setPartsListData(""); // Clear textarea if jobs are cleared
+      toast({ title: "Cleared", description: "Saved nesting jobs have been cleared." });
+    } catch (e) {
+      toast({ title: "Error", description: "Could not clear saved nesting jobs.", variant: "destructive" });
+    }
+  };
+
+
   const generatePartColorMap = (parts: InputPart[]): Map<string, string> => {
     const map = new Map<string, string>();
     let colorIndex = 0;
+    // Ensure we use the original name (if available) for color mapping
+    // This helps keep colors consistent for same base part types
     parts.forEach(part => {
-      if (!map.has(part.name)) {
-        map.set(part.name, PART_COLORS[colorIndex % PART_COLORS.length]);
+      const colorKey = part.originalName || part.name; 
+      if (!map.has(colorKey)) {
+        map.set(colorKey, PART_COLORS[colorIndex % PART_COLORS.length]);
         colorIndex++;
       }
     });
@@ -79,12 +148,11 @@ export default function SpecialFeaturePage() {
             const displayWidth = part.originalWidth || part.width;
             const displayHeight = part.originalHeight || part.height;
 
-            // Basic font size adjustment
-            const textLength = Math.max(displayName.length, `${displayWidth}x${displayHeight}`.length);
             let fontSize = 10;
-            if (displayWidth < textLength * 5 || displayHeight < 25) fontSize = 8;
-            if (displayWidth < textLength * 3 || displayHeight < 18) fontSize = 6;
-            if (fontSize < 6) fontSize = 6; // Minimum font size
+            if (displayWidth < 70 || displayHeight < 30) fontSize = 8;
+            if (displayWidth < 50 || displayHeight < 20) fontSize = 6;
+             if (displayWidth * displayHeight < 1000) fontSize = 5;
+
 
             return (
               <g key={`part-${sheet.id}-${pIndex}`} transform={`translate(${part.x ?? 0}, ${part.y ?? 0})`}>
@@ -102,7 +170,7 @@ export default function SpecialFeaturePage() {
                 </clipPath>
                 <text 
                     x={(KERF_ALLOWANCE / 2) + (displayWidth / 2)} 
-                    y={(KERF_ALLOWANCE / 2) + (displayHeight / 2) - (fontSize * 0.1)} // Adjusted for two lines
+                    y={(KERF_ALLOWANCE / 2) + (displayHeight / 2) - (fontSize * 0.1)} 
                     fontSize={fontSize} 
                     fill="black"
                     textAnchor="middle"
@@ -150,7 +218,16 @@ export default function SpecialFeaturePage() {
         ) {
           throw new Error("Each part must have a 'name' (string), and positive numeric 'width', 'height', and 'qty'. Invalid part: " + JSON.stringify(rawPart));
         }
-        validatedInputParts.push(rawPart as InputPart);
+        validatedInputParts.push({
+          name: rawPart.name,
+          width: rawPart.width,
+          height: rawPart.height,
+          qty: rawPart.qty,
+          material: rawPart.material, // Keep material if provided
+          originalName: rawPart.name, // Store original name
+          originalWidth: rawPart.width,
+          originalHeight: rawPart.height,
+        });
       }
 
       if (validatedInputParts.length === 0) {
@@ -162,7 +239,7 @@ export default function SpecialFeaturePage() {
 
       if (selectedClientAlgorithm === 'rectpack2d') {
         toast({ title: "Processing...", description: "Using Rectpack2D (Potpack Client-Side)." });
-        await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async
+        await new Promise(resolve => setTimeout(resolve, 100)); 
 
         const allPartsToPack: PotpackBox[] = [];
         validatedInputParts.forEach(part => {
@@ -171,9 +248,10 @@ export default function SpecialFeaturePage() {
               w: part.width + KERF_ALLOWANCE, 
               h: part.height + KERF_ALLOWANCE,
               name: `${part.name}_${i + 1}`,
-              originalName: part.name,
-              originalWidth: part.width,
-              originalHeight: part.height,
+              originalName: part.originalName,
+              originalWidth: part.originalWidth,
+              originalHeight: part.originalHeight,
+              material: part.material
             });
           }
         });
@@ -183,13 +261,13 @@ export default function SpecialFeaturePage() {
         let sheetId = 1;
 
         while (remainingPartsToPack.length > 0 && sheetId <= MAX_SHEETS_PER_JOB) {
-          const partsForCurrentSheetAttempt = [...remainingPartsToPack];
+          const partsForCurrentSheetAttempt = [...remainingPartsToPack]; // potpack modifies this array
           const stats: PotpackStats = potpack(partsForCurrentSheetAttempt);
           
           const currentSheetParts: PackedPart[] = [];
           const stillRemainingAfterSheet: PotpackBox[] = [];
 
-          for (const packedBox of partsForCurrentSheetAttempt) {
+          for (const packedBox of partsForCurrentSheetAttempt) { // Iterate over the potentially modified array
             if (packedBox.x !== undefined && packedBox.y !== undefined &&
                 (packedBox.x + packedBox.w) <= DEFAULT_SHEET_WIDTH &&
                 (packedBox.y + packedBox.h) <= DEFAULT_SHEET_HEIGHT) {
@@ -200,13 +278,15 @@ export default function SpecialFeaturePage() {
                 qty: 1, 
                 x: packedBox.x,
                 y: packedBox.y,
-                material: packedBox.originalName,
+                material: packedBox.material,
                 originalName: packedBox.originalName,
                 originalWidth: packedBox.originalWidth,
                 originalHeight: packedBox.originalHeight,
               });
             } else {
-              delete packedBox.x; delete packedBox.y; // Clear potpack properties
+              // If potpack didn't place it, or if it placed it outside sheet boundaries (should not happen with potpack's bin size logic if sheet is the bin)
+              // Ensure x,y are cleared so it's considered for next sheet
+              delete packedBox.x; delete packedBox.y; 
               stillRemainingAfterSheet.push(packedBox);
             }
           }
@@ -234,14 +314,14 @@ export default function SpecialFeaturePage() {
             });
             sheetId++;
           } else if (stillRemainingAfterSheet.length > 0) {
-            toast({ title: "Packing Incomplete (Potpack)", description: "Some remaining parts could not be packed onto a new sheet.", variant: "default" });
+            toast({ title: "Packing Incomplete (Potpack)", description: "Some remaining parts could not be packed onto a new sheet. They may be too large.", variant: "default" });
             break; 
           }
           remainingPartsToPack = stillRemainingAfterSheet;
         }
         
         if (remainingPartsToPack.length > 0 && sheetId > MAX_SHEETS_PER_JOB) {
-             toast({ title: "Max Sheets Reached (Potpack)", description: `Packing stopped after ${MAX_SHEETS_PER_JOB} sheets. Some parts may remain.`, variant: "default" });
+             toast({ title: "Max Sheets Reached (Potpack)", description: `Packing stopped after ${MAX_SHEETS_PER_JOB} sheets. ${remainingPartsToPack.length} part instances remain.`, variant: "default" });
         }
         setPackedLayoutData(packedSheets);
         setActionResult(`Potpack (Client) processed ${allPartsToPack.length} total part instances onto ${packedSheets.length} sheets.`);
@@ -249,32 +329,45 @@ export default function SpecialFeaturePage() {
 
       } else if (selectedClientAlgorithm === 'deepnest') {
         toast({ title: "Processing...", description: "Using Simulated FFDH (Server-Side)." });
-        const result = await runDeepnestAlgorithmAction(partsListData);
+        const result = await runDeepnestAlgorithmAction(partsListData); // partsListData already contains originalName etc.
         if (result.success && result.layout) {
           setPackedLayoutData(result.layout);
           setActionResult(result.message);
           toast({ title: "Deepnest (Simulated FFDH via Server)", description: result.message });
         } else {
-          setPackedLayoutData(result.layout || null); // Show partial layout if any
-          throw new Error(result.message || "Deepnest conceptual backend call failed.");
+          setPackedLayoutData(result.layout || null); 
+          throw new Error(result.message || "Deepnest (FFDH Sim) backend call failed.");
         }
       }
 
     } catch (error: any) {
       setActionResult(`Error: ${error.message}`);
-      toast({ title: "Client Nesting Error", description: error.message, variant: "destructive" });
+      toast({ title: "Nesting Error", description: error.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
   };
 
   React.useEffect(() => {
-    if (packedLayoutData) {
+    if (packedLayoutData && packedLayoutData.length > 0) {
+      // Regenerate partColorMap if it wasn't based on the currently loaded parts
+      // This is important if parts are loaded from storage vs. typed in
+      let partsForColorMap: InputPart[] = [];
+      try {
+          partsForColorMap = JSON.parse(partsListData);
+      } catch { /* ignore if not valid json, map might be based on previous valid input */ }
+      
+      if(partsForColorMap.length > 0){
+         const pcm = generatePartColorMap(partsForColorMap);
+         setPartColorMap(pcm);
+      } // Else, keep existing map if partsListData is invalid (e.g., mid-typing)
+
       setVisualizedLayout(renderSVGs(packedLayoutData, partColorMap));
     } else {
       setVisualizedLayout(null);
     }
-  }, [packedLayoutData, partColorMap]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps 
+  }, [packedLayoutData]); // Re-run if packedLayoutData changes. partColorMap is dep but should be updated before layout. partsListData is used to derive colors.
 
 
   const handleServerSideNesting = async () => {
@@ -282,7 +375,7 @@ export default function SpecialFeaturePage() {
     setActionResult(null);
     setPackedLayoutData(null);
     setVisualizedLayout(null);
-    toast({ title: "Processing...", description: "Calling server-side nesting." });
+    toast({ title: "Processing...", description: "Calling server-side nesting (legacy)." });
     try {
       const result = await performServerSideNestingAction(partsListData);
       setActionResult(`Server-Side Nesting Result: ${result.message}\nDetails: ${result.details}`);
@@ -371,9 +464,39 @@ export default function SpecialFeaturePage() {
             <TabsContent value="client-nesting" className="mt-4 p-4 border rounded-md">
               <CardTitle className="text-lg mb-2">Client/Server Hybrid Nesting</CardTitle>
               <CardDescription className="mb-4">
-                Visualize parts nested onto sheets. Select an algorithm to see its conceptual results.
+                Load parts from a saved Cabinet Designer project or paste JSON. Visualize parts nested onto sheets. Select an algorithm to see its results.
               </CardDescription>
               <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
+                  <div>
+                    <Label htmlFor="saved-nesting-jobs">Load Saved Project Parts</Label>
+                    <Select value={selectedNestingJobId} onValueChange={setSelectedNestingJobId}>
+                      <SelectTrigger id="saved-nesting-jobs">
+                        <SelectValue placeholder={availableNestingJobs.length > 0 ? "Select a saved job..." : "No saved jobs available"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {availableNestingJobs.length > 0 ? (
+                          availableNestingJobs.map(job => (
+                            <SelectItem key={job.value} value={job.value}>{job.label}</SelectItem>
+                          ))
+                        ) : (
+                          <div className="p-2 text-sm text-muted-foreground text-center">No saved jobs. Calculate a project in Cabinet Designer and save it for nesting.</div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button onClick={handleLoadSelectedNestingJob} disabled={!selectedNestingJobId} variant="outline" className="flex-1">
+                      <UploadCloud className="mr-2 h-4 w-4" /> Load Job
+                    </Button>
+                     {availableNestingJobs.length > 0 && (
+                        <Button onClick={handleClearNestingJobs} variant="destructive" size="icon" title="Clear all saved nesting jobs">
+                            <Trash2 className="h-4 w-4" />
+                        </Button>
+                    )}
+                  </div>
+                </div>
+                <Separator/>
                 <div className="space-y-2">
                   <Label htmlFor="client-nesting-algorithm">Nesting Algorithm</Label>
                   <Select value={selectedClientAlgorithm} onValueChange={setSelectedClientAlgorithm}>
@@ -387,7 +510,7 @@ export default function SpecialFeaturePage() {
                   </Select>
                 </div>
                 <Textarea
-                  placeholder={`Paste parts list here as JSON array. Example: \n[{"name":"Part A","width":300,"height":200,"qty":2}, {"name":"Part B","width":150,"height":100,"qty":5}]`}
+                  placeholder={`Paste parts list here as JSON array. Example: \n[{"name":"Part A","width":300,"height":200,"qty":2, "material":"Plywood"}, {"name":"Part B","width":150,"height":100,"qty":5, "material":"MDF"}]`}
                   value={partsListData}
                   onChange={(e) => setPartsListData(e.target.value)}
                   rows={8}
@@ -416,7 +539,7 @@ export default function SpecialFeaturePage() {
                 <Info className="h-4 w-4" />
                 <AlertTitle>Conceptual Implementation</AlertTitle>
                 <AlertDescription>
-                  This tab demonstrates calling a generic server action. The "Client/Server Hybrid Nesting" tab now handles the "Deepnest" conceptual call.
+                  This tab demonstrates calling a generic server action. The "Client/Server Hybrid Nesting" tab now handles the more defined "FFDH Simulation (Server Side)" conceptual call.
                 </AlertDescription>
               </Alert>
               <div className="space-y-3">
