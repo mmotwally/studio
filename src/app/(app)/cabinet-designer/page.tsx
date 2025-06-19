@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { FormItem, FormLabel, FormControl } from '@/components/ui/form';
 import { useToast } from "@/hooks/use-toast";
-import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer, Edit2 } from 'lucide-react';
+import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer, Edit2, List } from 'lucide-react';
 import {
     calculateCabinetDetails, calculateDrawerSet, saveCabinetTemplateAction, getCabinetTemplatesAction, getCabinetTemplateByIdAction, deleteCabinetTemplateAction,
     getMaterialDefinitionsAction, getAccessoryDefinitionsAction
@@ -22,7 +22,7 @@ import {
 import type {
     CabinetCalculationInput, CalculatedCabinet, CabinetPart, CabinetTemplateData, PartDefinition, CabinetPartType, CabinetTypeContext,
     DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer as SingleCalculatedDrawer, TemplateAccessoryEntry,
-    MaterialDefinitionDB, AccessoryDefinitionDB, PredefinedMaterialSimple, PredefinedAccessory, SelectItem as GenericSelectItem
+    MaterialDefinitionDB, AccessoryDefinitionDB, PredefinedMaterialSimple, PredefinedAccessory, SelectItem as GenericSelectItem, AccessoryItem
 } from './types';
 import { PREDEFINED_MATERIALS, PREDEFINED_ACCESSORIES } from './types';
 import { Separator } from '@/components/ui/separator';
@@ -122,6 +122,8 @@ interface ProjectCalculationResult {
   totalPanelArea: number;
   totalBackPanelArea: number;
   individualCabinetResults: Array<{ name: string; cost: number; quantity: number }>;
+  aggregatedParts: CabinetPart[];
+  aggregatedAccessories: AccessoryItem[];
 }
 
 export default function CabinetDesignerPage() {
@@ -245,13 +247,10 @@ export default function CabinetDesignerPage() {
         const foundDbTemplate = dbTemplates.find(dbt => dbt.id === calculationInput.cabinetType);
         if (foundDbTemplate) {
             templateToCalculateWith = foundDbTemplate;
-            // Ensure calculationInput.customTemplate is updated if it wasn't already
             if (!calculationInput.customTemplate || calculationInput.customTemplate.id !== foundDbTemplate.id) {
                  setCalculationInput(prev => ({...prev, customTemplate: foundDbTemplate}));
             }
         } else {
-            // This case might occur if selectableCabinetTypes got out of sync or if it's a new template ID not yet in dbTemplates state
-            // Try fetching by ID as a fallback
             const fetchedFromDb = await getCabinetTemplateByIdAction(calculationInput.cabinetType);
             if (fetchedFromDb) {
                  templateToCalculateWith = fetchedFromDb;
@@ -368,9 +367,9 @@ export default function CabinetDesignerPage() {
     try {
         const result = await saveCabinetTemplateAction(currentTemplate);
         if (result.success && result.id) {
-            toast({ title: "Template Added (This Session)", description: `Template "${currentTemplate.name}" is ready for calculation. The backend will attempt dynamic calculation with its formulas. (Note: Complex formulas may have limitations.)` });
+            toast({ title: "Template Saved to Database", description: `Template "${currentTemplate.name}" (ID: ${result.id}) saved.` });
             const updatedTemplates = await fetchAndSetTemplates();
-            const savedFullTemplate = updatedTemplates.find(t => t.id === result.id) || currentTemplate; // Prefer fresher data from DB
+            const savedFullTemplate = updatedTemplates.find(t => t.id === result.id) || currentTemplate; 
             setCalculationInput({
                 cabinetType: result.id, width: savedFullTemplate.defaultDimensions.width, height: savedFullTemplate.defaultDimensions.height,
                 depth: savedFullTemplate.defaultDimensions.depth, customTemplate: savedFullTemplate,
@@ -405,8 +404,7 @@ export default function CabinetDesignerPage() {
       await deleteCabinetTemplateAction(templateToDelete.id);
       toast({ title: "Template Deleted", description: `Template "${templateToDelete.name}" has been deleted.` });
       setTemplateToDelete(null);
-      await fetchAndSetTemplates(); // Refresh the list
-      // Reset calculator if the deleted template was selected
+      await fetchAndSetTemplates(); 
       if (calculationInput.cabinetType === templateToDelete.id) {
         setCalculationInput({
           cabinetType: 'standard_base_2_door',
@@ -539,6 +537,8 @@ export default function CabinetDesignerPage() {
     let cumulativePanelArea = 0;
     let cumulativeBackPanelArea = 0;
     const individualResults: Array<{ name: string; cost: number; quantity: number }> = [];
+    const aggregatedPartsMap = new Map<string, CabinetPart>();
+    const aggregatedAccessoriesMap = new Map<string, AccessoryItem>();
 
     try {
       for (const projectItem of projectCabinetItems) {
@@ -576,6 +576,35 @@ export default function CabinetDesignerPage() {
             cost: itemTotalCost,
             quantity: projectItem.quantity,
           });
+
+          // Aggregate parts
+          result.data.parts.forEach(part => {
+            const partKey = `${part.name}-${part.width.toFixed(1)}-${part.height.toFixed(1)}-${part.thickness.toFixed(1)}-${part.material}-${part.grainDirection || 'none'}`;
+            const existingPart = aggregatedPartsMap.get(partKey);
+            const quantityToAdd = part.quantity * projectItem.quantity;
+            if (existingPart) {
+              existingPart.quantity += quantityToAdd;
+            } else {
+              aggregatedPartsMap.set(partKey, { ...part, quantity: quantityToAdd });
+            }
+          });
+
+          // Aggregate accessories
+          result.data.accessories.forEach(accessory => {
+            const existingAccessory = aggregatedAccessoriesMap.get(accessory.id);
+            const quantityToAdd = accessory.quantity * projectItem.quantity;
+            if (existingAccessory) {
+              existingAccessory.quantity += quantityToAdd;
+              existingAccessory.totalCost += (accessory.unitCost * quantityToAdd);
+            } else {
+              aggregatedAccessoriesMap.set(accessory.id, {
+                ...accessory,
+                quantity: quantityToAdd,
+                totalCost: accessory.unitCost * quantityToAdd,
+              });
+            }
+          });
+
         } else {
           throw new Error(`Failed to calculate details for ${projectItem.templateName}: ${result.error || 'Unknown error'}`);
         }
@@ -585,8 +614,10 @@ export default function CabinetDesignerPage() {
         totalPanelArea: cumulativePanelArea,
         totalBackPanelArea: cumulativeBackPanelArea,
         individualCabinetResults: individualResults,
+        aggregatedParts: Array.from(aggregatedPartsMap.values()),
+        aggregatedAccessories: Array.from(aggregatedAccessoriesMap.values()),
       });
-      toast({ title: "Project Calculation Complete", description: "Summary costs and areas estimated." });
+      toast({ title: "Project Calculation Complete", description: "Summary costs, areas, parts, and accessories estimated." });
     } catch (error) {
       console.error("Project calculation failed:", error);
       toast({
@@ -642,7 +673,7 @@ export default function CabinetDesignerPage() {
         </CardContent>
       </Card>
       <Card className="lg:col-span-2 shadow-lg">
-        <CardHeader><CardTitle className="flex items-center"><Palette className="mr-2 h-5 w-5 text-primary" />Calculation Results</CardTitle><CardDescription>Estimated parts, materials, and costs.</CardDescription></CardHeader>
+        <CardHeader><CardTitle className="flex items-center"><Palette className="mr-2 h-5 w-5 text-primary" />Calculation Results</CardTitle><CardDescription>Estimated parts, materials, and costs for the selected cabinet.</CardDescription></CardHeader>
         <CardContent>
           {isLoading && (<div className="flex items-center justify-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2">Calculating...</p></div>)}
           {calculationError && !isLoading && (<div className="text-destructive bg-destructive/10 p-4 rounded-md"><p className="font-semibold">Error:</p><p>{calculationError}</p></div>)}
@@ -666,7 +697,7 @@ export default function CabinetDesignerPage() {
           {!isLoading && !calculatedData && !calculationError && (<div className="text-center py-10 text-muted-foreground"><Library className="mx-auto h-12 w-12 mb-4" /><p>Select type, enter dimensions, and click "Calculate".</p></div>)}
         </CardContent>
       </Card>
-      <Card className="lg:col-span-3 shadow-lg"><CardHeader><CardTitle className="flex items-center"><ListChecks className="mr-2 h-5 w-5 text-primary" />Project Planner</CardTitle><CardDescription>Add cabinet instances to your project and estimate overall costs and materials.</CardDescription></CardHeader>
+      <Card className="lg:col-span-3 shadow-lg"><CardHeader><CardTitle className="flex items-center"><ListChecks className="mr-2 h-5 w-5 text-primary" />Project Planner</CardTitle><CardDescription>Add cabinet instances to your project and estimate overall costs, materials, and aggregated parts/accessories lists.</CardDescription></CardHeader>
         <CardContent className="space-y-4">{projectCabinetItems.map((item) => (<Card key={item.id} className="p-4 space-y-3 relative bg-muted/30"><Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10 h-7 w-7" onClick={() => handleRemoveProjectItem(item.id)}><XCircle className="h-4 w-4"/></Button>
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3 items-end">
                 <div className="sm:col-span-2 md:col-span-2"><Label htmlFor={`project_template_${item.id}`} className="text-xs">Template</Label><Select value={item.templateId} onValueChange={(value) => handleProjectItemChange(item.id, 'templateId', value)}><SelectTrigger id={`project_template_${item.id}`} className="h-9 text-xs"><SelectValue placeholder="Select" /></SelectTrigger><SelectContent>{selectableCabinetTypes.map(type => (<SelectItem key={type.value} value={type.value} className="text-xs">{type.label}</SelectItem>))}</SelectContent></Select></div>
@@ -679,25 +710,85 @@ export default function CabinetDesignerPage() {
              {isCalculatingProject ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Calculator className="mr-2 h-4 w-4" />}
              {isCalculatingProject ? "Calculating Project..." : "Calculate Entire Project"}
            </Button>
-           <p className="text-xs text-muted-foreground mt-2">Note: Full project part aggregation is planned. This calculates overall costs and material areas.</p>
+           <p className="text-xs text-muted-foreground mt-2">Note: This calculates overall costs, material areas, and aggregated parts/accessories lists. Nesting optimization is a separate step.</p>
            
            {isCalculatingProject && (<div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2">Calculating project estimates...</p></div>)}
            {projectCalculationResult && !isCalculatingProject && (
-             <div className="mt-4 p-4 border rounded-md bg-muted/40">
-               <h4 className="font-semibold text-md mb-3">Project Calculation Summary:</h4>
-               <div className="grid grid-cols-2 gap-2 text-sm">
-                 <p>Overall Estimated Cost:</p><p className="text-right font-medium">${projectCalculationResult.totalCost.toFixed(2)}</p>
-                 <p>Total Main Panel Area:</p><p className="text-right font-medium">{projectCalculationResult.totalPanelArea.toFixed(2)} m²</p>
-                 <p>Total Back Panel Area:</p><p className="text-right font-medium">{projectCalculationResult.totalBackPanelArea.toFixed(2)} m²</p>
+             <div className="mt-4 p-4 border rounded-md bg-muted/40 space-y-6">
+               <div>
+                 <h4 className="font-semibold text-md mb-3">Project Calculation Summary:</h4>
+                 <div className="grid grid-cols-2 gap-2 text-sm">
+                   <p>Overall Estimated Cost:</p><p className="text-right font-medium">${projectCalculationResult.totalCost.toFixed(2)}</p>
+                   <p>Total Main Panel Area:</p><p className="text-right font-medium">{projectCalculationResult.totalPanelArea.toFixed(2)} m²</p>
+                   <p>Total Back Panel Area:</p><p className="text-right font-medium">{projectCalculationResult.totalBackPanelArea.toFixed(2)} m²</p>
+                 </div>
+                 <h5 className="font-semibold mt-4 mb-2">Individual Cabinet Costs:</h5>
+                 <ul className="list-disc list-inside text-sm space-y-1">
+                   {projectCalculationResult.individualCabinetResults.map((res, idx) => (
+                     <li key={idx}>
+                       {res.quantity} x {res.name}: ${res.cost.toFixed(2)}
+                     </li>
+                   ))}
+                 </ul>
                </div>
-               <h5 className="font-semibold mt-4 mb-2">Individual Cabinet Costs:</h5>
-               <ul className="list-disc list-inside text-sm space-y-1">
-                 {projectCalculationResult.individualCabinetResults.map((res, idx) => (
-                   <li key={idx}>
-                     {res.quantity} x {res.name}: ${res.cost.toFixed(2)}
-                   </li>
-                 ))}
-               </ul>
+               
+               <div>
+                <h4 className="text-md font-semibold mb-2 flex items-center"><List className="mr-2 h-5 w-5"/>Aggregated Project Part List</h4>
+                <div className="max-h-[400px] overflow-y-auto border rounded-md">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-background/80 backdrop-blur-sm z-10">
+                      <TableRow>
+                        <TableHead>Part Name</TableHead>
+                        <TableHead className="text-center">Total Qty</TableHead>
+                        <TableHead className="text-right">W</TableHead>
+                        <TableHead className="text-right">H</TableHead>
+                        <TableHead className="text-center">Th</TableHead>
+                        <TableHead>Material</TableHead>
+                        <TableHead>Grain</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {projectCalculationResult.aggregatedParts.map((part, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{part.name} ({part.partType})</TableCell>
+                          <TableCell className="text-center">{part.quantity}</TableCell>
+                          <TableCell className="text-right">{part.width.toFixed(0)}</TableCell>
+                          <TableCell className="text-right">{part.height.toFixed(0)}</TableCell>
+                          <TableCell className="text-center">{part.thickness.toFixed(0)}</TableCell>
+                          <TableCell>{part.material}</TableCell>
+                          <TableCell className="text-xs capitalize">{part.grainDirection || '-'}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+               </div>
+
+               <div>
+                <h4 className="text-md font-semibold mb-2 flex items-center"><Wrench className="mr-2 h-5 w-5"/>Aggregated Project Accessories List</h4>
+                <div className="max-h-[300px] overflow-y-auto border rounded-md">
+                  <Table>
+                    <TableHeader className="sticky top-0 bg-background/80 backdrop-blur-sm z-10">
+                      <TableRow>
+                        <TableHead>Accessory Name</TableHead>
+                        <TableHead className="text-center">Total Qty</TableHead>
+                        <TableHead className="text-right">Unit Cost</TableHead>
+                        <TableHead className="text-right">Total Cost</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {projectCalculationResult.aggregatedAccessories.map((acc, index) => (
+                        <TableRow key={index}>
+                          <TableCell>{acc.name}</TableCell>
+                          <TableCell className="text-center">{acc.quantity}</TableCell>
+                          <TableCell className="text-right">${acc.unitCost.toFixed(2)}</TableCell>
+                          <TableCell className="text-right">${acc.totalCost.toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+               </div>
              </div>
            )}
            </CardContent></Card>
@@ -777,7 +868,7 @@ export default function CabinetDesignerPage() {
 
   return (
     <TooltipProvider>
-      <PageHeader title="Cabinet Designer" description={viewMode === 'calculator' ? "Configure, calculate parts, and estimate costs." : "Define a new parametric cabinet template."}/>
+      <PageHeader title="Cabinet Designer" description={viewMode === 'calculator' ? "Configure, calculate parts, and estimate costs for individual cabinets or entire projects." : "Define a new parametric cabinet template."}/>
       {viewMode === 'calculator' ? renderCalculatorView() : renderTemplateDefinitionView()}
 
       {templateToDelete && (
