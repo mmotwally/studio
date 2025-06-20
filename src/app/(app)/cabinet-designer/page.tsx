@@ -14,7 +14,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Checkbox } from '@/components/ui/checkbox';
 import { FormItem, FormLabel, FormControl } from '@/components/ui/form';
 import { useToast } from "@/hooks/use-toast";
-import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer, Edit2, List, SendToBack } from 'lucide-react';
+import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer, Edit2, List, SendToBack, UploadCloud, SheetIcon } from 'lucide-react';
 import {
     calculateCabinetDetails, calculateDrawerSet, saveCabinetTemplateAction, getCabinetTemplatesAction, getCabinetTemplateByIdAction, deleteCabinetTemplateAction,
     getMaterialDefinitionsAction, getAccessoryDefinitionsAction
@@ -161,7 +161,7 @@ export default function CabinetDesignerPage() {
 
   const [customMaterialTypes, setCustomMaterialTypes] = React.useState<MaterialDefinitionDB[]>([]);
   const [customAccessoryTypes, setCustomAccessoryTypes] = React.useState<AccessoryDefinitionDB[]>([]);
-  const [isMaterialDialogOp, setIsMaterialDialogOp] = React.useState(false);
+  const [isMaterialDialogOp, setIsMaterialDialogOp] = React.useState(false); // Used by both general define and from AddPartDialog
   const [isAccessoryDialogOp, setIsAccessoryDialogOp] = React.useState(false);
   const [templateToDelete, setTemplateToDelete] = React.useState<CabinetTemplateData | null>(null);
 
@@ -493,9 +493,7 @@ export default function CabinetDesignerPage() {
             <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="whitespace-nowrap px-2"><ChevronDown className="h-4 w-4" /> <span className="ml-1 text-xs">Ins</span></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-72 max-h-96 overflow-y-auto">
                 {relevantFormulas.map((item) => ( <DropdownMenuItem key={item.key} onSelect={() => handleFormulaSelect(partIndex, formulaField as any, item.formula)} className="flex justify-between items-center"><span className="text-xs">{item.name} ({item.formula})</span>
-                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6 opacity-50 hover:opacity-100"><HelpCircle className="h-3 w-3" /></Button></TooltipTrigger>
-                      <TooltipContent side="left" className="max-w-xs text-xs p-2 bg-popover text-popover-foreground"><p className="font-semibold">{item.description}</p><p className="text-xs text-muted-foreground">{item.example}</p></TooltipContent>
-                    </Tooltip></DropdownMenuItem> ))}
+                    <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6 opacity-50 hover:opacity-100"><HelpCircle className="h-3 w-3" /></Button></TooltipTrigger><TooltipContent side="left" className="max-w-xs text-xs p-2 bg-popover text-popover-foreground"><p className="font-semibold">{item.description}</p><p className="text-xs text-muted-foreground">{item.example}</p></TooltipContent></Tooltip></DropdownMenuItem> ))}
                  <DropdownMenuItem key="CUSTOM" onSelect={() => handleFormulaSelect(partIndex, formulaField as any, PREDEFINED_FORMULAS.find(f => f.key === 'CUSTOM')?.formula || "")} className="flex justify-between items-center"><span className="text-xs">Custom Formula...</span></DropdownMenuItem>
               </DropdownMenuContent></DropdownMenu> )}
         </div>);
@@ -632,8 +630,8 @@ export default function CabinetDesignerPage() {
         height: p.height,
         qty: p.quantity,
         material: p.material,
-        grainDirection: p.grainDirection, // Copy grainDirection
-        originalName: p.name, // Store original name before material/thickness info
+        grainDirection: p.grainDirection, 
+        originalName: p.name, 
         originalWidth: p.width,
         originalHeight: p.height,
       }));
@@ -666,7 +664,7 @@ export default function CabinetDesignerPage() {
       
       const now = new Date();
       const jobName = customNestingJobName.trim() !== "" ? customNestingJobName.trim() : `Project Parts - ${format(now, "yyyy-MM-dd HH:mm:ss")}`;
-      const jobId = `nestJob_${now.getTime()}_${jobName.replace(/\s+/g, '_').slice(0,20)}`; // Add part of name to ID for easier debugging
+      const jobId = `nestJob_${now.getTime()}_${jobName.replace(/\s+/g, '_').slice(0,20)}`; 
 
       const newJob: NestingJob = {
         id: jobId,
@@ -675,12 +673,12 @@ export default function CabinetDesignerPage() {
         parts: latestCalculatedProjectPartsForNesting,
       };
 
-      existingJobs.unshift(newJob); // Add new job to the beginning
-      existingJobs = existingJobs.slice(0, 10); // Keep only the latest 10 jobs
+      existingJobs.unshift(newJob); 
+      existingJobs = existingJobs.slice(0, 10); 
 
       localStorage.setItem("cabinetDesignerNestingJobs", JSON.stringify(existingJobs));
       toast({ title: "Project Parts Saved", description: `"${jobName}" saved for nesting tool. You can now load it in Advanced Tools.`, });
-      setCustomNestingJobName(""); // Clear the input field after saving
+      setCustomNestingJobName(""); 
     } catch (e) {
       console.error("Error saving project for nesting:", e);
       toast({ title: "Error Saving for Nesting", description: "Could not save parts to localStorage.", variant: "destructive" });
@@ -890,7 +888,15 @@ export default function CabinetDesignerPage() {
                         <Input id={`param_${key}`} name={key} type="number" value={(currentTemplate.parameters as any)[key] || ''} onChange={(e) => handleTemplateInputChange(e, `parameters.${key}`)}/></div>))}</CardContent></Card>
                 <Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="text-lg">Part Definitions</CardTitle><CardDescription>Define each part, its quantity, dimensions, material, and edge banding.</CardDescription></div>
                     <Dialog open={isAddPartDialogOpen} onOpenChange={setIsAddPartDialogOpen}><DialogTrigger asChild><Button size="sm"><PlusCircle className="mr-2 h-4 w-4" />Add Part</Button></DialogTrigger>
-                        <AddPartDialog setOpen={setIsAddPartDialogOpen} onAddPart={handleAddPartToTemplate} existingPartCount={currentTemplate.parts.length} templateParameters={currentTemplate.parameters} materialOptions={combinedMaterialOptions} /></Dialog></CardHeader>
+                        <AddPartDialog 
+                            setOpen={setIsAddPartDialogOpen} 
+                            onAddPart={handleAddPartToTemplate} 
+                            existingPartCount={currentTemplate.parts.length} 
+                            templateParameters={currentTemplate.parameters} 
+                            materialOptions={combinedMaterialOptions}
+                            onRequestOpenMaterialDialog={() => setIsMaterialDialogOp(true)} 
+                        />
+                    </Dialog></CardHeader>
                     <CardContent className="space-y-4">{currentTemplate.parts.map((part, index) => {
                         const materialInfo = combinedMaterialOptions.find(m => m.value === part.materialId);
                         const grainText = part.grainDirection === 'with' ? 'With Grain' : part.grainDirection === 'reverse' ? 'Reverse Grain' : 'None';

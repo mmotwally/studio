@@ -31,6 +31,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { PartDefinition, CabinetPartType, EdgeBandingAssignment, CabinetTypeContext, PredefinedFormula, CabinetTemplateData, SelectItem as GenericSelectItem } from "@/app/(app)/cabinet-designer/types";
 import { PREDEFINED_FORMULAS } from "@/app/(app)/cabinet-designer/predefined-formulas";
 import { Textarea } from "@/components/ui/textarea";
+import { PlusCircle } from "lucide-react";
 
 const cabinetPartTypes: CabinetPartType[] = [
   'Side Panel', 'Bottom Panel', 'Top Panel', 'Back Panel', 'Double Back Panel', 
@@ -93,9 +94,10 @@ interface AddPartDialogProps {
   existingPartCount: number;
   templateParameters: CabinetTemplateData['parameters']; 
   materialOptions: GenericSelectItem[];
+  onRequestOpenMaterialDialog: () => void; // New prop
 }
 
-export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateParameters, materialOptions }: AddPartDialogProps) {
+export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateParameters, materialOptions, onRequestOpenMaterialDialog }: AddPartDialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -213,7 +215,13 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField control={form.control} name="materialId"
               render={({ field }) => (
-                <FormItem><FormLabel>Material*</FormLabel>
+                <FormItem>
+                  <div className="flex items-center justify-between">
+                    <FormLabel>Material*</FormLabel>
+                    <Button type="button" variant="link" size="sm" onClick={onRequestOpenMaterialDialog} className="p-0 h-auto text-xs">
+                      <PlusCircle className="mr-1 h-3 w-3" /> Define New...
+                    </Button>
+                  </div>
                   <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl><SelectTrigger><SelectValue placeholder="Select material" /></SelectTrigger></FormControl>
                     <SelectContent>{materialOptions.map((material) => (<SelectItem key={material.value} value={material.value}>{material.label}</SelectItem>))}</SelectContent>
