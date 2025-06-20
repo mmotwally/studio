@@ -7,12 +7,12 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label'; // Changed from ui/form to ui/label
+import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { FormItem, FormControl } from '@/components/ui/form'; // Renamed FormLabel to avoid conflict, removed RHFFormLabel alias
+import { FormItem, FormControl, FormLabel as RHFFormLabel } from '@/components/ui/form'; // Use RHFFormLabel for form context
 import { useToast } from "@/hooks/use-toast";
 import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer, Edit2, List, SendToBack, UploadCloud, SheetIcon } from 'lucide-react';
 import {
@@ -151,9 +151,7 @@ export default function CabinetDesignerPage() {
   const [customAccessoryTypes, setCustomAccessoryTypes] = React.useState<AccessoryDefinitionDB[]>([]);
   const [globalCustomFormulas, setGlobalCustomFormulas] = React.useState<CustomFormulaEntry[]>([]);
   
-  const [isMaterialDialogOp, setIsMaterialDialogOp] = React.useState(false);
-  const [materialDialogInitialType, setMaterialDialogInitialType] = React.useState<"panel" | "edge_band" | "other" | null>(null);
-
+  const [materialDialogType, setMaterialDialogType] = React.useState<"panel" | "edge_band" | "other" | null>(null);
   const [isAccessoryDialogOp, setIsAccessoryDialogOp] = React.useState(false);
   const [templateToDelete, setTemplateToDelete] = React.useState<CabinetTemplateData | null>(null);
 
@@ -217,9 +215,9 @@ export default function CabinetDesignerPage() {
     return [...predefined, ...custom].sort((a, b) => a.label.localeCompare(b.label));
   }, [customAccessoryTypes]);
 
-  const openPanelMaterialDialog = () => { setMaterialDialogInitialType("panel"); setIsMaterialDialogOp(true); };
-  const openEdgeBandMaterialDialog = () => { setMaterialDialogInitialType("edge_band"); setIsMaterialDialogOp(true); };
-  const openGenericMaterialDialog = () => { setMaterialDialogInitialType(null); setIsMaterialDialogOp(true); };
+  const openPanelMaterialDialog = () => setMaterialDialogType("panel");
+  const openEdgeBandMaterialDialog = () => setMaterialDialogType("edge_band");
+  const openGenericMaterialDialog = () => setMaterialDialogType("panel");
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -347,6 +345,10 @@ export default function CabinetDesignerPage() {
                 target[finalKey] = null;
             } else {
                 target[finalKey] = processedValue;
+            }
+            // Auto-switch to custom formula mode on edit
+            if (partIndex !== undefined && (finalKey === 'widthFormula' || finalKey === 'heightFormula' || finalKey === 'quantityFormula')) {
+                 target[`${finalKey}Key`] = 'CUSTOM';
             }
         }
         else console.error(`Final target for path ${path} is undefined.`);
@@ -562,7 +564,7 @@ export default function CabinetDesignerPage() {
         <div className="flex items-end gap-2">
           <div className="flex-grow">
             <Label htmlFor={`part_${partIndex}_${formulaField}`}>{label}</Label>
-            <Textarea id={`part_${partIndex}_${formulaField}`} rows={1} value={currentFormulaValue} onChange={(e) => handleTemplateInputChange(e, `parts.${partIndex}.${formulaField}`)} placeholder={placeholder} className="text-sm" readOnly={!isCustomEntryMode} />
+            <Textarea id={`part_${partIndex}_${formulaField}`} rows={1} value={currentFormulaValue} onChange={(e) => handleTemplateInputChange(e, `parts.${partIndex}.${formulaField}`)} placeholder={placeholder} className="text-sm" />
           </div>
            <div className="flex flex-col items-center space-y-1">
                 <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="whitespace-nowrap px-2"><ChevronDown className="h-4 w-4" /> <span className="ml-1 text-xs">Ins</span></Button></DropdownMenuTrigger>
@@ -1035,7 +1037,7 @@ export default function CabinetDesignerPage() {
                             <div className="mt-3">
                                 <Label className="font-medium">Edge Banding Application:</Label>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 text-sm">
-                                {(['front', 'back', 'top', 'bottom'] as Array<keyof PartDefinition['edgeBanding']>).map(edge => (<FormItem key={edge} className="flex flex-row items-center space-x-2"><Checkbox id={`edge_${index}_${edge}`} checked={!!part.edgeBanding?.[edge]} onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, `parts.${index}.edgeBanding.${edge}`, index, edge as keyof PartDefinition['edgeBanding'])}/><Label htmlFor={`edge_${index}_${edge}`} className="font-normal capitalize">{edge}</Label></FormItem>))}</div>
+                                {(['front', 'back', 'top', 'bottom'] as Array<keyof PartDefinition['edgeBanding']>).map(edge => (<FormItem key={edge} className="flex flex-row items-center space-x-2"><Checkbox id={`edge_${index}_${edge}`} checked={!!part.edgeBanding?.[edge]} onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, `parts.${index}.edgeBanding.${edge}`, index, edge as keyof PartDefinition['edgeBanding'])}/><RHFFormLabel htmlFor={`edge_${index}_${edge}`} className="font-normal capitalize">{edge}</RHFFormLabel></FormItem>))}</div>
                                 <p className="text-xs text-muted-foreground mt-1">For panels: Top/Bottom on Width; Front/Back on Height.</p>
                             </div>
                             <div className="mt-3">
@@ -1090,11 +1092,11 @@ export default function CabinetDesignerPage() {
       <PageHeader title="Cabinet Designer" description={viewMode === 'calculator' ? "Configure, calculate parts, and estimate costs for individual cabinets or entire projects." : "Define a new parametric cabinet template."}/>
       {viewMode === 'calculator' ? renderCalculatorView() : renderTemplateDefinitionView()}
 
-      <Dialog open={isMaterialDialogOp} onOpenChange={(open) => { setIsMaterialDialogOp(open); if (!open) setMaterialDialogInitialType(null); }}>
+      <Dialog open={materialDialogType !== null} onOpenChange={(open) => { if (!open) setMaterialDialogType(null); }}>
         <AddMaterialTypeDialog 
-            setOpen={setIsMaterialDialogOp} 
+            setOpen={(open) => !open && setMaterialDialogType(null)} 
             onMaterialTypeAdded={fetchCustomDefinitionsAndFormulas}
-            initialType={materialDialogInitialType} 
+            initialType={materialDialogType} 
         />
       </Dialog>
       <Dialog open={isAccessoryDialogOp} onOpenChange={setIsAccessoryDialogOp}>
@@ -1123,4 +1125,3 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
-

@@ -47,7 +47,7 @@ const cabinetPartTypes: CabinetPartType[] = [
 
 const cabinetTypeContexts: CabinetTypeContext[] = ['Base', 'Wall', 'Drawer', 'General'];
 
-const CUSTOM_FORMULA_KEY = "CUSTOM_FORMULA_KEY";
+const CUSTOM_FORMULA_KEY = "CUSTOM";
 const NO_EDGE_BANDING_PLACEHOLDER = "__NO_EDGE_BAND__";
 
 const addPartFormSchema = z.object({
@@ -146,7 +146,7 @@ export function AddPartDialog({
       (Array.isArray(f.partType) ? f.partType.includes(selectedPartType) : f.partType === selectedPartType || f.partType.length === 0) &&
       (f.context === null || (selectedCabinetContext && f.context.includes(selectedCabinetContext))) &&
       f.key !== CUSTOM_FORMULA_KEY
-    ).map(f => ({ ...f, type: 'predefined' as const, id: f.key, key: f.key })); // Ensure key is preserved
+    ).map(f => ({ ...f, type: 'predefined' as const, id: f.key, key: f.key }));
 
     const relevantGlobalFormulas = (globalCustomFormulas || []).filter(f =>
         (f.dimensionType === 'Width' && dimension === 'Width') ||
@@ -303,7 +303,7 @@ export function AddPartDialog({
                 </FormItem>)}/>
 
             <div>
-              <FormLabel className="text-base font-medium">Edge Banding Application</FormLabel>
+              <Label className="text-base font-medium">Edge Banding Application</Label>
               <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2">
                 {(['front', 'back', 'top', 'bottom'] as const).map((edge) => (<FormField key={edge} control={form.control} name={`edgeBanding_${edge}`} render={({ field }) => (<FormItem className="flex flex-row items-center space-x-2"><FormControl><Checkbox checked={field.value} onCheckedChange={field.onChange} /></FormControl><Label htmlFor={`edgeBanding_${edge}_${field.name}`} className="font-normal capitalize">{edge}</Label></FormItem>)}/>))}
               </div>
@@ -313,7 +313,7 @@ export function AddPartDialog({
               render={({ field }) => (
                 <FormItem>
                   <div className="flex items-center justify-between">
-                    <FormLabel>Edge Banding Material (Optional)</FormLabel>
+                    <Label>Edge Banding Material (Optional)</Label>
                      <Button type="button" variant="link" size="sm" onClick={onRequestOpenEdgeBandMaterialDialog} className="p-0 h-auto text-xs">
                       <PlusCircle className="mr-1 h-3 w-3" /> Define New...
                     </Button>
