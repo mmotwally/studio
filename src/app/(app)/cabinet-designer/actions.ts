@@ -127,10 +127,15 @@ export async function calculateCabinetDetails(
       const materialInfo = materialDefinitionsMap.get(partDef.materialId);
       let partThickness: number;
 
-      if (partDef.thicknessFormula) {
-        partThickness = evaluateFormula(partDef.thicknessFormula, formulaParams);
-      } else if (materialInfo?.thickness) {
-        partThickness = materialInfo.thickness;
+      // Thickness determination logic:
+      // 1. Material definition's thickness
+      // 2. Part definition's thicknessFormula (if it exists, for overrides)
+      // 3. Template parameter BPT for 'Back Panel'
+      // 4. Template parameter PT for others
+      if (materialInfo?.thickness !== null && materialInfo?.thickness !== undefined) {
+          partThickness = materialInfo.thickness;
+      } else if (partDef.thicknessFormula) {
+          partThickness = evaluateFormula(partDef.thicknessFormula, formulaParams);
       } else if (partDef.partType === 'Back Panel') {
          partThickness = formulaParams.BPT;
       } else {
@@ -211,13 +216,13 @@ export async function calculateCabinetDetails(
             const doorCount = template.parts.reduce((sum, p) => (p.partType === 'Door' || p.partType === 'Doors') ? sum + evaluateFormula(p.quantityFormula, formulaParams) : sum, 0);
             const hingeDef = accessoryDefinitionsMap.get("HINGE_STD_FO");
             const handleDef = accessoryDefinitionsMap.get("HANDLE_STD_PULL");
-            if(hingeDef) accessories.push({ id: hingeDef.id, name: hingeDef.name, quantity: doorCount * 2, unitCost: hingeDef.unitCost, totalCost: hingeDef.unitCost * doorCount * 2 });
-            if(handleDef) accessories.push({ id: handleDef.id, name: handleDef.name, quantity: doorCount, unitCost: handleDef.unitCost, totalCost: handleDef.unitCost * doorCount });
+            if(hingeDef) accessories.push({ id: "HINGE_STD_FO", name: hingeDef.name, quantity: doorCount * 2, unitCost: hingeDef.unitCost, totalCost: hingeDef.unitCost * doorCount * 2 });
+            if(handleDef) accessories.push({ id: "HANDLE_STD_PULL", name: handleDef.name, quantity: doorCount, unitCost: handleDef.unitCost, totalCost: handleDef.unitCost * doorCount });
         }
         if (template.parts.some(p => p.partType === 'Fixed Shelf' || p.partType === 'Mobile Shelf')) {
             const shelfCount = template.parts.reduce((sum, p) => (p.partType === 'Fixed Shelf' || p.partType === 'Mobile Shelf') ? sum + evaluateFormula(p.quantityFormula, formulaParams) : sum, 0);
             const shelfPinDef = accessoryDefinitionsMap.get("SHELF_PIN_STD");
-            if(shelfPinDef) accessories.push({ id: shelfPinDef.id, name: shelfPinDef.name, quantity: shelfCount * 4, unitCost: shelfPinDef.unitCost, totalCost: shelfPinDef.unitCost * shelfCount * 4 });
+            if(shelfPinDef) accessories.push({ id: "SHELF_PIN_STD", name: shelfPinDef.name, quantity: shelfCount * 4, unitCost: shelfPinDef.unitCost, totalCost: shelfPinDef.unitCost * shelfCount * 4 });
         }
     }
 
@@ -301,9 +306,9 @@ export async function calculateCabinetDetails(
     const hingeDef = accessoryDefinitionsMap.get("HINGE_STD_FO");
     const handleDef = accessoryDefinitionsMap.get("HANDLE_STD_PULL");
     const shelfPinDef = accessoryDefinitionsMap.get("SHELF_PIN_STD");
-    if(hingeDef) accessoriesStd.push({ id: hingeDef.id, name: hingeDef.name, quantity: 4, unitCost: hingeDef.unitCost, totalCost: hingeDef.unitCost * 4 }); // 2 per door
-    if(handleDef) accessoriesStd.push({ id: handleDef.id, name: handleDef.name, quantity: 2, unitCost: handleDef.unitCost, totalCost: handleDef.unitCost * 2 });
-    if(shelfPinDef) accessoriesStd.push({ id: shelfPinDef.id, name: shelfPinDef.name, quantity: 4, unitCost: shelfPinDef.unitCost, totalCost: shelfPinDef.unitCost * 4 });
+    if(hingeDef) accessoriesStd.push({ id: "HINGE_STD_FO", name: hingeDef.name, quantity: 4, unitCost: hingeDef.unitCost, totalCost: hingeDef.unitCost * 4 }); // 2 per door
+    if(handleDef) accessoriesStd.push({ id: "HANDLE_STD_PULL", name: handleDef.name, quantity: 2, unitCost: handleDef.unitCost, totalCost: handleDef.unitCost * 2 });
+    if(shelfPinDef) accessoriesStd.push({ id: "SHELF_PIN_STD", name: shelfPinDef.name, quantity: 4, unitCost: shelfPinDef.unitCost, totalCost: shelfPinDef.unitCost * 4 });
     
     const totalAccessoryCostStd = accessoriesStd.reduce((sum, acc) => sum + acc.totalCost, 0);
     const estimatedPanelMaterialCostStd = totalPanelArea_sqmm * FALLBACK_COST_PER_SQM_PANEL_MM;
@@ -703,4 +708,3 @@ export async function getAccessoryDefinitionsAction(dbInstance?: Database): Prom
     return [];
   }
 }
-

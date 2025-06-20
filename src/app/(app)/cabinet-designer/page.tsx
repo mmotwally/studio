@@ -1,3 +1,4 @@
+
 "use client";
 
 import * as React from 'react';
@@ -554,7 +555,7 @@ export default function CabinetDesignerPage() {
                     <DropdownMenuItem key="CUSTOM" onSelect={() => handleFormulaSelect(partIndex, formulaField as any, PREDEFINED_FORMULAS.find(f => f.key === 'CUSTOM')?.formula || "")} className="flex justify-between items-center text-xs"><span className="font-semibold">Custom Formula... (Type directly)</span></DropdownMenuItem>
                 </DropdownMenuContent></DropdownMenu>
             )}
-            {isCustomEntryMode && currentFormulaValue && currentFormulaValue.trim() && (
+             {isCustomEntryMode && currentFormulaValue && currentFormulaValue.trim() && (
                 <Button type="button" variant="outline" size="sm" onClick={handleSaveGlobal} className="whitespace-nowrap px-2" title="Save this custom formula globally">
                     <Save className="h-4 w-4" /> <span className="ml-1 text-xs">Save</span>
                 </Button>
@@ -937,7 +938,7 @@ export default function CabinetDesignerPage() {
 
  const renderTemplateDefinitionView = () => {
     const evalParams = { W: currentTemplate.defaultDimensions.width, H: currentTemplate.defaultDimensions.height, D: currentTemplate.defaultDimensions.depth, ...currentTemplate.parameters };
-    return (<div className="space-y-6"><TooltipProvider><Card className="shadow-lg"><CardHeader><CardTitle className="flex items-center"><DraftingCompass className="mr-2 h-5 w-5 text-primary" />Define Cabinet Template</CardTitle><CardDescription>Specify parameters, parts, formulas, and accessories.</CardDescription></CardHeader>
+    return (<div className="space-y-6"><TooltipProvider><Card className="shadow-lg"><CardHeader><CardTitle className="flex items-center"><DraftingCompass className="mr-2 h-5 w-5 text-primary" />Define Cabinet Template</CardTitle><CardDescription>Specify parameters, parts, formulas, and accessories. Part thickness is derived from the selected material.</CardDescription></CardHeader>
             <CardContent className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div><Label htmlFor="templateName">Template Name</Label><Input id="templateName" name="name" value={currentTemplate.name} onChange={(e) => handleTemplateInputChange(e, 'name')}/></div>
@@ -961,19 +962,21 @@ export default function CabinetDesignerPage() {
                     <CardContent className="space-y-4">{currentTemplate.parts.map((part, index) => {
                         const materialInfo = combinedMaterialOptions.find(m => m.value === part.materialId);
                         const grainText = part.grainDirection === 'with' ? 'With Grain' : part.grainDirection === 'reverse' ? 'Reverse Grain' : 'None';
-                        const calculatedHeight = evaluateFormulaClientSide(part.heightFormula, evalParams); const calculatedWidth = evaluateFormulaClientSide(part.widthFormula, evalParams); const calculatedThickness = evaluateFormulaClientSide(part.thicknessFormula, evalParams); const calculatedQty = evaluateFormulaClientSide(part.quantityFormula, evalParams);
+                        const calculatedHeight = evaluateFormulaClientSide(part.heightFormula, evalParams); const calculatedWidth = evaluateFormulaClientSide(part.widthFormula, evalParams); 
+                        // Thickness formula display removed, actual thickness shown with material name
+                        const calculatedQty = evaluateFormulaClientSide(part.quantityFormula, evalParams);
                         return (<Card key={part.partId || index} className="p-4 relative bg-card/80"><Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
                             <div className="mb-3 p-2 border rounded-md bg-muted/30 text-sm space-y-1"><Input id={`partName_${index}`} value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, `parts.${index}.nameLabel`)} className="text-base font-medium mb-1"/>
                                 <p><span className="font-medium">Type:</span> {part.partType} ({part.cabinetContext || 'General'})</p>
-                                <p><span className="font-medium">Calc. Dim (H x W x T):</span>{` ${calculatedHeight}${isNaN(Number(calculatedHeight)) ? '' : 'mm'} x ${calculatedWidth}${isNaN(Number(calculatedWidth)) ? '' : 'mm'} x ${calculatedThickness}${isNaN(Number(calculatedThickness)) ? '' : 'mm'}`}<span className="text-muted-foreground text-[10px] block">(Formulas: {part.heightFormula || 'N/A'} x {part.widthFormula || 'N/A'} x {part.thicknessFormula || 'N/A'})</span></p>
+                                <p><span className="font-medium">Calc. Dim (H x W):</span>{` ${calculatedHeight}${isNaN(Number(calculatedHeight)) ? '' : 'mm'} x ${calculatedWidth}${isNaN(Number(calculatedWidth)) ? '' : 'mm'}`}<span className="text-muted-foreground text-[10px] block">(Formulas: {part.heightFormula || 'N/A'} x {part.widthFormula || 'N/A'})</span></p>
                                 <p><span className="font-medium">Calc. Qty:</span> {calculatedQty} <span className="text-muted-foreground text-[10px]">(Formula: {part.quantityFormula})</span></p>
-                                <p><span className="font-medium">Material:</span> {materialInfo?.label || part.materialId}</p><p><span className="font-medium">Grain:</span> {grainText}</p></div>
+                                <p><span className="font-medium">Material:</span> {materialInfo?.label || part.materialId} (Thickness derived from material)</p><p><span className="font-medium">Grain:</span> {grainText}</p></div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 items-start">
                                 <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula*" placeholder="e.g., 2" customDbFormulas={globalCustomFormulas} onRefreshGlobalFormulas={fetchCustomDefinitionsAndFormulas} />
                                 <FormulaInputWithHelper partIndex={index} formulaField="widthFormula" label="Width Formula*" placeholder="e.g., D or W - 2*PT" customDbFormulas={globalCustomFormulas} onRefreshGlobalFormulas={fetchCustomDefinitionsAndFormulas} />
                                 <FormulaInputWithHelper partIndex={index} formulaField="heightFormula" label="Height Formula*" placeholder="e.g., H or D - BPO" customDbFormulas={globalCustomFormulas} onRefreshGlobalFormulas={fetchCustomDefinitionsAndFormulas} />
                                 <div><Label>Material ID*</Label><Select value={part.materialId} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'materialId', value }} as any, `parts.${index}.materialId`)}><SelectTrigger className="text-sm"><SelectValue placeholder="Select material" /></SelectTrigger><SelectContent>{combinedMaterialOptions.map((material) => (<SelectItem key={material.value} value={material.value}>{material.label}</SelectItem>))}</SelectContent></Select></div>
-                                <FormulaInputWithHelper partIndex={index} formulaField="thicknessFormula" label="Thickness Formula*" placeholder="e.g., PT or 18" customDbFormulas={globalCustomFormulas} onRefreshGlobalFormulas={fetchCustomDefinitionsAndFormulas} />
+                                {/* Thickness Formula Input Removed */}
                                 <div><Label>Grain Direction</Label><Select value={part.grainDirection || 'none'} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'grainDirection', value: value === 'none' ? null : value }} as any, `parts.${index}.grainDirection`)}><SelectTrigger className="text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="with">With Grain (Height)</SelectItem><SelectItem value="reverse">Reverse Grain (Width)</SelectItem></SelectContent></Select></div></div>
                             <div className="mt-3"><Label className="font-medium">Edge Banding:</Label><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 text-sm">
                                 {(['front', 'back', 'top', 'bottom'] as Array<keyof PartDefinition['edgeBanding']>).map(edge => (<FormItem key={edge} className="flex flex-row items-center space-x-2"><Checkbox id={`edge_${index}_${edge}`} checked={!!part.edgeBanding?.[edge]} onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, `parts.${index}.edgeBanding.${edge}`, index, edge as keyof PartDefinition['edgeBanding'])}/><Label htmlFor={`edge_${index}_${edge}`} className="capitalize font-normal">{edge}</Label></FormItem>))}</div>

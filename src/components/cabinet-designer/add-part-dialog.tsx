@@ -59,8 +59,7 @@ const addPartFormSchema = z.object({
   heightFormulaKey: z.string().optional(),
   customHeightFormula: z.string().optional(),
   materialId: z.string().min(1, "Material selection is required."),
-  thicknessChoice: z.enum(["global", "custom"]).default("global"),
-  customThicknessValue: z.string().optional(),
+  // Thickness options removed
   grainDirection: z.enum(["with", "reverse", "none"]).nullable().default(null),
   edgeBanding_front: z.boolean().default(false),
   edgeBanding_back: z.boolean().default(false),
@@ -78,13 +77,9 @@ const addPartFormSchema = z.object({
         return false;
     }
     return true;
-}, { message: "Custom height formula cannot be empty.", path: ["customHeightFormula"] })
-.refine(data => {
-    if (data.thicknessChoice === "custom" && (!data.customThicknessValue?.trim() || isNaN(parseFloat(data.customThicknessValue)) || parseFloat(data.customThicknessValue) <=0 )) {
-        return false;
-    }
-    return true;
-}, { message: "Custom thickness must be a valid positive number.", path: ["customThicknessValue"] });
+}, { message: "Custom height formula cannot be empty.", path: ["customHeightFormula"] });
+// Thickness refinement removed
+
 
 type AddPartFormValues = z.infer<typeof addPartFormSchema>;
 
@@ -94,7 +89,7 @@ interface AddPartDialogProps {
   existingPartCount: number;
   templateParameters: CabinetTemplateData['parameters']; 
   materialOptions: GenericSelectItem[];
-  onRequestOpenMaterialDialog: () => void; // New prop
+  onRequestOpenMaterialDialog: () => void;
 }
 
 export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateParameters, materialOptions, onRequestOpenMaterialDialog }: AddPartDialogProps) {
@@ -115,8 +110,8 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
       heightFormulaKey: PREDEFINED_FORMULAS.find(f => f.partType === 'Side Panel' && f.context?.includes('Base') && f.dimension === 'Height')?.key || CUSTOM_FORMULA_KEY,
       customHeightFormula: PREDEFINED_FORMULAS.find(f => f.partType === 'Side Panel' && f.context?.includes('Base') && f.dimension === 'Height')?.formula || "H - PT",
       materialId: defaultMaterialId,
-      thicknessChoice: "global",
-      customThicknessValue: "",
+      // thicknessChoice removed
+      // customThicknessValue removed
       grainDirection: 'with',
       edgeBanding_front: true,
       edgeBanding_back: false,
@@ -128,7 +123,7 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
   
   const selectedPartType = form.watch("partType");
   const selectedCabinetContext = form.watch("cabinetContext");
-  const selectedThicknessChoice = form.watch("thicknessChoice");
+  // selectedThicknessChoice removed
 
   const getFilteredFormulas = (dimension: 'Width' | 'Height') => {
     return PREDEFINED_FORMULAS.filter(f =>
@@ -165,11 +160,13 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
       const edgeBanding: EdgeBandingAssignment = { front: values.edgeBanding_front, back: values.edgeBanding_back, top: values.edgeBanding_top, bottom: values.edgeBanding_bottom };
       const finalWidthFormula = values.widthFormulaKey === CUSTOM_FORMULA_KEY ? values.customWidthFormula || "" : PREDEFINED_FORMULAS.find(f => f.key === values.widthFormulaKey)?.formula || values.customWidthFormula || "";
       const finalHeightFormula = values.heightFormulaKey === CUSTOM_FORMULA_KEY ? values.customHeightFormula || "" : PREDEFINED_FORMULAS.find(f => f.key === values.heightFormulaKey)?.formula || values.customHeightFormula || "";
-      const finalThicknessFormula = values.thicknessChoice === "global" ? "PT" : values.customThicknessValue || "PT"; 
+      
       const newPart: PartDefinition = {
         partId: `${values.partType.toLowerCase().replace(/[\s()]+/g, '_')}_${existingPartCount + 1}_${Date.now()}`, nameLabel: values.nameLabel, partType: values.partType, cabinetContext: values.cabinetContext,
         quantityFormula: values.quantityFormula, widthFormula: finalWidthFormula, widthFormulaKey: values.widthFormulaKey, heightFormula: finalHeightFormula, heightFormulaKey: values.heightFormulaKey,
-        thicknessFormula: finalThicknessFormula, materialId: values.materialId, grainDirection: values.grainDirection, edgeBanding: edgeBanding, notes: values.notes || `Added via dialog. Part Type: ${values.partType}`,
+        thicknessFormula: null, // Thickness formula no longer set here
+        thicknessFormulaKey: null, // No longer set here
+        materialId: values.materialId, grainDirection: values.grainDirection, edgeBanding: edgeBanding, notes: values.notes || `Added via dialog. Part Type: ${values.partType}`,
       };
       onAddPart(newPart);
       toast({ title: "Part Added", description: `"${values.nameLabel}" has been added.` });
@@ -201,7 +198,7 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
 
   return (
     <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-      <DialogHeader><DialogTitle>Add New Part to Template</DialogTitle><DialogDescription>Select type, context, and define properties and formulas.</DialogDescription></DialogHeader>
+      <DialogHeader><DialogTitle>Add New Part to Template</DialogTitle><DialogDescription>Select type, context, and define properties and formulas. Part thickness will be derived from the selected material.</DialogDescription></DialogHeader>
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6 py-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -212,31 +209,22 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
             <FormField control={form.control} name="quantityFormula" render={({ field }) => (<FormItem><FormLabel>Quantity Formula*</FormLabel><FormControl><Input placeholder="e.g., 1 or 2" {...field} /></FormControl><FormMessage /></FormItem>)}/>
           {renderFormulaSelect('Width', availableWidthFormulas, 'widthFormulaKey', 'customWidthFormula')}
           {renderFormulaSelect('Height', availableHeightFormulas, 'heightFormulaKey', 'customHeightFormula')}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField control={form.control} name="materialId"
-              render={({ field }) => (
-                <FormItem>
-                  <div className="flex items-center justify-between">
-                    <FormLabel>Material*</FormLabel>
-                    <Button type="button" variant="link" size="sm" onClick={onRequestOpenMaterialDialog} className="p-0 h-auto text-xs">
-                      <PlusCircle className="mr-1 h-3 w-3" /> Define New...
-                    </Button>
-                  </div>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl><SelectTrigger><SelectValue placeholder="Select material" /></SelectTrigger></FormControl>
-                    <SelectContent>{materialOptions.map((material) => (<SelectItem key={material.value} value={material.value}>{material.label}</SelectItem>))}</SelectContent>
-                  </Select><FormMessage />
-                </FormItem>)}/>
-            <FormField control={form.control} name="thicknessChoice"
-                render={({ field }) => (
-                <FormItem><FormLabel>Part Thickness*</FormLabel>
-                    <RadioGroup onValueChange={field.onChange} value={field.value} className="flex flex-col space-y-1">
-                        <FormItem className="flex items-center space-x-2"><RadioGroupItem value="global" id="thickness-global-dlg" /><Label htmlFor="thickness-global-dlg" className="font-normal">Use Global Panel Thickness (PT)</Label></FormItem>
-                        <FormItem className="flex items-center space-x-2"><RadioGroupItem value="custom" id="thickness-custom-dlg" /><Label htmlFor="thickness-custom-dlg" className="font-normal">Specify Custom Thickness (mm)</Label></FormItem>
-                    </RadioGroup><FormMessage />
-                </FormItem>)}/>
-           </div>
-            {selectedThicknessChoice === "custom" && (<FormField control={form.control} name="customThicknessValue" render={({ field }) => (<FormItem><FormLabel>Custom Thickness Value (mm)*</FormLabel><FormControl><Input type="number" placeholder="e.g., 19" {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>)}/>)}
+          
+          <FormField control={form.control} name="materialId"
+            render={({ field }) => (
+              <FormItem>
+                <div className="flex items-center justify-between">
+                  <FormLabel>Material*</FormLabel>
+                  <Button type="button" variant="link" size="sm" onClick={onRequestOpenMaterialDialog} className="p-0 h-auto text-xs">
+                    <PlusCircle className="mr-1 h-3 w-3" /> Define New...
+                  </Button>
+                </div>
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="Select material" /></SelectTrigger></FormControl>
+                  <SelectContent>{materialOptions.map((material) => (<SelectItem key={material.value} value={material.value}>{material.label}</SelectItem>))}</SelectContent>
+                </Select><FormMessage />
+              </FormItem>)}/>
+            
           <FormField control={form.control} name="grainDirection"
             render={({ field }) => (
               <FormItem><FormLabel>Grain Direction</FormLabel>

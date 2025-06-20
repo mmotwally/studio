@@ -1,5 +1,4 @@
 
-
 export type CabinetPartType =
   | 'Side Panel'
   | 'Bottom Panel'
@@ -161,8 +160,8 @@ export interface PartDefinition {
   heightFormula: string; 
   heightFormulaKey?: string; 
   materialId: string; // Can refer to PredefinedMaterialSimple.id or MaterialDefinitionDB.id
-  thicknessFormula?: string; 
-  thicknessFormulaKey?: string; 
+  thicknessFormula?: string | null; // Made optional: thickness now primarily from material
+  thicknessFormulaKey?: string | null; // Made optional
   quantityFormulaKey?: string; 
   edgeBanding?: EdgeBandingAssignment;
   grainDirection?: 'with' | 'reverse' | 'none' | null; 
