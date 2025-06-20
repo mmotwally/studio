@@ -156,6 +156,16 @@ export default function CabinetDesignerPage() {
   const [isAccessoryDialogOpen, setIsAccessoryDialogOpen] = React.useState(false);
   const [isFormulaDialogOpen, setIsFormulaDialogOpen] = React.useState(false);
   const [templateToDelete, setTemplateToDelete] = React.useState<CabinetTemplateData | null>(null);
+  
+  const [saveFormulaDialogState, setSaveFormulaDialogState] = React.useState<{
+    isOpen: boolean;
+    formula?: string;
+    dimensionType?: FormulaDimensionType;
+    partType?: CabinetPartType | null;
+    context?: CabinetTypeContext | null;
+  }>({ isOpen: false });
+  const [formulaNameToSave, setFormulaNameToSave] = React.useState("");
+
 
 
   const fetchAndSetTemplates = React.useCallback(async () => {
@@ -491,12 +501,11 @@ export default function CabinetDesignerPage() {
     } finally { setIsCalculatingDrawers(false); }
   };
 
-  const FormulaInputWithHelper = ({ partIndex, formulaField, label, placeholder, customDbFormulas, onRefreshGlobalFormulas }: { partIndex: number, formulaField: 'widthFormula' | 'heightFormula' | 'quantityFormula', label: string, placeholder: string, customDbFormulas: CustomFormulaEntry[], onRefreshGlobalFormulas: () => void }) => {
-      const currentFormulaKey = (currentTemplate.parts[partIndex] as any)[`${formulaField}Key`];
+  const FormulaInputWithHelper = ({ partIndex, formulaField, label, placeholder }: { partIndex: number, formulaField: 'widthFormula' | 'heightFormula' | 'quantityFormula', label: string, placeholder: string }) => {
       let currentFormulaValue = (currentTemplate.parts[partIndex] as any)[formulaField] || "";
       if (typeof currentFormulaValue !== 'string') currentFormulaValue = String(currentFormulaValue);
 
-      const isCustomEntryMode = currentFormulaKey === 'CUSTOM';
+      const isCustomEntryMode = (currentTemplate.parts[partIndex] as any)[`${formulaField}Key`] === 'CUSTOM';
       
       const part = currentTemplate.parts[partIndex];
       const dimension = formulaField === 'widthFormula' ? 'Width' : formulaField === 'heightFormula' ? 'Height' : 'Quantity';
@@ -505,14 +514,14 @@ export default function CabinetDesignerPage() {
           if (!part) return [];
           
           const predefined = PREDEFINED_FORMULAS.filter(f => {
-              if (f.key === 'CUSTOM') return false; // Exclude the placeholder
+              if (f.key === 'CUSTOM') return false; 
               const contextMatch = f.context === null || (part.cabinetContext && f.context.includes(part.cabinetContext));
-              const partTypeMatch = f.partType.length === 0 || f.partType.includes(part.partType);
+              const partTypeMatch = f.partType.length === 0 || (Array.isArray(f.partType) && f.partType.includes(part.partType));
               const dimensionMatch = f.dimension === dimension;
               return contextMatch && partTypeMatch && dimensionMatch;
           }).map(f => ({ ...f, type: 'predefined' as const, id: f.key }));
 
-          const custom = customDbFormulas.filter(f => {
+          const custom = globalCustomFormulas.filter(f => {
               const contextMatch = !f.context || f.context === part.cabinetContext;
               const partTypeMatch = !f.partType || f.partType === part.partType;
               const dimensionMatch = f.dimensionType === dimension;
@@ -529,32 +538,26 @@ export default function CabinetDesignerPage() {
 
       const combinedFormulas = getRelevantFormulas();
 
-      const handleSaveGlobal = async () => {
+      const handleSaveGlobal = () => {
         const formulaToSave = (currentTemplate.parts[partIndex] as any)[formulaField];
         if (!formulaToSave || !String(formulaToSave).trim()) {
             toast({title: "Empty Formula", description: "Cannot save an empty formula globally.", variant: "default"});
             return;
         }
-        const formulaName = window.prompt("Enter a name for this global formula:");
-        if (!formulaName || !formulaName.trim()) {
-            toast({title: "Name Required", description: "A name is required to save the formula globally.", variant: "default"});
-            return;
-        }
+        
         let dimType: FormulaDimensionType = 'Width';
         if (formulaField === 'heightFormula') dimType = 'Height';
         else if (formulaField === 'quantityFormula') dimType = 'Quantity';
 
-        try {
-            const result = await saveCustomFormulaAction(formulaName, String(formulaToSave), dimType, "Saved from template editor");
-            if (result.success) {
-                toast({title: "Formula Saved", description: `Formula "${formulaName}" saved globally.`});
-                onRefreshGlobalFormulas();
-            } else {
-                 toast({title: "Error Saving Formula", description: result.error || "Could not save formula.", variant: "destructive"});
-            }
-        } catch (err) {
-            toast({title: "Error", description: (err instanceof Error ? err.message : "Unknown error."), variant: "destructive"});
-        }
+        const part = currentTemplate.parts[partIndex];
+        setFormulaNameToSave(""); // Reset name input
+        setSaveFormulaDialogState({
+            isOpen: true,
+            formula: String(formulaToSave),
+            dimensionType: dimType,
+            partType: part.partType,
+            context: part.cabinetContext,
+        });
       };
 
       return (
@@ -996,12 +999,12 @@ export default function CabinetDesignerPage() {
                         return (<Card key={part.partId || index} className="p-4 relative bg-card/80 mb-4"><Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
                             <div className="mb-3 p-2 border rounded-md bg-muted/30 text-sm space-y-1"><Input id={`partName_${index}`} value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, `parts.${index}.nameLabel`)} className="text-base font-medium mb-1"/>
                                 <p><span className="font-medium">Type:</span> {part.partType} ({part.cabinetContext || 'General'})</p>
-                                <p><span className="font-medium">Calc. Dim (H x W):</span>{` ${calculatedHeight}${isNaN(Number(calculatedHeight)) ? '' : 'mm'} x ${calculatedWidth}${isNaN(Number(calculatedWidth)) ? '' : 'mm'}`}<span className="text-muted-foreground text-[10px] block">(Formulas: {part.heightFormula || 'N/A'} x {part.widthFormula || 'N/A'})</span></p>
+                                <p><span className="font-medium">Calc. Dim (H x W):</span>{` ${calculatedHeight}${isNaN(Number(calculatedHeight)) ? '' : 'mm'} x ${calculatedWidth}${isNaN(Number(calculatedWidth)) ? '' : 'mm'}`}<span className="text-xs text-muted-foreground block">(Formulas: {part.heightFormula || 'N/A'} x {part.widthFormula || 'N/A'})</span></p>
                                 <p><span className="font-medium">Material:</span> {materialInfo?.label || part.materialId} (Thickness derived from material)</p><p><span className="font-medium">Grain:</span> {grainText}</p></div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 items-start">
-                                <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula*" placeholder="e.g., 2" customDbFormulas={globalCustomFormulas} onRefreshGlobalFormulas={fetchCustomDefinitionsAndFormulas} />
-                                <FormulaInputWithHelper partIndex={index} formulaField="widthFormula" label="Width Formula*" placeholder="e.g., D or W - 2*PT" customDbFormulas={globalCustomFormulas} onRefreshGlobalFormulas={fetchCustomDefinitionsAndFormulas} />
-                                <FormulaInputWithHelper partIndex={index} formulaField="heightFormula" label="Height Formula*" placeholder="e.g., H or D - BPO" customDbFormulas={globalCustomFormulas} onRefreshGlobalFormulas={fetchCustomDefinitionsAndFormulas} />
+                                <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula*" placeholder="e.g., 2" />
+                                <FormulaInputWithHelper partIndex={index} formulaField="widthFormula" label="Width Formula*" placeholder="e.g., D or W - 2*PT" />
+                                <FormulaInputWithHelper partIndex={index} formulaField="heightFormula" label="Height Formula*" placeholder="e.g., H or D - BPO" />
                                 <div>
                                     <div className="flex items-center justify-between mb-1">
                                         <Label htmlFor={`part_material_${index}`}>Material (Panel)*</Label>
@@ -1131,6 +1134,61 @@ export default function CabinetDesignerPage() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+
+      {saveFormulaDialogState.isOpen && (
+        <AlertDialog open={saveFormulaDialogState.isOpen} onOpenChange={(open) => { if (!open) setSaveFormulaDialogState({ isOpen: false }); }}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Save Formula Globally</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Provide a name to save this formula for reuse across other templates.
+                        <p className="font-mono text-sm bg-muted p-2 rounded-md mt-2">{saveFormulaDialogState.formula}</p>
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="space-y-2">
+                    <Label htmlFor="formulaNameInput" className="sr-only">Formula Name</Label>
+                    <Input
+                        id="formulaNameInput"
+                        value={formulaNameToSave}
+                        onChange={(e) => setFormulaNameToSave(e.target.value)}
+                        placeholder="e.g., Standard Door Width"
+                        autoFocus
+                    />
+                </div>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setSaveFormulaDialogState({ isOpen: false })}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={async () => {
+                        if (!formulaNameToSave.trim()) {
+                            toast({ title: "Name Required", description: "Please enter a name for the formula." });
+                            return;
+                        }
+                        
+                        try {
+                            const result = await saveCustomFormulaAction(
+                                formulaNameToSave,
+                                saveFormulaDialogState.formula!,
+                                saveFormulaDialogState.dimensionType!,
+                                `Saved from template editor for part type: ${saveFormulaDialogState.partType || 'General'}`,
+                                saveFormulaDialogState.partType,
+                                saveFormulaDialogState.context
+                            );
+                            if (result.success) {
+                                toast({title: "Formula Saved", description: `Formula "${formulaNameToSave}" saved globally.`});
+                                fetchCustomDefinitionsAndFormulas();
+                                setSaveFormulaDialogState({ isOpen: false });
+                                setFormulaNameToSave(""); 
+                            } else {
+                                throw new Error(result.error || "An unknown error occurred during save.");
+                            }
+                        } catch (err) {
+                            toast({title: "Error Saving Formula", description: (err instanceof Error ? err.message : "Unknown error."), variant: "destructive"});
+                        }
+                    }}>Save</AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+      )}
+
     </TooltipProvider>
   );
 }
