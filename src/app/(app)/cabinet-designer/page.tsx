@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { FormItem, FormLabel as RHFFormLabel, FormControl } from '@/components/ui/form'; // Renamed FormLabel to avoid conflict
+import { FormItem, FormControl } from '@/components/ui/form'; // Renamed FormLabel to avoid conflict, removed RHFFormLabel alias
 import { useToast } from "@/hooks/use-toast";
 import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer, Edit2, List, SendToBack, UploadCloud, SheetIcon } from 'lucide-react';
 import {
@@ -504,7 +504,7 @@ export default function CabinetDesignerPage() {
   const FormulaInputWithHelper = ({ partIndex, formulaField, label, placeholder, customDbFormulas, onRefreshGlobalFormulas }: { partIndex: number, formulaField: 'widthFormula' | 'heightFormula' | 'quantityFormula', label: string, placeholder: string, customDbFormulas: CustomFormulaEntry[], onRefreshGlobalFormulas: () => void }) => {
       const currentFormulaKey = (currentTemplate.parts[partIndex] as any)[`${formulaField}Key`];
       let currentFormulaValue = (currentTemplate.parts[partIndex] as any)[formulaField] || "";
-      if (typeof currentFormulaValue !== 'string') currentFormulaValue = String(currentFormulaValue); // Ensure it's a string
+      if (typeof currentFormulaValue !== 'string') currentFormulaValue = String(currentFormulaValue);
 
       const isCustomEntryMode = currentFormulaKey === 'CUSTOM';
 
@@ -532,7 +532,7 @@ export default function CabinetDesignerPage() {
 
       const handleSaveGlobal = async () => {
         const formulaToSave = (currentTemplate.parts[partIndex] as any)[formulaField];
-        if (!formulaToSave || !String(formulaToSave).trim()) { // Ensure it's a string and trimmed
+        if (!formulaToSave || !String(formulaToSave).trim()) {
             toast({title: "Empty Formula", description: "Cannot save an empty formula globally.", variant: "default"});
             return;
         }
@@ -549,7 +549,7 @@ export default function CabinetDesignerPage() {
             const result = await saveCustomFormulaAction(formulaName, String(formulaToSave), dimType, "Saved from template editor");
             if (result.success) {
                 toast({title: "Formula Saved", description: `Formula "${formulaName}" saved globally.`});
-                onRefreshGlobalFormulas(); // Refresh the list of global formulas
+                onRefreshGlobalFormulas();
             } else {
                  toast({title: "Error Saving Formula", description: result.error || "Could not save formula.", variant: "destructive"});
             }
@@ -795,7 +795,7 @@ export default function CabinetDesignerPage() {
           </div>
            <Button onClick={() => { setCurrentTemplate(generateNewTemplatePlaceholder()); setViewMode('templateDefinition'); }} variant="outline" className="w-full"><PlusCircle className="mr-2 h-4 w-4" /> Define New Cabinet Template</Button>
           <Separator />
-          <div><RHFFormLabel htmlFor="cabinetType">Cabinet Type</RHFFormLabel><Select value={calculationInput.cabinetType} onValueChange={handleTypeChange}><SelectTrigger id="cabinetType"><SelectValue placeholder="Select type" /></SelectTrigger><SelectContent>{selectableCabinetTypes.map(type => (<SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>))}</SelectContent></Select></div>
+          <div><Label htmlFor="cabinetType">Cabinet Type</Label><Select value={calculationInput.cabinetType} onValueChange={handleTypeChange}><SelectTrigger id="cabinetType"><SelectValue placeholder="Select type" /></SelectTrigger><SelectContent>{selectableCabinetTypes.map(type => (<SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>))}</SelectContent></Select></div>
           {isSelectedTemplateCustomDb && (
             <div className="flex gap-2 mt-2">
                 <Button variant="outline" size="sm" onClick={handleEditSelectedTemplate} className="flex-1">
