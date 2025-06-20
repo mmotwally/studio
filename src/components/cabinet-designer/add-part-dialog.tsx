@@ -142,6 +142,7 @@ export function AddPartDialog({
 
   const getFilteredFormulas = React.useCallback((dimension: 'Width' | 'Height' | 'Quantity') => {
       const predefined = PREDEFINED_FORMULAS.filter(f => {
+          if (f.key === CUSTOM_FORMULA_KEY) return false; // Exclude the placeholder
           const contextMatch = f.context === null || (selectedCabinetContext && f.context.includes(selectedCabinetContext));
           const partTypeMatch = f.partType.length === 0 || f.partType.includes(selectedPartType);
           const dimensionMatch = f.dimension === dimension;
