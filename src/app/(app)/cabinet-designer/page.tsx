@@ -1042,7 +1042,13 @@ export default function CabinetDesignerPage() {
                             <div className="mt-3">
                                 <Label className="font-medium">Edge Banding Application:</Label>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 text-sm">
-                                {(['front', 'back', 'top', 'bottom'] as Array<keyof PartDefinition['edgeBanding']>).map(edge => (<FormItem key={edge} className="flex flex-row items-center space-x-2"><Checkbox id={`edge_${index}_${edge}`} checked={!!part.edgeBanding?.[edge]} onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, `parts.${index}.edgeBanding.${edge}`, index, edge as keyof PartDefinition['edgeBanding'])}/><RHFFormLabel htmlFor={`edge_${index}_${edge}`} className="font-normal capitalize">{edge}</RHFFormLabel></FormItem>))}</div>
+                                {(['front', 'back', 'top', 'bottom'] as Array<keyof PartDefinition['edgeBanding']>).map(edge => (
+                                    <div key={edge} className="flex flex-row items-center space-x-2">
+                                        <Checkbox id={`edge_${index}_${edge}`} checked={!!part.edgeBanding?.[edge]} onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, `parts.${index}.edgeBanding.${edge}`, index, edge as keyof PartDefinition['edgeBanding'])}/>
+                                        <Label htmlFor={`edge_${index}_${edge}`} className="font-normal capitalize">{edge}</Label>
+                                    </div>
+                                ))}
+                                </div>
                                 <p className="text-xs text-muted-foreground mt-1">For panels: Top/Bottom on Width; Front/Back on Height.</p>
                             </div>
                             <div className="mt-3">
@@ -1133,3 +1139,5 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
+
+    
