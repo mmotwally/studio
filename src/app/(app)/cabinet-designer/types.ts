@@ -194,7 +194,6 @@ export interface CabinetTemplateData {
     DG?: number; 
     DCG?: number; 
     TRD?: number; 
-    B?: number; 
     DW?: number; 
     DD?: number; 
     DH?: number; 
@@ -278,3 +277,65 @@ export interface SelectItem {
   [key: string]: any; // For additional properties like cost, thickness, etc.
 }
 
+// Types for Special Feature / Nesting
+export interface InputPart {
+  name: string;
+  width: number;
+  height: number;
+  qty: number;
+  material?: string; 
+  grainDirection?: 'with' | 'reverse' | 'none' | null;
+  originalName?: string; 
+  originalWidth?: number; 
+  originalHeight?: number; 
+}
+
+export interface PackedPart extends InputPart { 
+  x?: number;
+  y?: number;
+  isRotated?: boolean; 
+}
+
+export interface SheetLayout {
+  id: number;
+  dimensions: { w: number; h: number }; 
+  parts: PackedPart[]; 
+  packedAreaWidth?: number; 
+  packedAreaHeight?: number; 
+  efficiency?: number; 
+  material?: string; 
+}
+
+// For potpack (client-side)
+export interface PotpackBox {
+  w: number; 
+  h: number; 
+  x?: number; 
+  y?: number; 
+  name?: string; 
+  originalName?: string; 
+  originalWidth?: number; 
+  originalHeight?: number; 
+  material?: string;
+  grainDirection?: 'with' | 'reverse' | 'none' | null;
+  [key: string]: any; 
+}
+export interface PotpackStats {
+  w: number; 
+  h: number; 
+  fill: number; 
+  [key: string]: any;
+}
+
+export interface NestingJob {
+  id: string; 
+  name: string; 
+  timestamp: string; 
+  parts: InputPart[]; 
+}
+
+export interface SheetDimensionOption {
+  label: string;
+  width: number;
+  height: number;
+}
