@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { FormItem, FormControl, FormLabel as RHFFormLabel } from '@/components/ui/form'; // Use RHFFormLabel for form context
+import { FormItem, FormControl } from '@/components/ui/form';
 import { useToast } from "@/hooks/use-toast";
 import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer, Edit2, List, SendToBack, UploadCloud, SheetIcon } from 'lucide-react';
 import {
@@ -362,7 +362,7 @@ export default function CabinetDesignerPage() {
     setCurrentTemplate(prev => {
         const newTemplate = JSON.parse(JSON.stringify(prev));
         if (newTemplate.parts && newTemplate.parts[partIndex]) {
-            const formulaInfo = [...PREDEFINED_FORMULAS, ...globalCustomFormulas.map(f => ({ key: f.id, formula: f.formulaString, dimension: f.dimensionType }))].find(f => f.formula === selectedFormulaValue);
+            const formulaInfo = [...PREDEFINED_FORMULAS.filter(f => f.key !== 'CUSTOM'), ...globalCustomFormulas.map(f => ({ key: f.id, formula: f.formulaString, dimension: f.dimensionType }))].find(f => f.formula === selectedFormulaValue);
             (newTemplate.parts[partIndex] as any)[formulaField] = selectedFormulaValue;
 
             if (formulaInfo) {
@@ -569,7 +569,7 @@ export default function CabinetDesignerPage() {
                     {combinedFormulas.filter(item => item.key !== 'CUSTOM').map((item) => ( <DropdownMenuItem key={item.id || item.key} onSelect={() => handleFormulaSelect(partIndex, formulaField as any, item.formula)} className="flex justify-between items-center text-xs">
                         <span className={item.type === 'custom_db' ? 'italic' : ''}>{item.name} ({item.formula})</span>
                         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6 opacity-50 hover:opacity-100"><HelpCircle className="h-3 w-3" /></Button></TooltipTrigger><TooltipContent side="left" className="max-w-xs text-xs p-2 bg-popover text-popover-foreground"><p className="font-semibold">{item.description}</p><p className="text-xs text-muted-foreground">{item.example}</p></TooltipContent></Tooltip></DropdownMenuItem> ))}
-                    <DropdownMenuItem key="CUSTOM" onSelect={() => handleFormulaSelect(partIndex, formulaField as any, PREDEFINED_FORMULAS.find(f => f.key === 'CUSTOM')?.formula || "")} className="flex justify-between items-center text-xs"><span className="font-semibold">Custom Formula... (Type directly)</span></DropdownMenuItem>
+                    <DropdownMenuItem key="CUSTOM_FORMULA" onSelect={() => handleFormulaSelect(partIndex, formulaField as any, PREDEFINED_FORMULAS.find(f => f.key === 'CUSTOM')?.formula || "")} className="flex justify-between items-center text-xs"><span className="font-semibold">Custom Formula... (Type directly)</span></DropdownMenuItem>
                 </DropdownMenuContent></DropdownMenu>
              {isCustomEntryMode && (
                 <Button
@@ -987,7 +987,7 @@ export default function CabinetDesignerPage() {
                             globalCustomFormulas={globalCustomFormulas} 
                         />
                     </Dialog></CardHeader>
-                    <CardContent className="space-y-4"><ScrollArea className="max-h-[600px] pr-3">
+                    <CardContent className="max-h-[600px] overflow-y-auto">
                       {currentTemplate.parts.map((part, index) => {
                         const materialInfo = combinedMaterialOptions.find(m => m.value === part.materialId);
                         const grainText = part.grainDirection === 'with' ? 'With Grain' : part.grainDirection === 'reverse' ? 'Reverse Grain' : 'None';
@@ -1035,8 +1035,8 @@ export default function CabinetDesignerPage() {
                                 </div>
                             </div>
                             <div className="mt-3">
-                                <Label className="font-medium">Edge Banding Application:</Label>
-                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 text-sm">
+                                <div className="font-medium text-sm mb-1">Edge Banding Application:</div>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
                                 {(['front', 'back', 'top', 'bottom'] as Array<keyof NonNullable<PartDefinition['edgeBanding']>>).map(edge => (
                                     <div key={edge} className="flex flex-row items-center space-x-2">
                                         <Checkbox id={`edge_${index}_${edge}`} checked={!!part.edgeBanding?.[edge]} onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, `parts.${index}.edgeBanding.${edge}`, index, edge as keyof PartDefinition['edgeBanding'])}/>
@@ -1052,7 +1052,7 @@ export default function CabinetDesignerPage() {
                             </div>
                             </Card>)})}
                         {currentTemplate.parts.length === 0 && <p className="text-muted-foreground text-center py-4">No parts defined. Click "Add Part".</p>}
-                    </ScrollArea></CardContent></Card>
+                    </CardContent></Card>
                 <Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="text-lg flex items-center"><Wrench className="mr-2 h-5 w-5" />Accessories</CardTitle><CardDescription>Define accessories like hinges, handles, with quantity formulas.</CardDescription></div>
                   <div className="flex gap-2">
                     <Button size="sm" variant="outline" onClick={() => setIsAccessoryDialogOpen(true)}>
