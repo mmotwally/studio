@@ -32,12 +32,12 @@ async function getCombinedAccessoryMap(db: Database): Promise<Map<string, {name:
 }
 
 // Helper to build a combined map of predefined and DB-defined materials
-async function getCombinedMaterialMap(db: Database): Promise<Map<string, {name: string, costPerSqm?: number | null, thickness?: number | null }>> {
-    const combinedMap = new Map<string, {name: string, costPerSqm?: number | null, thickness?: number | null}>();
+async function getCombinedMaterialMap(db: Database): Promise<Map<string, {name: string, costPerSqm?: number | null, costPerMeter?: number | null, thickness?: number | null }>> {
+    const combinedMap = new Map<string, {name: string, costPerSqm?: number | null, costPerMeter?: number | null, thickness?: number | null}>();
     PREDEFINED_MATERIALS.forEach(mat => combinedMap.set(mat.id, { name: mat.name, costPerSqm: mat.costPerSqm, thickness: mat.thickness }));
 
     const customMaterials = await getMaterialDefinitionsAction(db); // Pass db instance
-    customMaterials.forEach(mat => combinedMap.set(mat.id, { name: mat.name, costPerSqm: mat.costPerSqm, thickness: mat.thickness }));
+    customMaterials.forEach(mat => combinedMap.set(mat.id, { name: mat.name, costPerSqm: mat.costPerSqm, costPerMeter: mat.costPerMeter, thickness: mat.thickness }));
     return combinedMap;
 }
 
@@ -102,6 +102,7 @@ export async function calculateCabinetDetails(
   const parts: CabinetPart[] = [];
   let totalMaterialCost = 0;
   let totalEdgeBandLength_mm = 0;
+  let estimatedEdgeBandCost = 0;
   // Specific panel area tracking for summary, not directly for cost if materials have own costs
   let totalPanelArea_sqmm = 0; 
   let totalBackPanelArea_sqmm = 0;
@@ -127,11 +128,6 @@ export async function calculateCabinetDetails(
       const materialInfo = materialDefinitionsMap.get(partDef.materialId);
       let partThickness: number;
 
-      // Thickness determination logic:
-      // 1. Material definition's thickness
-      // 2. Part definition's thicknessFormula (if it exists, for overrides)
-      // 3. Template parameter BPT for 'Back Panel'
-      // 4. Template parameter PT for others
       if (materialInfo?.thickness !== null && materialInfo?.thickness !== undefined) {
           partThickness = materialInfo.thickness;
       } else if (partDef.thicknessFormula) {
@@ -149,15 +145,26 @@ export async function calculateCabinetDetails(
 
       const materialDisplayName = materialInfo ? `${materialInfo.name} (${partThickness.toFixed(0)}mm)` : `${partThickness.toFixed(0)}mm Panel (Unknown Material ID: ${partDef.materialId})`;
       
-      let edgeBandingLength = 0;
+      let edgeBandingLengthForPart = 0;
       const appliedEdges: string[] = [];
       if (partDef.edgeBanding) {
-        if (partDef.edgeBanding.front) { edgeBandingLength += partHeight; appliedEdges.push(`Front: ${partHeight.toFixed(0)}mm`); }
-        if (partDef.edgeBanding.back) { edgeBandingLength += partHeight; appliedEdges.push(`Back: ${partHeight.toFixed(0)}mm`); }
-        if (partDef.edgeBanding.top) { edgeBandingLength += partWidth; appliedEdges.push(`Top: ${partWidth.toFixed(0)}mm`); }
-        if (partDef.edgeBanding.bottom) { edgeBandingLength += partWidth; appliedEdges.push(`Bottom: ${partWidth.toFixed(0)}mm`); }
+        if (partDef.edgeBanding.front) { edgeBandingLengthForPart += partHeight; appliedEdges.push(`Front: ${partHeight.toFixed(0)}mm`); }
+        if (partDef.edgeBanding.back) { edgeBandingLengthForPart += partHeight; appliedEdges.push(`Back: ${partHeight.toFixed(0)}mm`); }
+        if (partDef.edgeBanding.top) { edgeBandingLengthForPart += partWidth; appliedEdges.push(`Top: ${partWidth.toFixed(0)}mm`); }
+        if (partDef.edgeBanding.bottom) { edgeBandingLengthForPart += partWidth; appliedEdges.push(`Bottom: ${partWidth.toFixed(0)}mm`); }
       }
-      totalEdgeBandLength_mm += (quantity * edgeBandingLength);
+      
+      const edgeBandingForThisPartInstance = quantity * edgeBandingLengthForPart;
+      totalEdgeBandLength_mm += edgeBandingForThisPartInstance;
+
+      let edgeBandCostForPart = 0;
+      if (edgeBandingForThisPartInstance > 0) {
+        const edgeBandMaterialInfo = materialDefinitionsMap.get(partDef.edgeBandingMaterialId || '');
+        const costPerMeter = edgeBandMaterialInfo?.costPerMeter ?? FALLBACK_COST_PER_METER_EDGE_BAND;
+        edgeBandCostForPart = (edgeBandingForThisPartInstance / 1000) * costPerMeter;
+      }
+      estimatedEdgeBandCost += edgeBandCostForPart;
+
 
       parts.push({
         name: partDef.nameLabel,
@@ -227,7 +234,7 @@ export async function calculateCabinetDetails(
     }
 
     const totalAccessoryCost = accessories.reduce((sum, acc) => sum + acc.totalCost, 0);
-    const estimatedEdgeBandCost = (totalEdgeBandLength_mm / 1000) * FALLBACK_COST_PER_METER_EDGE_BAND;
+    // estimatedEdgeBandCost is now calculated per part and summed up
     const estimatedTotalCost = totalMaterialCost + estimatedEdgeBandCost + totalAccessoryCost;
 
     const calculatedCabinet: CalculatedCabinet = {
@@ -244,9 +251,7 @@ export async function calculateCabinetDetails(
   }
   // --- LOGIC FOR HARDCODED 'standard_base_2_door' ---
   else if (input.cabinetType === 'standard_base_2_door') {
-    // (Existing hardcoded logic for standard_base_2_door remains largely unchanged, 
-    // but uses FALLBACK costs and DEFAULT thicknesses. 
-    // It could be refactored to use materialDefinitionsMap too if desired for consistency)
+    
     if (input.width < 300 || input.width > 1200 || input.height < 500 || input.height > 900 || input.depth < 300 || input.depth > 700) {
       return { success: false, error: 'Dimensions are outside typical ranges for a standard base cabinet. Please check values (W:300-1200, H:500-900, D:300-700).' };
     }
@@ -313,9 +318,9 @@ export async function calculateCabinetDetails(
     const totalAccessoryCostStd = accessoriesStd.reduce((sum, acc) => sum + acc.totalCost, 0);
     const estimatedPanelMaterialCostStd = totalPanelArea_sqmm * FALLBACK_COST_PER_SQM_PANEL_MM;
     const estimatedBackPanelMaterialCostStd = totalBackPanelArea_sqmm * FALLBACK_COST_PER_SQM_BACK_PANEL_MM;
-    const estimatedEdgeBandCostStd = (totalEdgeBandLength_mm / 1000) * FALLBACK_COST_PER_METER_EDGE_BAND;
-    const estimatedMaterialCostStd = estimatedPanelMaterialCostStd + estimatedBackPanelMaterialCostStd + estimatedEdgeBandCostStd;
-    const estimatedTotalCostStd = estimatedMaterialCostStd + totalAccessoryCostStd;
+    const estimatedEdgeBandCostStd = (totalEdgeBandLength_mm / 1000) * FALLBACK_COST_PER_METER_EDGE_BAND; // Hardcoded uses fallback for edge banding
+    const estimatedMaterialCostStd = estimatedPanelMaterialCostStd + estimatedBackPanelMaterialCostStd; // Edge band cost is separate from material for this fallback
+    const estimatedTotalCostStd = estimatedMaterialCostStd + estimatedEdgeBandCostStd + totalAccessoryCostStd;
 
     return { success: true, data: { parts, accessories: accessoriesStd, estimatedMaterialCost: parseFloat(estimatedMaterialCostStd.toFixed(2)), estimatedAccessoryCost: parseFloat(totalAccessoryCostStd.toFixed(2)), estimatedTotalCost: parseFloat(estimatedTotalCostStd.toFixed(2)), totalPanelAreaMM: totalPanelArea_sqmm, totalBackPanelAreaMM: totalBackPanelArea_sqmm }};
 

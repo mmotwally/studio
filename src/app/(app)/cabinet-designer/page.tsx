@@ -37,6 +37,7 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { PREDEFINED_FORMULAS } from './predefined-formulas';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { format } from 'date-fns';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 
 const initialHardcodedCabinetTypes = [
@@ -192,10 +193,19 @@ export default function CabinetDesignerPage() {
   }, [fetchAndSetTemplates, fetchCustomDefinitionsAndFormulas]);
 
   const combinedMaterialOptions = React.useMemo((): GenericSelectItem[] => {
-    const predefined = PREDEFINED_MATERIALS.map(m => ({ value: m.id, label: `${m.name}${m.hasGrain ? " (Grain)" : ""}${m.thickness ? ` - ${m.thickness}mm` : ''}` }));
-    const custom = customMaterialTypes.map(m => ({ value: m.id, label: `${m.name}${m.hasGrain ? " (Grain)" : ""}${m.thickness ? ` - ${m.thickness}mm` : ''}` }));
+    const predefined = PREDEFINED_MATERIALS.map(m => ({ 
+        value: m.id, 
+        label: `${m.name}${m.hasGrain ? " (Grain)" : ""}${m.thickness ? ` - ${m.thickness}mm` : ''}`,
+        type: m.id.startsWith("EDGE_") ? "edge_band" : "panel" // Simple type inference for predefined
+    }));
+    const custom = customMaterialTypes.map(m => ({ 
+        value: m.id, 
+        label: `${m.name}${m.hasGrain ? " (Grain)" : ""}${m.thickness ? ` - ${m.thickness}mm` : ''}`,
+        type: m.type
+    }));
     return [...predefined, ...custom].sort((a, b) => a.label.localeCompare(b.label));
   }, [customMaterialTypes]);
+
 
   const combinedAccessoryOptions = React.useMemo((): GenericSelectItem[] => {
     const predefined = PREDEFINED_ACCESSORIES.map(a => ({ value: a.id, label: `${a.name} ($${a.unitCost.toFixed(2)})` }));
@@ -744,6 +754,7 @@ export default function CabinetDesignerPage() {
 
 
   const isSelectedTemplateCustomDb = dbTemplates.some(t => t.id === calculationInput.cabinetType);
+  const edgeBandingMaterialOptions = React.useMemo(() => combinedMaterialOptions.filter(m => m.type === 'edge_band'), [combinedMaterialOptions]);
 
 
   const renderCalculatorView = () => (
@@ -951,12 +962,13 @@ export default function CabinetDesignerPage() {
                             onRequestOpenMaterialDialog={() => setIsMaterialDialogOp(true)}
                         />
                     </Dialog></CardHeader>
-                    <CardContent className="space-y-4">{currentTemplate.parts.map((part, index) => {
+                    <CardContent className="space-y-4"><ScrollArea className="max-h-[600px] pr-3">
+                      {currentTemplate.parts.map((part, index) => {
                         const materialInfo = combinedMaterialOptions.find(m => m.value === part.materialId);
                         const grainText = part.grainDirection === 'with' ? 'With Grain' : part.grainDirection === 'reverse' ? 'Reverse Grain' : 'None';
                         const calculatedHeight = evaluateFormulaClientSide(part.heightFormula, evalParams); const calculatedWidth = evaluateFormulaClientSide(part.widthFormula, evalParams);
                         const calculatedQty = evaluateFormulaClientSide(part.quantityFormula, evalParams);
-                        return (<Card key={part.partId || index} className="p-4 relative bg-card/80"><Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
+                        return (<Card key={part.partId || index} className="p-4 relative bg-card/80 mb-4"><Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemovePartFromTemplate(index)}><XCircle className="h-5 w-5"/></Button>
                             <div className="mb-3 p-2 border rounded-md bg-muted/30 text-sm space-y-1"><Input id={`partName_${index}`} value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, `parts.${index}.nameLabel`)} className="text-base font-medium mb-1"/>
                                 <p><span className="font-medium">Type:</span> {part.partType} ({part.cabinetContext || 'General'})</p>
                                 <p><span className="font-medium">Calc. Dim (H x W):</span>{` ${calculatedHeight}${isNaN(Number(calculatedHeight)) ? '' : 'mm'} x ${calculatedWidth}${isNaN(Number(calculatedWidth)) ? '' : 'mm'}`}<span className="text-muted-foreground text-[10px] block">(Formulas: {part.heightFormula || 'N/A'} x {part.widthFormula || 'N/A'})</span></p>
@@ -966,19 +978,55 @@ export default function CabinetDesignerPage() {
                                 <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula*" placeholder="e.g., 2" customDbFormulas={globalCustomFormulas} onRefreshGlobalFormulas={fetchCustomDefinitionsAndFormulas} />
                                 <FormulaInputWithHelper partIndex={index} formulaField="widthFormula" label="Width Formula*" placeholder="e.g., D or W - 2*PT" customDbFormulas={globalCustomFormulas} onRefreshGlobalFormulas={fetchCustomDefinitionsAndFormulas} />
                                 <FormulaInputWithHelper partIndex={index} formulaField="heightFormula" label="Height Formula*" placeholder="e.g., H or D - BPO" customDbFormulas={globalCustomFormulas} onRefreshGlobalFormulas={fetchCustomDefinitionsAndFormulas} />
-                                <div><Label>Material ID*</Label><Select value={part.materialId} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'materialId', value }} as any, `parts.${index}.materialId`)}><SelectTrigger className="text-sm"><SelectValue placeholder="Select material" /></SelectTrigger><SelectContent>{combinedMaterialOptions.map((material) => (<SelectItem key={material.value} value={material.value}>{material.label}</SelectItem>))}</SelectContent></Select></div>
-                                <div><Label>Grain Direction</Label><Select value={part.grainDirection || 'none'} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'grainDirection', value: value === 'none' ? null : value }} as any, `parts.${index}.grainDirection`)}><SelectTrigger className="text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="with">With Grain (Height)</SelectItem><SelectItem value="reverse">Reverse Grain (Width)</SelectItem></SelectContent></Select></div></div>
-                            <div className="mt-3"><Label className="font-medium">Edge Banding:</Label><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 text-sm">
+                                <div>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <Label>Material (Panel)*</Label>
+                                        <Button type="button" variant="link" size="sm" onClick={() => setIsMaterialDialogOp(true)} className="p-0 h-auto text-xs">
+                                            <PlusCircle className="mr-1 h-3 w-3" /> Define New...
+                                        </Button>
+                                    </div>
+                                    <Select value={part.materialId} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'materialId', value }} as any, `parts.${index}.materialId`)}>
+                                      <SelectTrigger className="text-sm"><SelectValue placeholder="Select material" /></SelectTrigger>
+                                      <SelectContent>{combinedMaterialOptions.filter(m => m.type === 'panel' || m.type === 'other').map((material) => (<SelectItem key={material.value} value={material.value}>{material.label}</SelectItem>))}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div><Label>Grain Direction</Label><Select value={part.grainDirection || 'none'} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'grainDirection', value: value === 'none' ? null : value }} as any, `parts.${index}.grainDirection`)}><SelectTrigger className="text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="with">With Grain (Height)</SelectItem><SelectItem value="reverse">Reverse Grain (Width)</SelectItem></SelectContent></Select></div>
+                                <div>
+                                    <div className="flex items-center justify-between mb-1">
+                                        <Label>Edge Banding Material (Optional)</Label>
+                                        <Button type="button" variant="link" size="sm" onClick={() => setIsMaterialDialogOp(true)} className="p-0 h-auto text-xs">
+                                            <PlusCircle className="mr-1 h-3 w-3" /> Define New...
+                                        </Button>
+                                    </div>
+                                    <Select value={part.edgeBandingMaterialId || ""} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'edgeBandingMaterialId', value: value === "" ? null : value }} as any, `parts.${index}.edgeBandingMaterialId`)}>
+                                      <SelectTrigger className="text-sm"><SelectValue placeholder="Select edge band material" /></SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="">None</SelectItem>
+                                        {edgeBandingMaterialOptions.map((ebMaterial) => (<SelectItem key={ebMaterial.value} value={ebMaterial.value}>{ebMaterial.label}</SelectItem>))}
+                                      </SelectContent>
+                                    </Select>
+                                </div>
+                            </div>
+                            <div className="mt-3"><Label className="font-medium">Edge Banding Application:</Label><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 text-sm">
                                 {(['front', 'back', 'top', 'bottom'] as Array<keyof PartDefinition['edgeBanding']>).map(edge => (<FormItem key={edge} className="flex flex-row items-center space-x-2"><Checkbox id={`edge_${index}_${edge}`} checked={!!part.edgeBanding?.[edge]} onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, `parts.${index}.edgeBanding.${edge}`, index, edge as keyof PartDefinition['edgeBanding'])}/><Label htmlFor={`edge_${index}_${edge}`} className="capitalize font-normal">{edge}</Label></FormItem>))}</div>
                                 <p className="text-xs text-muted-foreground mt-1">For panels: Top/Bottom on Width; Front/Back on Height.</p></div>
                             <div className="mt-3"><Label className="font-medium">Part Notes:</Label><Textarea value={part.notes || ''} onChange={(e) => handleTemplateInputChange(e, `parts.${index}.notes`)} rows={2} className="text-sm" placeholder="Optional notes..."/></div></Card>)})}
-                        {currentTemplate.parts.length === 0 && <p className="text-muted-foreground text-center py-4">No parts defined. Click "Add Part".</p>}</CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="text-lg flex items-center"><Wrench className="mr-2 h-5 w-5" />Accessories</CardTitle><CardDescription>Define accessories like hinges, handles, with quantity formulas.</CardDescription></div><Button size="sm" onClick={handleAddAccessoryToTemplate}><PlusCircle className="mr-2 h-4 w-4" />Add Accessory</Button></CardHeader>
-                    <CardContent className="space-y-4">{(currentTemplate.accessories || []).map((acc, index) => (<Card key={acc.id} className="p-4 relative bg-card/80"><Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemoveAccessoryFromTemplate(acc.id)}><XCircle className="h-5 w-5"/></Button>
+                        {currentTemplate.parts.length === 0 && <p className="text-muted-foreground text-center py-4">No parts defined. Click "Add Part".</p>}
+                    </ScrollArea></CardContent></Card>
+                <Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="text-lg flex items-center"><Wrench className="mr-2 h-5 w-5" />Accessories</CardTitle><CardDescription>Define accessories like hinges, handles, with quantity formulas.</CardDescription></div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="outline" onClick={() => setIsAccessoryDialogOp(true)}>
+                      <PlusCircle className="mr-2 h-4 w-4" />Define New Accessory
+                    </Button>
+                    <Button size="sm" onClick={handleAddAccessoryToTemplate}><PlusCircle className="mr-2 h-4 w-4" />Add To Template</Button>
+                  </div>
+                  </CardHeader>
+                    <CardContent className="space-y-4"><ScrollArea className="max-h-[300px] pr-3">{(currentTemplate.accessories || []).map((acc, index) => (<Card key={acc.id} className="p-4 relative bg-card/80 mb-3"><Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemoveAccessoryFromTemplate(acc.id)}><XCircle className="h-5 w-5"/></Button>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><Label htmlFor={`acc_type_${index}`}>Accessory Type*</Label><Select value={acc.accessoryId} onValueChange={(value) => handleAccessoryInputChange(value, index, 'accessoryId')}><SelectTrigger id={`acc_type_${index}`} className="text-sm"><SelectValue placeholder="Select accessory" /></SelectTrigger><SelectContent>{combinedAccessoryOptions.map(pa => (<SelectItem key={pa.value} value={pa.value}>{pa.label}</SelectItem>))}</SelectContent></Select></div>
                                 <div><Label htmlFor={`acc_qty_formula_${index}`}>Quantity Formula*</Label><Input id={`acc_qty_formula_${index}`} value={acc.quantityFormula} onChange={(e) => handleAccessoryInputChange(e, index, 'quantityFormula')} className="text-sm"/></div>
                                 <div className="md:col-span-2"><Label htmlFor={`acc_notes_${index}`}>Notes</Label><Textarea id={`acc_notes_${index}`} value={acc.notes || ''} onChange={(e) => handleAccessoryInputChange(e, index, 'notes')} className="text-sm" rows={2}/></div></div></Card>))}
-                        {(!currentTemplate.accessories || currentTemplate.accessories.length === 0) && <p className="text-muted-foreground text-center py-4">No accessories defined. Click "Add Accessory".</p>}</CardContent></Card>
+                        {(!currentTemplate.accessories || currentTemplate.accessories.length === 0) && <p className="text-muted-foreground text-center py-4">No accessories defined for this template.</p>}
+                    </ScrollArea></CardContent></Card>
             </CardContent><CardFooter className="flex justify-end space-x-3"><Button variant="outline" onClick={() => setViewMode('calculator')}>Cancel</Button><Button onClick={handleSaveTemplate} disabled={isLoading}>{isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save Template</Button></CardFooter></Card></TooltipProvider>
         {(currentTemplate.type === 'base' || currentTemplate.type === 'tall' || currentTemplate.type === 'custom') && (
             <Card className="shadow-lg"><CardHeader><CardTitle className="flex items-center"><BoxSelect className="mr-2 h-5 w-5 text-primary" />Drawer Set Calculator</CardTitle><CardDescription>Helper to calculate drawer components. Add these to 'Part Definitions' manually.</CardDescription></CardHeader>
@@ -1010,6 +1058,13 @@ export default function CabinetDesignerPage() {
       <PageHeader title="Cabinet Designer" description={viewMode === 'calculator' ? "Configure, calculate parts, and estimate costs for individual cabinets or entire projects." : "Define a new parametric cabinet template."}/>
       {viewMode === 'calculator' ? renderCalculatorView() : renderTemplateDefinitionView()}
 
+      <Dialog open={isMaterialDialogOp} onOpenChange={setIsMaterialDialogOp}>
+        <AddMaterialTypeDialog setOpen={setIsMaterialDialogOp} onMaterialTypeAdded={fetchCustomDefinitionsAndFormulas} />
+      </Dialog>
+      <Dialog open={isAccessoryDialogOp} onOpenChange={setIsAccessoryDialogOp}>
+         <AddAccessoryTypeDialog setOpen={setIsAccessoryDialogOp} onAccessoryTypeAdded={fetchCustomDefinitionsAndFormulas} />
+      </Dialog>
+
       {templateToDelete && (
         <AlertDialog open={!!templateToDelete} onOpenChange={() => setTemplateToDelete(null)}>
           <AlertDialogContent>
@@ -1032,4 +1087,3 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
-

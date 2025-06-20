@@ -108,6 +108,7 @@ export const PREDEFINED_MATERIALS: PredefinedMaterialSimple[] = [
     { id: "DOOR_GRADE_PANEL_18MM", name: "Door Grade Panel 18mm", costPerSqm: 30.0, thickness: 18, hasGrain: true },
     { id: "SHELF_PANEL_18MM", name: "Shelf Panel 18mm", costPerSqm: 22.0, thickness: 18 },
     { id: "OAK_VENEER_18MM", name: "Oak Veneer Panel 18mm", hasGrain: true, costPerSqm: 45.0, thickness: 18 },
+    { id: "EDGE_BAND_WHITE_PVC", name: "White PVC Edge Band", costPerSqm: 0, thickness: 0.4}, // Example, cost should be per meter
 ];
 
 // For user-defined accessory types via UI
@@ -160,10 +161,11 @@ export interface PartDefinition {
   heightFormula: string; 
   heightFormulaKey?: string; 
   materialId: string; // Can refer to PredefinedMaterialSimple.id or MaterialDefinitionDB.id
-  thicknessFormula?: string | null; // Made optional: thickness now primarily from material
-  thicknessFormulaKey?: string | null; // Made optional
+  thicknessFormula?: string | null; 
+  thicknessFormulaKey?: string | null; 
   quantityFormulaKey?: string; 
   edgeBanding?: EdgeBandingAssignment;
+  edgeBandingMaterialId?: string | null; // New field for edge banding material
   grainDirection?: 'with' | 'reverse' | 'none' | null; 
   notes?: string;
 }
@@ -273,6 +275,7 @@ export interface SelectItem {
   value: string;
   label: string;
   disabled?: boolean;
+  type?: "panel" | "edge_band" | "other"; // Added to filter material options
   [key: string]: any; // For additional properties like cost, thickness, etc.
 }
 
