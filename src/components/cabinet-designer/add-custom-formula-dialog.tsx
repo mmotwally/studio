@@ -38,6 +38,8 @@ const cabinetPartTypes: CabinetPartType[] = [
 ];
 const cabinetTypeContexts: CabinetTypeContext[] = ['Base', 'Wall', 'Drawer', 'General'];
 
+const ALL_TYPES_PLACEHOLDER = "__ALL__";
+
 
 interface AddCustomFormulaDialogProps {
   setOpen: (open: boolean) => void;
@@ -132,10 +134,12 @@ export function AddCustomFormulaDialog({ setOpen, onFormulaAdded }: AddCustomFor
            <FormField control={form.control} name="partType"
             render={({ field }) => (
               <FormItem><FormLabel>Part Type Association (Optional)</FormLabel>
-                <Select onValueChange={field.onChange} value={field.value || ""}>
+                <Select
+                  onValueChange={(value) => field.onChange(value === ALL_TYPES_PLACEHOLDER ? null : value)}
+                  value={field.value || ALL_TYPES_PLACEHOLDER}>
                   <FormControl><SelectTrigger><SelectValue placeholder="All Part Types"/></SelectTrigger></FormControl>
                   <SelectContent>
-                    <SelectItem value="">All Part Types</SelectItem>
+                    <SelectItem value={ALL_TYPES_PLACEHOLDER}>All Part Types</SelectItem>
                     {cabinetPartTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
                   </SelectContent>
                 </Select>
@@ -144,10 +148,12 @@ export function AddCustomFormulaDialog({ setOpen, onFormulaAdded }: AddCustomFor
            <FormField control={form.control} name="context"
             render={({ field }) => (
               <FormItem><FormLabel>Context Association (Optional)</FormLabel>
-                 <Select onValueChange={field.onChange} value={field.value || ""}>
+                 <Select
+                    onValueChange={(value) => field.onChange(value === ALL_TYPES_PLACEHOLDER ? null : value)}
+                    value={field.value || ALL_TYPES_PLACEHOLDER}>
                   <FormControl><SelectTrigger><SelectValue placeholder="All Contexts" /></SelectTrigger></FormControl>
                   <SelectContent>
-                    <SelectItem value="">All Contexts</SelectItem>
+                    <SelectItem value={ALL_TYPES_PLACEHOLDER}>All Contexts</SelectItem>
                     {cabinetTypeContexts.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
                   </SelectContent>
                 </Select>
