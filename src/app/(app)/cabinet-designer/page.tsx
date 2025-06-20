@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { FormItem, FormControl } from '@/components/ui/form';
+import { FormItem, FormControl, FormLabel as RHFFormLabel } from '@/components/ui/form';
 import { useToast } from "@/hooks/use-toast";
 import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer, Edit2, List, SendToBack, UploadCloud, SheetIcon } from 'lucide-react';
 import {
@@ -561,7 +561,7 @@ export default function CabinetDesignerPage() {
         <div className="flex items-end gap-2">
           <div className="flex-grow">
             <Label htmlFor={`part_${partIndex}_${formulaField}`}>{label}</Label>
-            <Textarea id={`part_${partIndex}_${formulaField}`} rows={1} value={currentFormulaValue} onChange={(e) => handleTemplateInputChange(e, `parts.${partIndex}.${formulaField}`)} placeholder={placeholder} className="text-sm" />
+            <Input id={`part_${partIndex}_${formulaField}`} value={currentFormulaValue} onChange={(e) => handleTemplateInputChange(e, `parts.${partIndex}.${formulaField}`)} placeholder={placeholder} className="text-sm" />
           </div>
            <div className="flex flex-col items-center space-y-1">
                 <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="whitespace-nowrap px-2"><ChevronDown className="h-4 w-4" /> <span className="ml-1 text-xs">Ins</span></Button></DropdownMenuTrigger>
