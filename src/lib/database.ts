@@ -286,8 +286,9 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       formula_string TEXT NOT NULL,
       dimension_type TEXT NOT NULL CHECK (dimension_type IN ('Width', 'Height', 'Quantity', 'Thickness')),
       description TEXT,
-      created_at TEXT NOT NULL,
-      UNIQUE (name, dimension_type) 
+      part_type TEXT, -- e.g., 'Side Panel', 'Door'
+      context TEXT, -- e.g., 'Base', 'Wall'
+      created_at TEXT NOT NULL
     );
   `);
 
@@ -593,7 +594,7 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
           purchase_order_items: ['purchaseOrderId', 'inventoryItemId', 'quantityOrdered', 'unitCost', 'quantityApproved'],
           stock_movements: ['inventoryItemId', 'movementType', 'quantityChanged', 'balanceAfterMovement', 'movementDate'],
           cabinet_templates: ['name', 'type', 'defaultDimensions', 'parameters', 'parts', 'createdAt', 'lastUpdated', 'accessories'],
-          custom_formulas: ['name', 'formula_string', 'dimension_type', 'created_at'],
+          custom_formulas: ['name', 'formula_string', 'dimension_type', 'created_at', 'part_type', 'context'],
           material_definitions: ['name', 'type', 'costPerSqm', 'thickness', 'hasGrain', 'createdAt', 'lastUpdated'],
           accessory_definitions: ['name', 'type', 'unitCost', 'createdAt', 'lastUpdated'],
         };
@@ -729,6 +730,7 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
     
 
     
+
 
 
 

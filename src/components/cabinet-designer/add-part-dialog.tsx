@@ -140,25 +140,27 @@ export function AddPartDialog({
   const selectedPartType = form.watch("partType");
   const selectedCabinetContext = form.watch("cabinetContext");
 
-  const getFilteredFormulas = React.useCallback((dimension: 'Width' | 'Height') => {
-    const predefinedFiltered = PREDEFINED_FORMULAS.filter(f =>
-      f.dimension === dimension &&
-      (Array.isArray(f.partType) ? f.partType.includes(selectedPartType) : f.partType === selectedPartType || f.partType.length === 0) &&
-      (f.context === null || (selectedCabinetContext && f.context.includes(selectedCabinetContext))) &&
-      f.key !== CUSTOM_FORMULA_KEY
-    ).map(f => ({ ...f, type: 'predefined' as const, id: f.key, key: f.key }));
+  const getFilteredFormulas = React.useCallback((dimension: 'Width' | 'Height' | 'Quantity') => {
+      const predefined = PREDEFINED_FORMULAS.filter(f => {
+          const contextMatch = f.context === null || (selectedCabinetContext && f.context.includes(selectedCabinetContext));
+          const partTypeMatch = f.partType.length === 0 || f.partType.includes(selectedPartType);
+          const dimensionMatch = f.dimension === dimension;
+          return contextMatch && partTypeMatch && dimensionMatch;
+      }).map(f => ({ ...f, type: 'predefined' as const, id: f.key }));
 
-    const relevantGlobalFormulas = (globalCustomFormulas || []).filter(f =>
-        (f.dimensionType === 'Width' && dimension === 'Width') ||
-        (f.dimensionType === 'Height' && dimension === 'Height')
-    ).map(f_glob => ({
-        id: f_glob.id, key: f_glob.id, name: `${f_glob.name} (Global)`, formula: f_glob.formulaString,
-        description: f_glob.description || 'User-defined global formula.',
-        example: `Global Formula: ${f_glob.formulaString}`, type: 'custom_db' as const,
-        partType: [], context: null, dimension: f_glob.dimensionType,
-    }));
-
-    return [...predefinedFiltered, ...relevantGlobalFormulas].sort((a,b) => a.name.localeCompare(b.name));
+      const custom = (globalCustomFormulas || []).filter(f => {
+          const contextMatch = !f.context || f.context === selectedCabinetContext;
+          const partTypeMatch = !f.partType || f.partType === selectedPartType;
+          const dimensionMatch = f.dimensionType === dimension;
+          return contextMatch && partTypeMatch && dimensionMatch;
+      }).map(f => ({
+          id: f.id, key: f.id, name: `${f.name} (Global)`, formula: f.formulaString,
+          description: f.description || 'User-defined global formula.',
+          example: `Global Formula: ${f.formulaString}`, type: 'custom_db' as const,
+          partType: [f.partType as CabinetPartType], context: f.context ? [f.context as CabinetTypeContext] : null, dimension: f.dimensionType,
+      }));
+      
+      return [...predefined, ...custom].sort((a,b) => a.name.localeCompare(b.name));
   }, [selectedPartType, selectedCabinetContext, globalCustomFormulas]);
 
   const availableWidthFormulas = React.useMemo(() => getFilteredFormulas('Width'), [getFilteredFormulas]);
@@ -240,7 +242,7 @@ export function AddPartDialog({
               >
                 <FormControl><SelectTrigger><SelectValue placeholder={`Select ${dimension.toLowerCase()} formula`} /></SelectTrigger></FormControl>
                 <SelectContent>
-                  {availableFormulasForDim.map((f_item) => (<SelectItem key={f_item.key || f_item.id} value={f_item.key || f_item.id}>{f_item.name} ({f_item.formula})</SelectItem>))}
+                  {availableFormulasForDim.map((f_item) => (<SelectItem key={f_item.id} value={f_item.key || f_item.id}>{f_item.name} ({f_item.formula})</SelectItem>))}
                   <SelectItem value={CUSTOM_FORMULA_KEY}>Custom Formula...</SelectItem>
                 </SelectContent>
               </Select>
@@ -249,7 +251,7 @@ export function AddPartDialog({
              <DropdownMenu>
                 <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" className="h-10 w-10 shrink-0"><ChevronDown className="h-4 w-4" /></Button></DropdownMenuTrigger>
                  <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
-                    {availableFormulasForDim.map((item) => ( <DropdownMenuItem key={item.key || item.id} onSelect={() => { field.onChange(item.key || item.id); form.setValue(customValueKey, item.formula, {shouldValidate: true}); }} className="flex justify-between items-center text-xs">
+                    {availableFormulasForDim.map((item) => ( <DropdownMenuItem key={item.id} onSelect={() => { field.onChange(item.key || item.id); form.setValue(customValueKey, item.formula, {shouldValidate: true}); }} className="flex justify-between items-center text-xs">
                         <span className={item.type === 'custom_db' ? 'italic' : ''}>{item.name} ({item.formula})</span>
                         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6 opacity-50 hover:opacity-100"><HelpCircle className="h-3 w-3" /></Button></TooltipTrigger><TooltipContent side="left" className="max-w-xs text-xs p-2 bg-popover text-popover-foreground"><p className="font-semibold">{item.description}</p><p className="text-xs text-muted-foreground">{item.example}</p></TooltipContent></Tooltip></DropdownMenuItem> ))}
                     <DropdownMenuItem key="CUSTOM" onSelect={() => { field.onChange(CUSTOM_FORMULA_KEY); form.setValue(customValueKey, "", {shouldValidate: true}); }} className="flex justify-between items-center text-xs"><span className="font-semibold">Custom Formula... (Type directly)</span></DropdownMenuItem>

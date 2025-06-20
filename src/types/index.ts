@@ -1,5 +1,7 @@
 
 import type { LucideIcon } from 'lucide-react';
+import type { CabinetPartType as CustomCabinetPartType, CabinetTypeContext as CustomCabinetTypeContext } from './cabinet-designer-types';
+
 
 export interface NavItem {
   title: string;
@@ -486,14 +488,8 @@ export type GeneratedReportData =
   | null;
 
 // Types for Cabinet Designer
-export type CabinetPartType =
-  | 'Side Panel' | 'Bottom Panel' | 'Top Panel' | 'Back Panel' | 'Double Back Panel'
-  | 'Door' | 'Doors' | 'Drawer Front' | 'Drawer Back' | 'Drawer Side' | 'Drawer Counter Front'
-  | 'Drawer Bottom' | 'Mobile Shelf' | 'Fixed Shelf' | 'Upright' | 'Front Panel'
-  | 'Top Rail (Front)' | 'Top Rail (Back)' | 'Bottom Rail (Front)' | 'Bottom Rail (Back)'
-  | 'Stretcher' | 'Toe Kick';
-
-export type CabinetTypeContext = 'Base' | 'Wall' | 'Drawer' | 'General';
+export type CabinetPartType = CustomCabinetPartType;
+export type CabinetTypeContext = CustomCabinetTypeContext;
 export type FormulaDimensionType = 'Width' | 'Height' | 'Quantity' | 'Thickness';
 
 export interface CabinetPart {
@@ -559,7 +555,8 @@ export interface PartDefinition {
   widthFormula: string; widthFormulaKey?: string;
   heightFormula: string; heightFormulaKey?: string;
   materialId: string;
-  thicknessFormula?: string; thicknessFormulaKey?: string;
+  edgeBandingMaterialId?: string | null;
+  thicknessFormula?: string | null; thicknessFormulaKey?: string | null;
   edgeBanding?: EdgeBandingAssignment;
   grainDirection?: 'with' | 'reverse' | 'none' | null; notes?: string;
 }
@@ -571,7 +568,7 @@ export interface TemplateAccessoryEntry {
 export interface CabinetTemplateData {
   id: string; name: string; type: "base" | "wall" | "tall" | "custom"; previewImage?: string;
   defaultDimensions: { width: number; height: number; depth: number; };
-  parameters: { PT: number; BPT?: number; BPO?: number; DG?: number; DCG?: number; TRD?: number; B?: number; DW?: number; DD?: number; DH?: number; Clearance?: number; };
+  parameters: { PT: number; BPT?: number; BPO?: number; DG?: number; DCG?: number; TRD?: number; DW?: number; DD?: number; DH?: number; Clearance?: number; };
   parts: PartDefinition[]; accessories?: TemplateAccessoryEntry[]; createdAt?: string; lastUpdated?: string;
 }
 
@@ -580,10 +577,18 @@ export interface PredefinedFormula {
   partType: CabinetPartType | CabinetPartType[] | []; context: CabinetTypeContext[] | null;
   dimension: FormulaDimensionType; formula: string;
 }
+
 export interface CustomFormulaEntry {
-  id: string; name: string; formulaString: string; dimensionType: FormulaDimensionType;
-  description?: string | null; createdAt: string;
+  id: string; 
+  name: string; 
+  formulaString: string; 
+  dimensionType: FormulaDimensionType;
+  description?: string | null;
+  partType?: CabinetPartType | null;
+  context?: CabinetTypeContext | null;
+  createdAt: string;
 }
+
 export type CombinedFormulaItem = Omit<PredefinedFormula, 'key'> & { id: string; isCustom: boolean; };
 
 export interface DrawerPartCalculation { name: string; quantity: number; width: number; height: number; thickness: number; notes?: string; }
@@ -661,4 +666,3 @@ export interface SheetDimensionOption {
   width: number;
   height: number;
 }
-

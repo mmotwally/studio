@@ -1,7 +1,7 @@
 
 'use server';
 
-import type { CalculatedCabinet, CabinetCalculationInput, CabinetPart, AccessoryItem, CabinetTemplateData, PartDefinition, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer, DrawerPartCalculation, CustomFormulaEntry, FormulaDimensionType, AccessoryDefinitionDB, PredefinedAccessory, MaterialDefinitionDB, PredefinedMaterialSimple, TemplateAccessoryEntry } from './types';
+import type { CalculatedCabinet, CabinetCalculationInput, CabinetPart, AccessoryItem, CabinetTemplateData, PartDefinition, DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer, DrawerPartCalculation, CustomFormulaEntry, FormulaDimensionType, AccessoryDefinitionDB, PredefinedAccessory, MaterialDefinitionDB, PredefinedMaterialSimple, TemplateAccessoryEntry, CabinetPartType, CabinetTypeContext } from './types';
 import { PREDEFINED_ACCESSORIES, PREDEFINED_MATERIALS } from './types';
 import { openDb } from '@/lib/database';
 import { revalidatePath } from 'next/cache';
@@ -555,7 +555,9 @@ export async function saveCustomFormulaAction(
   name: string,
   formulaString: string,
   dimensionType: FormulaDimensionType,
-  description?: string
+  description?: string,
+  partType?: CabinetPartType | null,
+  context?: CabinetTypeContext | null,
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   const db = await openDb();
   try {
@@ -563,13 +565,15 @@ export async function saveCustomFormulaAction(
     const createdAt = new Date().toISOString();
 
     await db.run(
-      `INSERT INTO custom_formulas (id, name, formula_string, dimension_type, description, created_at)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO custom_formulas (id, name, formula_string, dimension_type, description, part_type, context, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       name,
       formulaString,
       dimensionType,
       description || null,
+      partType || null,
+      context || null,
       createdAt
     );
     revalidatePath('/cabinet-designer'); 
@@ -577,7 +581,7 @@ export async function saveCustomFormulaAction(
   } catch (error) {
     console.error("Failed to save custom formula:", error);
     if (error instanceof Error && error.message.includes("UNIQUE constraint failed")) {
-      return { success: false, error: `A custom formula with the name "${name}" for dimension type "${dimensionType}" already exists.` };
+      return { success: false, error: `A custom formula with a similar unique property already exists.` };
     }
     return { success: false, error: (error as Error).message };
   }
@@ -586,13 +590,15 @@ export async function saveCustomFormulaAction(
 export async function getCustomFormulasAction(): Promise<CustomFormulaEntry[]> {
   const db = await openDb();
   try {
-    const rows = await db.all<any[]>("SELECT id, name, formula_string, dimension_type, description, created_at FROM custom_formulas ORDER BY name ASC");
+    const rows = await db.all<any[]>("SELECT id, name, formula_string, dimension_type, description, part_type, context, created_at FROM custom_formulas ORDER BY name ASC");
     return rows.map(row => ({
       id: row.id,
       name: row.name,
       formulaString: row.formula_string,
       dimensionType: row.dimension_type as FormulaDimensionType,
       description: row.description,
+      partType: row.part_type,
+      context: row.context,
       createdAt: row.created_at,
     }));
   } catch (error) {

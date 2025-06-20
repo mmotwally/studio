@@ -12,7 +12,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { FormItem, FormControl, FormLabel as RHFFormLabel } from '@/components/ui/form'; // Use RHFFormLabel for form context
+import { FormItem, FormControl } from '@/components/ui/form'; // Use RHFFormLabel for form context
 import { useToast } from "@/hooks/use-toast";
 import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer, Edit2, List, SendToBack, UploadCloud, SheetIcon } from 'lucide-react';
 import {
@@ -511,28 +511,36 @@ export default function CabinetDesignerPage() {
       if (typeof currentFormulaValue !== 'string') currentFormulaValue = String(currentFormulaValue);
 
       const isCustomEntryMode = currentFormulaKey === 'CUSTOM';
+      
+      const part = currentTemplate.parts[partIndex];
+      const dimension = formulaField === 'widthFormula' ? 'Width' : formulaField === 'heightFormula' ? 'Height' : 'Quantity';
 
-      let relevantFormulas = PREDEFINED_FORMULAS.filter(f => {
-          const part = currentTemplate.parts[partIndex];
-          if (!part) return false;
-          const contextMatch = f.context === null || (part.cabinetContext && f.context.includes(part.cabinetContext));
-          const partTypeMatch = Array.isArray(f.partType) ? f.partType.includes(part.partType) : f.partType === part.partType || f.partType.length === 0;
-          const dimensionMatch = (f.dimension === 'Width' && formulaField === 'widthFormula') || (f.dimension === 'Height' && formulaField === 'heightFormula') || (f.dimension === 'Quantity' && formulaField === 'quantityFormula');
-          return contextMatch && partTypeMatch && dimensionMatch;
-      }).map(f => ({ ...f, type: 'predefined' as const, id: f.key }));
+      const getRelevantFormulas = () => {
+          if (!part) return [];
+          
+          const predefined = PREDEFINED_FORMULAS.filter(f => {
+              const contextMatch = f.context === null || (part.cabinetContext && f.context.includes(part.cabinetContext));
+              const partTypeMatch = f.partType.length === 0 || f.partType.includes(part.partType);
+              const dimensionMatch = f.dimension === dimension;
+              return contextMatch && partTypeMatch && dimensionMatch;
+          }).map(f => ({ ...f, type: 'predefined' as const, id: f.key }));
 
-      const relevantCustomDbFormulas = customDbFormulas.filter(f =>
-           (f.dimensionType === 'Width' && formulaField === 'widthFormula') ||
-           (f.dimensionType === 'Height' && formulaField === 'heightFormula') ||
-           (f.dimensionType === 'Quantity' && formulaField === 'quantityFormula')
-      ).map(f => ({
-          id: f.id, key: f.id, name: `${f.name} (DB)`, formula: f.formulaString,
-          description: f.description || 'User-defined custom formula.',
-          example: `Custom Formula: ${f.formulaString}`, type: 'custom_db' as const,
-          partType: [], context: null, dimension: f.dimensionType
-      }));
+          const custom = customDbFormulas.filter(f => {
+              const contextMatch = !f.context || f.context === part.cabinetContext;
+              const partTypeMatch = !f.partType || f.partType === part.partType;
+              const dimensionMatch = f.dimensionType === dimension;
+              return contextMatch && partTypeMatch && dimensionMatch;
+          }).map(f => ({
+              id: f.id, key: f.id, name: `${f.name} (Global)`, formula: f.formulaString,
+              description: f.description || 'User-defined global formula.',
+              example: `Global Formula: ${f.formulaString}`, type: 'custom_db' as const,
+              partType: [], context: null, dimension: f.dimensionType
+          }));
+          
+          return [...predefined, ...custom].sort((a,b) => a.name.localeCompare(b.name));
+      };
 
-      const combinedFormulas = [...relevantFormulas, ...relevantCustomDbFormulas].sort((a,b) => a.name.localeCompare(b.name));
+      const combinedFormulas = getRelevantFormulas();
 
       const handleSaveGlobal = async () => {
         const formulaToSave = (currentTemplate.parts[partIndex] as any)[formulaField];
@@ -1139,5 +1147,3 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
-
-    

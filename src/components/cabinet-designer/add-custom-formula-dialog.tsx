@@ -27,6 +27,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { type CustomFormulaFormValues, customFormulaSchema } from "@/app/(app)/cabinet-designer/custom-formula-schema";
 import { saveCustomFormulaAction } from "@/app/(app)/cabinet-designer/actions";
+import type { CabinetPartType, CabinetTypeContext } from "@/app/(app)/cabinet-designer/types";
+
+const cabinetPartTypes: CabinetPartType[] = [
+  'Side Panel', 'Bottom Panel', 'Top Panel', 'Back Panel', 'Double Back Panel',
+  'Door', 'Doors', 'Drawer Front', 'Drawer Back', 'Drawer Side', 'Drawer Counter Front',
+  'Drawer Bottom', 'Mobile Shelf', 'Fixed Shelf', 'Upright', 'Front Panel',
+  'Top Rail (Front)', 'Top Rail (Back)', 'Bottom Rail (Front)', 'Bottom Rail (Back)',
+  'Stretcher', 'Toe Kick'
+];
+const cabinetTypeContexts: CabinetTypeContext[] = ['Base', 'Wall', 'Drawer', 'General'];
+
 
 interface AddCustomFormulaDialogProps {
   setOpen: (open: boolean) => void;
@@ -44,13 +55,22 @@ export function AddCustomFormulaDialog({ setOpen, onFormulaAdded }: AddCustomFor
       formulaString: "",
       dimensionType: "Width",
       description: "",
+      partType: null,
+      context: null,
     },
   });
 
   async function onSubmit(values: CustomFormulaFormValues) {
     setIsSubmitting(true);
     try {
-      await saveCustomFormulaAction(values.name, values.formulaString, values.dimensionType, values.description || undefined);
+      await saveCustomFormulaAction(
+        values.name, 
+        values.formulaString, 
+        values.dimensionType, 
+        values.description || undefined,
+        values.partType,
+        values.context
+      );
       toast({
         title: "Success",
         description: `Global formula "${values.name}" saved successfully.`,
@@ -75,7 +95,7 @@ export function AddCustomFormulaDialog({ setOpen, onFormulaAdded }: AddCustomFor
       <DialogHeader>
         <DialogTitle>Define New Global Formula</DialogTitle>
         <DialogDescription>
-          Create a reusable formula that can be selected in any cabinet template. Use parameters like W, H, D, and PT.
+          Create a reusable formula. You can optionally associate it with a part type and context to narrow down when it appears in dropdowns. Use parameters like W, H, D, and PT.
         </DialogDescription>
       </DialogHeader>
       <Form {...form}>
@@ -107,6 +127,30 @@ export function AddCustomFormulaDialog({ setOpen, onFormulaAdded }: AddCustomFor
                   </SelectContent>
                 </Select>
                 <FormMessage />
+              </FormItem>)}
+          />
+           <FormField control={form.control} name="partType"
+            render={({ field }) => (
+              <FormItem><FormLabel>Part Type Association (Optional)</FormLabel>
+                <Select onValueChange={field.onChange} value={field.value || ""}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="All Part Types"/></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="">All Part Types</SelectItem>
+                    {cabinetPartTypes.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </FormItem>)}
+          />
+           <FormField control={form.control} name="context"
+            render={({ field }) => (
+              <FormItem><FormLabel>Context Association (Optional)</FormLabel>
+                 <Select onValueChange={field.onChange} value={field.value || ""}>
+                  <FormControl><SelectTrigger><SelectValue placeholder="All Contexts" /></SelectTrigger></FormControl>
+                  <SelectContent>
+                    <SelectItem value="">All Contexts</SelectItem>
+                    {cabinetTypeContexts.map(type => <SelectItem key={type} value={type}>{type}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </FormItem>)}
           />
           <FormField control={form.control} name="description"
