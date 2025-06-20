@@ -197,7 +197,7 @@ export default function CabinetDesignerPage() {
     const predefined = PREDEFINED_MATERIALS.map(m => ({ 
         value: m.id, 
         label: `${m.name}${m.hasGrain ? " (Grain)" : ""}${m.thickness ? ` - ${m.thickness}mm` : ''}`,
-        type: m.id.startsWith("EDGE_") ? "edge_band" : "panel" // Simple type inference for predefined
+        type: m.id.startsWith("EDGE_") ? "edge_band" : "panel" 
     }));
     const custom = customMaterialTypes.map(m => ({ 
         value: m.id, 
@@ -308,7 +308,7 @@ export default function CabinetDesignerPage() {
 
   const handleTemplateInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>, path: string, partIndex?: number, field?: keyof PartDefinition | keyof PartDefinition['edgeBanding']) => {
     const { name, value, type } = e.target;
-    let processedValue: string | number | boolean = value;
+    let processedValue: string | number | boolean | null = value;
     if (type === 'number') processedValue = parseFloat(value) || 0;
     if (type === 'checkbox' && field) {
         processedValue = (e.target as HTMLInputElement).checked;
@@ -335,7 +335,13 @@ export default function CabinetDesignerPage() {
             if (!target && i < pathArray.length -1) { console.error(`Path segment ${currentPathSegment} not found.`); return prev; }
         }
         const finalKey = pathArray[pathArray.length -1];
-        if(target) target[finalKey] = processedValue;
+        if(target) {
+            if (finalKey === 'edgeBandingMaterialId' && processedValue === NO_EDGE_BANDING_PLACEHOLDER) {
+                target[finalKey] = null;
+            } else {
+                target[finalKey] = processedValue;
+            }
+        }
         else console.error(`Final target for path ${path} is undefined.`);
         return newTemplate;
     });
@@ -1090,3 +1096,5 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
+
+    

@@ -166,9 +166,8 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
         partId: `${values.partType.toLowerCase().replace(/[\s()]+/g, '_')}_${existingPartCount + 1}_${Date.now()}`, nameLabel: values.nameLabel, partType: values.partType, cabinetContext: values.cabinetContext,
         quantityFormula: values.quantityFormula, widthFormula: finalWidthFormula, widthFormulaKey: values.widthFormulaKey, heightFormula: finalHeightFormula, heightFormulaKey: values.heightFormulaKey,
         materialId: values.materialId,
-        edgeBandingMaterialId: values.edgeBandingMaterialId, // This now comes directly from the form
+        edgeBandingMaterialId: values.edgeBandingMaterialId,
         grainDirection: values.grainDirection, edgeBanding: edgeBanding, notes: values.notes || `Added via dialog. Part Type: ${values.partType}`,
-        // thicknessFormula and thicknessFormulaKey are intentionally null as thickness is derived from material
         thicknessFormula: null,
         thicknessFormulaKey: null,
       };
@@ -280,3 +279,5 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
     </DialogContent>
   );
 }
+
+    
