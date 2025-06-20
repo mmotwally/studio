@@ -17,13 +17,13 @@ import { useToast } from "@/hooks/use-toast";
 import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer, Edit2, List, SendToBack, UploadCloud, SheetIcon } from 'lucide-react';
 import {
     calculateCabinetDetails, calculateDrawerSet, saveCabinetTemplateAction, getCabinetTemplatesAction, getCabinetTemplateByIdAction, deleteCabinetTemplateAction,
-    getMaterialDefinitionsAction, getAccessoryDefinitionsAction
+    getMaterialDefinitionsAction, getAccessoryDefinitionsAction, getCustomFormulasAction
 } from './actions';
 import type {
     CabinetCalculationInput, CalculatedCabinet, CabinetPart, CabinetTemplateData, PartDefinition, CabinetPartType, CabinetTypeContext,
     DrawerSetCalculatorInput, DrawerSetCalculatorResult, CalculatedDrawer as SingleCalculatedDrawer, TemplateAccessoryEntry,
     MaterialDefinitionDB, AccessoryDefinitionDB, PredefinedMaterialSimple, PredefinedAccessory, SelectItem as GenericSelectItem, AccessoryItem,
-    InputPart, NestingJob
+    InputPart, NestingJob, CustomFormulaEntry
 } from './types';
 import { PREDEFINED_MATERIALS, PREDEFINED_ACCESSORIES } from './types';
 import { Separator } from '@/components/ui/separator';
@@ -147,6 +147,7 @@ export default function CabinetDesignerPage() {
 
   const [customMaterialTypes, setCustomMaterialTypes] = React.useState<MaterialDefinitionDB[]>([]);
   const [customAccessoryTypes, setCustomAccessoryTypes] = React.useState<AccessoryDefinitionDB[]>([]);
+  const [globalCustomFormulas, setGlobalCustomFormulas] = React.useState<CustomFormulaEntry[]>([]);
   const [isMaterialDialogOp, setIsMaterialDialogOp] = React.useState(false); 
   const [isAccessoryDialogOp, setIsAccessoryDialogOp] = React.useState(false);
   const [templateToDelete, setTemplateToDelete] = React.useState<CabinetTemplateData | null>(null);
@@ -169,24 +170,26 @@ export default function CabinetDesignerPage() {
     }
   }, [toast]);
 
-  const fetchCustomDefinitions = React.useCallback(async () => {
+  const fetchCustomDefinitionsAndFormulas = React.useCallback(async () => {
     try {
-      const [materials, accessories] = await Promise.all([
+      const [materials, accessories, formulas] = await Promise.all([
         getMaterialDefinitionsAction(),
         getAccessoryDefinitionsAction(),
+        getCustomFormulasAction(),
       ]);
       setCustomMaterialTypes(materials);
       setCustomAccessoryTypes(accessories);
+      setGlobalCustomFormulas(formulas);
     } catch (error) {
-      console.error("Failed to fetch custom material/accessory definitions:", error);
-      toast({ title: "Error", description: "Could not load custom material/accessory types.", variant: "destructive" });
+      console.error("Failed to fetch custom definitions/formulas:", error);
+      toast({ title: "Error", description: "Could not load custom types or formulas.", variant: "destructive" });
     }
   }, [toast]);
 
   React.useEffect(() => {
     fetchAndSetTemplates();
-    fetchCustomDefinitions();
-  }, [fetchAndSetTemplates, fetchCustomDefinitions]);
+    fetchCustomDefinitionsAndFormulas();
+  }, [fetchAndSetTemplates, fetchCustomDefinitionsAndFormulas]);
 
   const combinedMaterialOptions = React.useMemo((): GenericSelectItem[] => {
     const predefined = PREDEFINED_MATERIALS.map(m => ({ value: m.id, label: `${m.name}${m.hasGrain ? " (Grain)" : ""}${m.thickness ? ` - ${m.thickness}mm` : ''}` }));
@@ -331,18 +334,35 @@ export default function CabinetDesignerPage() {
     setCurrentTemplate(prev => {
         const newTemplate = JSON.parse(JSON.stringify(prev));
         if (newTemplate.parts && newTemplate.parts[partIndex]) {
-            if (selectedFormulaValue === PREDEFINED_FORMULAS.find(f => f.key === 'CUSTOM')?.formula) {
-                (newTemplate.parts[partIndex] as any)[`${formulaField}Key`] = 'CUSTOM';
-                (newTemplate.parts[partIndex] as any)[formulaField] = "";
-            } else {
-                const selectedFormula = PREDEFINED_FORMULAS.find(f => f.formula === selectedFormulaValue);
-                (newTemplate.parts[partIndex] as any)[`${formulaField}Key`] = selectedFormula?.key;
-                (newTemplate.parts[partIndex] as any)[formulaField] = selectedFormulaValue;
+            (newTemplate.parts[partIndex] as any)[formulaField] = selectedFormulaValue;
+            const isPredefined = PREDEFINED_FORMULAS.find(f => f.formula === selectedFormulaValue && 
+                ( (f.dimension === 'Width' && formulaField === 'widthFormula') ||
+                  (f.dimension === 'Height' && formulaField === 'heightFormula') ||
+                  (f.dimension === 'Quantity' && formulaField === 'quantityFormula') ||
+                  (f.dimension === 'Thickness' && formulaField === 'thicknessFormula') )
+            );
+            const isGlobalCustom = globalCustomFormulas.find(f => f.formulaString === selectedFormulaValue && 
+                 ( (f.dimensionType === 'Width' && formulaField === 'widthFormula') ||
+                   (f.dimensionType === 'Height' && formulaField === 'heightFormula') ||
+                   (f.dimensionType === 'Quantity' && formulaField === 'quantityFormula') ||
+                   (f.dimensionType === 'Thickness' && formulaField === 'thicknessFormula') )
+            );
+
+            if (isPredefined) {
+                (newTemplate.parts[partIndex] as any)[`${formulaField}Key`] = isPredefined.key;
+            } else if (isGlobalCustom || selectedFormulaValue === PREDEFINED_FORMULAS.find(f => f.key === 'CUSTOM')?.formula) {
+                (newTemplate.parts[partIndex] as any)[`${formulaField}Key`] = 'CUSTOM'; // Or a specific key for global custom if needed
+            } else { // User might have typed something completely new
+                 (newTemplate.parts[partIndex] as any)[`${formulaField}Key`] = 'CUSTOM';
+                 if (selectedFormulaValue === "") { // Explicitly choosing the blank "Custom Formula..." option
+                    (newTemplate.parts[partIndex] as any)[formulaField] = "";
+                 }
             }
         } else console.error(`Part at index ${partIndex} not found.`);
         return newTemplate;
     });
   };
+
 
   const handleAddPartToTemplate = (newPart: PartDefinition) => {
     setCurrentTemplate(prev => ({ ...prev, parts: [...prev.parts, newPart] }));
@@ -456,31 +476,50 @@ export default function CabinetDesignerPage() {
     } finally { setIsCalculatingDrawers(false); }
   };
 
-  const FormulaInputWithHelper = ({ partIndex, formulaField, label, placeholder }: { partIndex: number, formulaField: keyof PartDefinition, label: string, placeholder: string }) => {
+  const FormulaInputWithHelper = ({ partIndex, formulaField, label, placeholder, customDbFormulas }: { partIndex: number, formulaField: keyof PartDefinition, label: string, placeholder: string, customDbFormulas: CustomFormulaEntry[] }) => {
       const currentFormulaKey = (currentTemplate.parts[partIndex] as any)[`${formulaField}Key`];
-      const isCustom = currentFormulaKey === 'CUSTOM' || !PREDEFINED_FORMULAS.find(f => f.key === currentFormulaKey && (f.dimension === 'Width' ? formulaField === 'widthFormula' : f.dimension === 'Height' ? formulaField === 'heightFormula' : f.dimension === 'Quantity' ? formulaField === 'quantityFormula' : formulaField === 'thicknessFormula' ));
-      const relevantFormulas = PREDEFINED_FORMULAS.filter(f => {
+      const currentFormulaValue = (currentTemplate.parts[partIndex] as any)[formulaField] || "";
+
+      const isCustomEntryMode = currentFormulaKey === 'CUSTOM' && !globalCustomFormulas.find(f => f.formulaString === currentFormulaValue && (f.dimensionType === 'Width' ? formulaField === 'widthFormula' : f.dimensionType === 'Height' ? formulaField === 'heightFormula' : f.dimensionType === 'Quantity' ? formulaField === 'quantityFormula' : formulaField === 'thicknessFormula')) && !PREDEFINED_FORMULAS.find(f => f.formula === currentFormulaValue && (f.dimension === 'Width' ? formulaField === 'widthFormula' : f.dimension === 'Height' ? formulaField === 'heightFormula' : f.dimension === 'Quantity' ? formulaField === 'quantityFormula' : formulaField === 'thicknessFormula'));
+
+      let relevantFormulas = PREDEFINED_FORMULAS.filter(f => {
           const part = currentTemplate.parts[partIndex];
           if (!part) return false;
           const contextMatch = f.context === null || (part.cabinetContext && f.context.includes(part.cabinetContext));
           const partTypeMatch = Array.isArray(f.partType) ? f.partType.includes(part.partType) : f.partType === part.partType || f.partType.length === 0;
           const dimensionMatch = (f.dimension === 'Width' && formulaField === 'widthFormula') || (f.dimension === 'Height' && formulaField === 'heightFormula') || (f.dimension === 'Quantity' && formulaField === 'quantityFormula') || (f.dimension === 'Thickness' && formulaField === 'thicknessFormula');
           return contextMatch && partTypeMatch && dimensionMatch;
-      }).sort((a,b) => a.name.localeCompare(b.name));
+      }).map(f => ({ ...f, type: 'predefined' as const, id: f.key }));
+      
+      const relevantCustomDbFormulas = customDbFormulas.filter(f => 
+           (f.dimensionType === 'Width' && formulaField === 'widthFormula') ||
+           (f.dimensionType === 'Height' && formulaField === 'heightFormula') ||
+           (f.dimensionType === 'Quantity' && formulaField === 'quantityFormula') ||
+           (f.dimensionType === 'Thickness' && formulaField === 'thicknessFormula')
+      ).map(f => ({
+          id: f.id, key: f.id, name: `${f.name} (Custom DB)`, formula: f.formulaString,
+          description: f.description || 'User-defined custom formula.',
+          example: `Custom Formula: ${f.formulaString}`, type: 'custom_db' as const,
+          partType: [], context: null, dimension: f.dimensionType
+      }));
+      
+      const combinedFormulas = [...relevantFormulas, ...relevantCustomDbFormulas].sort((a,b) => a.name.localeCompare(b.name));
+
       return (
         <div className="flex items-end gap-2">
           <div className="flex-grow">
             <Label htmlFor={`part_${partIndex}_${formulaField}`}>{label}</Label>
             {(formulaField === 'widthFormula' || formulaField === 'heightFormula' || formulaField === 'quantityFormula' || formulaField === 'thicknessFormula') ? (
-                <Textarea id={`part_${partIndex}_${formulaField}`} rows={1} value={(currentTemplate.parts[partIndex] as any)[formulaField] || ''} onChange={(e) => handleTemplateInputChange(e, `parts.${partIndex}.${formulaField}`)} placeholder={placeholder} className="text-sm" readOnly={!isCustom && formulaField !== 'quantityFormula' && formulaField !== 'thicknessFormula'} />
-            ) : ( <Input id={`part_${partIndex}_${formulaField}`} value={(currentTemplate.parts[partIndex] as any)[formulaField] || ''} onChange={(e) => handleTemplateInputChange(e, `parts.${partIndex}.${formulaField}`)} placeholder={placeholder} className="text-sm" readOnly={!isCustom} /> )}
+                <Textarea id={`part_${partIndex}_${formulaField}`} rows={1} value={currentFormulaValue} onChange={(e) => handleTemplateInputChange(e, `parts.${partIndex}.${formulaField}`)} placeholder={placeholder} className="text-sm" readOnly={!isCustomEntryMode && formulaField !== 'quantityFormula' && formulaField !== 'thicknessFormula'} />
+            ) : ( <Input id={`part_${partIndex}_${formulaField}`} value={currentFormulaValue} onChange={(e) => handleTemplateInputChange(e, `parts.${partIndex}.${formulaField}`)} placeholder={placeholder} className="text-sm" readOnly={!isCustomEntryMode} /> )}
           </div>
           {(formulaField === 'widthFormula' || formulaField === 'heightFormula' || formulaField === 'quantityFormula' || formulaField === 'thicknessFormula') && (
             <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="whitespace-nowrap px-2"><ChevronDown className="h-4 w-4" /> <span className="ml-1 text-xs">Ins</span></Button></DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-72 max-h-96 overflow-y-auto">
-                {relevantFormulas.map((item) => ( <DropdownMenuItem key={item.key} onSelect={() => handleFormulaSelect(partIndex, formulaField as any, item.formula)} className="flex justify-between items-center"><span className="text-xs">{item.name} ({item.formula})</span>
+              <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
+                {combinedFormulas.map((item) => ( <DropdownMenuItem key={item.id} onSelect={() => handleFormulaSelect(partIndex, formulaField as any, item.formula)} className="flex justify-between items-center text-xs">
+                    <span className={item.type === 'custom_db' ? 'italic' : ''}>{item.name} ({item.formula})</span>
                     <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6 opacity-50 hover:opacity-100"><HelpCircle className="h-3 w-3" /></Button></TooltipTrigger><TooltipContent side="left" className="max-w-xs text-xs p-2 bg-popover text-popover-foreground"><p className="font-semibold">{item.description}</p><p className="text-xs text-muted-foreground">{item.example}</p></TooltipContent></Tooltip></DropdownMenuItem> ))}
-                 <DropdownMenuItem key="CUSTOM" onSelect={() => handleFormulaSelect(partIndex, formulaField as any, PREDEFINED_FORMULAS.find(f => f.key === 'CUSTOM')?.formula || "")} className="flex justify-between items-center"><span className="text-xs">Custom Formula...</span></DropdownMenuItem>
+                 <DropdownMenuItem key="CUSTOM" onSelect={() => handleFormulaSelect(partIndex, formulaField as any, PREDEFINED_FORMULAS.find(f => f.key === 'CUSTOM')?.formula || "")} className="flex justify-between items-center text-xs"><span className="font-semibold">Custom Formula... (Type directly)</span></DropdownMenuItem>
               </DropdownMenuContent></DropdownMenu> )}
         </div>);
   };
@@ -683,11 +722,11 @@ export default function CabinetDesignerPage() {
           <div className="flex flex-col sm:flex-row gap-2">
             <Dialog open={isMaterialDialogOp} onOpenChange={setIsMaterialDialogOp}>
               <DialogTrigger asChild><Button variant="outline" className="flex-1"><Construction className="mr-2 h-4 w-4"/>Define Material</Button></DialogTrigger>
-              <AddMaterialTypeDialog setOpen={setIsMaterialDialogOp} onMaterialTypeAdded={fetchCustomDefinitions} />
+              <AddMaterialTypeDialog setOpen={setIsMaterialDialogOp} onMaterialTypeAdded={fetchCustomDefinitionsAndFormulas} />
             </Dialog>
             <Dialog open={isAccessoryDialogOp} onOpenChange={setIsAccessoryDialogOp}>
               <DialogTrigger asChild><Button variant="outline" className="flex-1"><Hammer className="mr-2 h-4 w-4"/>Define Accessory</Button></DialogTrigger>
-              <AddAccessoryTypeDialog setOpen={setIsAccessoryDialogOp} onAccessoryTypeAdded={fetchCustomDefinitions} />
+              <AddAccessoryTypeDialog setOpen={setIsAccessoryDialogOp} onAccessoryTypeAdded={fetchCustomDefinitionsAndFormulas} />
             </Dialog>
           </div>
            <Button onClick={() => { setCurrentTemplate(generateNewTemplatePlaceholder()); setViewMode('templateDefinition'); }} variant="outline" className="w-full"><PlusCircle className="mr-2 h-4 w-4" /> Define New Cabinet Template</Button>
@@ -891,11 +930,11 @@ export default function CabinetDesignerPage() {
                                 <p><span className="font-medium">Calc. Qty:</span> {calculatedQty} <span className="text-muted-foreground text-[10px]">(Formula: {part.quantityFormula})</span></p>
                                 <p><span className="font-medium">Material:</span> {materialInfo?.label || part.materialId}</p><p><span className="font-medium">Grain:</span> {grainText}</p></div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 items-start">
-                                <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula" placeholder="e.g., 2"/>
-                                <FormulaInputWithHelper partIndex={index} formulaField="widthFormula" label="Width Formula" placeholder="e.g., D or W - 2*PT"/>
-                                <FormulaInputWithHelper partIndex={index} formulaField="heightFormula" label="Height Formula" placeholder="e.g., H or D - BPO"/>
+                                <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula" placeholder="e.g., 2" customDbFormulas={globalCustomFormulas}/>
+                                <FormulaInputWithHelper partIndex={index} formulaField="widthFormula" label="Width Formula" placeholder="e.g., D or W - 2*PT" customDbFormulas={globalCustomFormulas}/>
+                                <FormulaInputWithHelper partIndex={index} formulaField="heightFormula" label="Height Formula" placeholder="e.g., H or D - BPO" customDbFormulas={globalCustomFormulas}/>
                                 <div><Label>Material ID</Label><Select value={part.materialId} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'materialId', value }} as any, `parts.${index}.materialId`)}><SelectTrigger className="text-sm"><SelectValue placeholder="Select material" /></SelectTrigger><SelectContent>{combinedMaterialOptions.map((material) => (<SelectItem key={material.value} value={material.value}>{material.label}</SelectItem>))}</SelectContent></Select></div>
-                                <FormulaInputWithHelper partIndex={index} formulaField="thicknessFormula" label="Thickness Formula" placeholder="e.g., PT or 18"/>
+                                <FormulaInputWithHelper partIndex={index} formulaField="thicknessFormula" label="Thickness Formula" placeholder="e.g., PT or 18" customDbFormulas={globalCustomFormulas}/>
                                 <div><Label>Grain Direction</Label><Select value={part.grainDirection || 'none'} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'grainDirection', value: value === 'none' ? null : value }} as any, `parts.${index}.grainDirection`)}><SelectTrigger className="text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="with">With Grain (Height)</SelectItem><SelectItem value="reverse">Reverse Grain (Width)</SelectItem></SelectContent></Select></div></div>
                             <div className="mt-3"><Label className="font-medium">Edge Banding:</Label><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 text-sm">
                                 {(['front', 'back', 'top', 'bottom'] as Array<keyof PartDefinition['edgeBanding']>).map(edge => (<FormItem key={edge} className="flex flex-row items-center space-x-2"><Checkbox id={`edge_${index}_${edge}`} checked={!!part.edgeBanding?.[edge]} onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, `parts.${index}.edgeBanding.${edge}`, index, edge as keyof PartDefinition['edgeBanding'])}/><Label htmlFor={`edge_${index}_${edge}`} className="capitalize font-normal">{edge}</Label></FormItem>))}</div>
@@ -961,4 +1000,5 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
+
 
