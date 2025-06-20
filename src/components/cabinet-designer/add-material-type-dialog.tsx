@@ -33,28 +33,35 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 interface AddMaterialTypeDialogProps {
   setOpen: (open: boolean) => void;
   onMaterialTypeAdded: () => void;
+  initialType?: "panel" | "edge_band" | "other" | null;
 }
 
-export function AddMaterialTypeDialog({ setOpen, onMaterialTypeAdded }: AddMaterialTypeDialogProps) {
+export function AddMaterialTypeDialog({ setOpen, onMaterialTypeAdded, initialType }: AddMaterialTypeDialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
   const form = useForm<MaterialTypeFormValues>({
     resolver: zodResolver(materialTypeFormSchema),
-    defaultValues: {
-      name: "",
-      type: "panel",
-      costPerSqm: 0,
-      costPerMeter: 0,
-      thickness: 18,
-      defaultSheetWidth: 2440,
-      defaultSheetHeight: 1220,
-      hasGrain: false,
-      notes: "",
-    },
+    // Default values will be set by useEffect based on initialType
   });
   
   const watchedType = form.watch("type");
+
+  React.useEffect(() => {
+    // Reset the form with appropriate defaults when initialType changes or dialog opens
+    form.reset({
+      name: "",
+      type: initialType || "panel",
+      costPerSqm: initialType === "panel" || !initialType ? 0 : undefined,
+      costPerMeter: initialType === "edge_band" ? 0 : undefined,
+      thickness: initialType === "panel" || !initialType ? 18 : undefined,
+      defaultSheetWidth: initialType === "panel" || !initialType ? 2440 : undefined,
+      defaultSheetHeight: initialType === "panel" || !initialType ? 1220 : undefined,
+      hasGrain: initialType === "panel" ? false : undefined, // Only relevant for panels
+      notes: "",
+    });
+  }, [initialType, form]);
+
 
   async function onSubmit(values: MaterialTypeFormValues) {
     setIsSubmitting(true);
@@ -66,6 +73,7 @@ export function AddMaterialTypeDialog({ setOpen, onMaterialTypeAdded }: AddMater
         thickness: values.type === 'panel' ? values.thickness : null,
         defaultSheetWidth: values.type === 'panel' ? values.defaultSheetWidth : null,
         defaultSheetHeight: values.type === 'panel' ? values.defaultSheetHeight : null,
+        hasGrain: values.type === 'panel' ? values.hasGrain : false, // Ensure hasGrain is boolean for panel, false otherwise
       };
 
       await saveMaterialDefinitionAction(dataToSave);
@@ -75,7 +83,6 @@ export function AddMaterialTypeDialog({ setOpen, onMaterialTypeAdded }: AddMater
       });
       onMaterialTypeAdded();
       setOpen(false);
-      form.reset();
     } catch (error) {
       console.error("Failed to save material type:", error);
       toast({
@@ -174,7 +181,7 @@ export function AddMaterialTypeDialog({ setOpen, onMaterialTypeAdded }: AddMater
               <FormField control={form.control} name="notes"
                 render={({ field }) => (
                   <FormItem><FormLabel>Notes</FormLabel>
-                    <FormControl><Textarea placeholder="Optional notes about this material..." {...field} /></FormControl>
+                    <FormControl><Textarea placeholder="Optional notes about this material..." {...field} value={field.value ?? ""} /></FormControl>
                     <FormMessage />
                   </FormItem>)} />
             </div>

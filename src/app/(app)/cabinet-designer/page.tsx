@@ -150,7 +150,10 @@ export default function CabinetDesignerPage() {
   const [customMaterialTypes, setCustomMaterialTypes] = React.useState<MaterialDefinitionDB[]>([]);
   const [customAccessoryTypes, setCustomAccessoryTypes] = React.useState<AccessoryDefinitionDB[]>([]);
   const [globalCustomFormulas, setGlobalCustomFormulas] = React.useState<CustomFormulaEntry[]>([]);
+  
   const [isMaterialDialogOp, setIsMaterialDialogOp] = React.useState(false);
+  const [materialDialogInitialType, setMaterialDialogInitialType] = React.useState<"panel" | "edge_band" | "other" | null>(null);
+
   const [isAccessoryDialogOp, setIsAccessoryDialogOp] = React.useState(false);
   const [templateToDelete, setTemplateToDelete] = React.useState<CabinetTemplateData | null>(null);
 
@@ -213,6 +216,10 @@ export default function CabinetDesignerPage() {
     const custom = customAccessoryTypes.map(a => ({ value: a.id, label: `${a.name} ($${a.unitCost.toFixed(2)})` }));
     return [...predefined, ...custom].sort((a, b) => a.label.localeCompare(b.label));
   }, [customAccessoryTypes]);
+
+  const openPanelMaterialDialog = () => { setMaterialDialogInitialType("panel"); setIsMaterialDialogOp(true); };
+  const openEdgeBandMaterialDialog = () => { setMaterialDialogInitialType("edge_band"); setIsMaterialDialogOp(true); };
+  const openGenericMaterialDialog = () => { setMaterialDialogInitialType(null); setIsMaterialDialogOp(true); };
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -769,14 +776,12 @@ export default function CabinetDesignerPage() {
         <CardHeader><CardTitle className="flex items-center"><Settings2 className="mr-2 h-5 w-5 text-primary" />Configure Cabinet</CardTitle><CardDescription>Select type and customize dimensions for calculation.</CardDescription></CardHeader>
         <CardContent className="space-y-6">
           <div className="flex flex-col sm:flex-row gap-2">
-            <Dialog open={isMaterialDialogOp} onOpenChange={setIsMaterialDialogOp}>
-              <DialogTrigger asChild><Button variant="outline" className="flex-1"><Construction className="mr-2 h-4 w-4"/>Define Material</Button></DialogTrigger>
-              <AddMaterialTypeDialog setOpen={setIsMaterialDialogOp} onMaterialTypeAdded={fetchCustomDefinitionsAndFormulas} />
-            </Dialog>
-            <Dialog open={isAccessoryDialogOp} onOpenChange={setIsAccessoryDialogOp}>
-              <DialogTrigger asChild><Button variant="outline" className="flex-1"><Hammer className="mr-2 h-4 w-4"/>Define Accessory</Button></DialogTrigger>
-              <AddAccessoryTypeDialog setOpen={setIsAccessoryDialogOp} onAccessoryTypeAdded={fetchCustomDefinitionsAndFormulas} />
-            </Dialog>
+            <Button variant="outline" className="flex-1" onClick={openGenericMaterialDialog}>
+              <Construction className="mr-2 h-4 w-4"/>Define Material
+            </Button>
+            <Button variant="outline" className="flex-1" onClick={() => setIsAccessoryDialogOp(true)}>
+              <Hammer className="mr-2 h-4 w-4"/>Define Accessory
+            </Button>
           </div>
            <Button onClick={() => { setCurrentTemplate(generateNewTemplatePlaceholder()); setViewMode('templateDefinition'); }} variant="outline" className="w-full"><PlusCircle className="mr-2 h-4 w-4" /> Define New Cabinet Template</Button>
           <Separator />
@@ -965,7 +970,8 @@ export default function CabinetDesignerPage() {
                             existingPartCount={currentTemplate.parts.length}
                             templateParameters={currentTemplate.parameters}
                             materialOptions={combinedMaterialOptions}
-                            onRequestOpenMaterialDialog={() => setIsMaterialDialogOp(true)}
+                            onRequestOpenPanelMaterialDialog={openPanelMaterialDialog}
+                            onRequestOpenEdgeBandMaterialDialog={openEdgeBandMaterialDialog}
                         />
                     </Dialog></CardHeader>
                     <CardContent className="space-y-4"><ScrollArea className="max-h-[600px] pr-3">
@@ -987,7 +993,7 @@ export default function CabinetDesignerPage() {
                                 <div>
                                     <div className="flex items-center justify-between mb-1">
                                         <FormLabel>Material (Panel)*</FormLabel>
-                                        <Button type="button" variant="link" size="sm" onClick={() => setIsMaterialDialogOp(true)} className="p-0 h-auto text-xs">
+                                        <Button type="button" variant="link" size="sm" onClick={openPanelMaterialDialog} className="p-0 h-auto text-xs">
                                             <PlusCircle className="mr-1 h-3 w-3" /> Define New...
                                         </Button>
                                     </div>
@@ -1000,7 +1006,7 @@ export default function CabinetDesignerPage() {
                                 <div>
                                     <div className="flex items-center justify-between mb-1">
                                         <FormLabel>Edge Banding Material (Optional)</FormLabel>
-                                        <Button type="button" variant="link" size="sm" onClick={() => setIsMaterialDialogOp(true)} className="p-0 h-auto text-xs">
+                                        <Button type="button" variant="link" size="sm" onClick={openEdgeBandMaterialDialog} className="p-0 h-auto text-xs">
                                             <PlusCircle className="mr-1 h-3 w-3" /> Define New...
                                         </Button>
                                     </div>
@@ -1067,8 +1073,12 @@ export default function CabinetDesignerPage() {
       <PageHeader title="Cabinet Designer" description={viewMode === 'calculator' ? "Configure, calculate parts, and estimate costs for individual cabinets or entire projects." : "Define a new parametric cabinet template."}/>
       {viewMode === 'calculator' ? renderCalculatorView() : renderTemplateDefinitionView()}
 
-      <Dialog open={isMaterialDialogOp} onOpenChange={setIsMaterialDialogOp}>
-        <AddMaterialTypeDialog setOpen={setIsMaterialDialogOp} onMaterialTypeAdded={fetchCustomDefinitionsAndFormulas} />
+      <Dialog open={isMaterialDialogOp} onOpenChange={(open) => { setIsMaterialDialogOp(open); if (!open) setMaterialDialogInitialType(null); }}>
+        <AddMaterialTypeDialog 
+            setOpen={setIsMaterialDialogOp} 
+            onMaterialTypeAdded={fetchCustomDefinitionsAndFormulas}
+            initialType={materialDialogInitialType} 
+        />
       </Dialog>
       <Dialog open={isAccessoryDialogOp} onOpenChange={setIsAccessoryDialogOp}>
          <AddAccessoryTypeDialog setOpen={setIsAccessoryDialogOp} onAccessoryTypeAdded={fetchCustomDefinitionsAndFormulas} />
@@ -1096,5 +1106,3 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
-
-    

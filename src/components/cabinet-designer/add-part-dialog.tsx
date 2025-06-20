@@ -90,10 +90,19 @@ interface AddPartDialogProps {
   existingPartCount: number;
   templateParameters: CabinetTemplateData['parameters']; 
   materialOptions: GenericSelectItem[];
-  onRequestOpenMaterialDialog: () => void;
+  onRequestOpenPanelMaterialDialog: () => void;
+  onRequestOpenEdgeBandMaterialDialog: () => void;
 }
 
-export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateParameters, materialOptions, onRequestOpenMaterialDialog }: AddPartDialogProps) {
+export function AddPartDialog({ 
+  setOpen, 
+  onAddPart, 
+  existingPartCount, 
+  templateParameters, 
+  materialOptions, 
+  onRequestOpenPanelMaterialDialog,
+  onRequestOpenEdgeBandMaterialDialog 
+}: AddPartDialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
 
@@ -166,7 +175,7 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
         partId: `${values.partType.toLowerCase().replace(/[\s()]+/g, '_')}_${existingPartCount + 1}_${Date.now()}`, nameLabel: values.nameLabel, partType: values.partType, cabinetContext: values.cabinetContext,
         quantityFormula: values.quantityFormula, widthFormula: finalWidthFormula, widthFormulaKey: values.widthFormulaKey, heightFormula: finalHeightFormula, heightFormulaKey: values.heightFormulaKey,
         materialId: values.materialId,
-        edgeBandingMaterialId: values.edgeBandingMaterialId,
+        edgeBandingMaterialId: values.edgeBandingMaterialId === NO_EDGE_BANDING_PLACEHOLDER ? null : values.edgeBandingMaterialId,
         grainDirection: values.grainDirection, edgeBanding: edgeBanding, notes: values.notes || `Added via dialog. Part Type: ${values.partType}`,
         thicknessFormula: null,
         thicknessFormulaKey: null,
@@ -219,7 +228,7 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
                 <FormItem>
                   <div className="flex items-center justify-between">
                     <FormLabel>Material (Panel)*</FormLabel>
-                    <Button type="button" variant="link" size="sm" onClick={onRequestOpenMaterialDialog} className="p-0 h-auto text-xs">
+                    <Button type="button" variant="link" size="sm" onClick={onRequestOpenPanelMaterialDialog} className="p-0 h-auto text-xs">
                       <PlusCircle className="mr-1 h-3 w-3" /> Define New...
                     </Button>
                   </div>
@@ -251,7 +260,7 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
                 <FormItem>
                   <div className="flex items-center justify-between">
                     <FormLabel>Edge Banding Material (Optional)</FormLabel>
-                     <Button type="button" variant="link" size="sm" onClick={onRequestOpenMaterialDialog} className="p-0 h-auto text-xs">
+                     <Button type="button" variant="link" size="sm" onClick={onRequestOpenEdgeBandMaterialDialog} className="p-0 h-auto text-xs">
                       <PlusCircle className="mr-1 h-3 w-3" /> Define New...
                     </Button>
                   </div>
@@ -279,5 +288,3 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
     </DialogContent>
   );
 }
-
-    
