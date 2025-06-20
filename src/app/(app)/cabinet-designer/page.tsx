@@ -547,7 +547,7 @@ export default function CabinetDesignerPage() {
             const result = await saveCustomFormulaAction(formulaName, formulaToSave, dimType, "Saved from template editor");
             if (result.success) {
                 toast({title: "Formula Saved", description: `Formula "${formulaName}" saved globally.`});
-                onRefreshGlobalFormulas();
+                onRefreshGlobalFormulas(); // Refresh the list of global formulas
             } else {
                  toast({title: "Error Saving Formula", description: result.error || "Could not save formula.", variant: "destructive"});
             }
@@ -565,13 +565,21 @@ export default function CabinetDesignerPage() {
            <div className="flex flex-col items-center space-y-1">
                 <DropdownMenu><DropdownMenuTrigger asChild><Button variant="outline" size="sm" className="whitespace-nowrap px-2"><ChevronDown className="h-4 w-4" /> <span className="ml-1 text-xs">Ins</span></Button></DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
-                    {combinedFormulas.map((item) => ( <DropdownMenuItem key={item.id} onSelect={() => handleFormulaSelect(partIndex, formulaField as any, item.formula)} className="flex justify-between items-center text-xs">
+                    {combinedFormulas.map((item) => ( <DropdownMenuItem key={item.id || item.key} onSelect={() => handleFormulaSelect(partIndex, formulaField as any, item.formula)} className="flex justify-between items-center text-xs">
                         <span className={item.type === 'custom_db' ? 'italic' : ''}>{item.name} ({item.formula})</span>
                         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6 opacity-50 hover:opacity-100"><HelpCircle className="h-3 w-3" /></Button></TooltipTrigger><TooltipContent side="left" className="max-w-xs text-xs p-2 bg-popover text-popover-foreground"><p className="font-semibold">{item.description}</p><p className="text-xs text-muted-foreground">{item.example}</p></TooltipContent></Tooltip></DropdownMenuItem> ))}
                     <DropdownMenuItem key="CUSTOM" onSelect={() => handleFormulaSelect(partIndex, formulaField as any, PREDEFINED_FORMULAS.find(f => f.key === 'CUSTOM')?.formula || "")} className="flex justify-between items-center text-xs"><span className="font-semibold">Custom Formula... (Type directly)</span></DropdownMenuItem>
                 </DropdownMenuContent></DropdownMenu>
              {isCustomEntryMode && (
-                <Button type="button" variant="outline" size="sm" onClick={handleSaveGlobal} className="whitespace-nowrap px-2" title="Save this custom formula globally" disabled={!currentFormulaValue || !currentFormulaValue.trim()}>
+                <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={handleSaveGlobal}
+                    className="whitespace-nowrap px-2"
+                    title="Save this custom formula globally"
+                    disabled={!currentFormulaValue || !currentFormulaValue.trim()}
+                >
                     <Save className="h-4 w-4" /> <span className="ml-1 text-xs">Save</span>
                 </Button>
             )}
@@ -972,6 +980,7 @@ export default function CabinetDesignerPage() {
                             materialOptions={combinedMaterialOptions}
                             onRequestOpenPanelMaterialDialog={openPanelMaterialDialog}
                             onRequestOpenEdgeBandMaterialDialog={openEdgeBandMaterialDialog}
+                            globalCustomFormulas={globalCustomFormulas} 
                         />
                     </Dialog></CardHeader>
                     <CardContent className="space-y-4"><ScrollArea className="max-h-[600px] pr-3">
@@ -984,7 +993,6 @@ export default function CabinetDesignerPage() {
                             <div className="mb-3 p-2 border rounded-md bg-muted/30 text-sm space-y-1"><Input id={`partName_${index}`} value={part.nameLabel} onChange={(e) => handleTemplateInputChange(e, `parts.${index}.nameLabel`)} className="text-base font-medium mb-1"/>
                                 <p><span className="font-medium">Type:</span> {part.partType} ({part.cabinetContext || 'General'})</p>
                                 <p><span className="font-medium">Calc. Dim (H x W):</span>{` ${calculatedHeight}${isNaN(Number(calculatedHeight)) ? '' : 'mm'} x ${calculatedWidth}${isNaN(Number(calculatedWidth)) ? '' : 'mm'}`}<span className="text-muted-foreground text-[10px] block">(Formulas: {part.heightFormula || 'N/A'} x {part.widthFormula || 'N/A'})</span></p>
-                                <p><span className="font-medium">Calc. Qty:</span> {calculatedQty} <span className="text-muted-foreground text-[10px]">(Formula: {part.quantityFormula})</span></p>
                                 <p><span className="font-medium">Material:</span> {materialInfo?.label || part.materialId} (Thickness derived from material)</p><p><span className="font-medium">Grain:</span> {grainText}</p></div>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-3 items-start">
                                 <FormulaInputWithHelper partIndex={index} formulaField="quantityFormula" label="Quantity Formula*" placeholder="e.g., 2" customDbFormulas={globalCustomFormulas} onRefreshGlobalFormulas={fetchCustomDefinitionsAndFormulas} />
@@ -1106,3 +1114,4 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
+

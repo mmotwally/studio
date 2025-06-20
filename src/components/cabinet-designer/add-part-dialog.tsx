@@ -28,11 +28,13 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import type { PartDefinition, CabinetPartType, EdgeBandingAssignment, CabinetTypeContext, PredefinedFormula, CabinetTemplateData, SelectItem as GenericSelectItem } from "@/app/(app)/cabinet-designer/types";
+import type { PartDefinition, CabinetPartType, EdgeBandingAssignment, CabinetTypeContext, PredefinedFormula, CabinetTemplateData, SelectItem as GenericSelectItem, CustomFormulaEntry } from "@/app/(app)/cabinet-designer/types";
 import { PREDEFINED_FORMULAS } from "@/app/(app)/cabinet-designer/predefined-formulas";
 import { Textarea } from "@/components/ui/textarea";
-import { PlusCircle } from "lucide-react";
+import { PlusCircle, HelpCircle, ChevronDown } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+
 
 const cabinetPartTypes: CabinetPartType[] = [
   'Side Panel', 'Bottom Panel', 'Top Panel', 'Back Panel', 'Double Back Panel', 
@@ -92,6 +94,7 @@ interface AddPartDialogProps {
   materialOptions: GenericSelectItem[];
   onRequestOpenPanelMaterialDialog: () => void;
   onRequestOpenEdgeBandMaterialDialog: () => void;
+  globalCustomFormulas: CustomFormulaEntry[];
 }
 
 export function AddPartDialog({ 
@@ -101,7 +104,8 @@ export function AddPartDialog({
   templateParameters, 
   materialOptions, 
   onRequestOpenPanelMaterialDialog,
-  onRequestOpenEdgeBandMaterialDialog 
+  onRequestOpenEdgeBandMaterialDialog,
+  globalCustomFormulas,
 }: AddPartDialogProps) {
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -135,17 +139,30 @@ export function AddPartDialog({
   const selectedPartType = form.watch("partType");
   const selectedCabinetContext = form.watch("cabinetContext");
 
-  const getFilteredFormulas = (dimension: 'Width' | 'Height') => {
-    return PREDEFINED_FORMULAS.filter(f =>
+  const getFilteredFormulas = React.useCallback((dimension: 'Width' | 'Height') => {
+    const predefinedFiltered = PREDEFINED_FORMULAS.filter(f =>
       f.dimension === dimension &&
       (Array.isArray(f.partType) ? f.partType.includes(selectedPartType) : f.partType === selectedPartType || f.partType.length === 0) &&
       (f.context === null || (selectedCabinetContext && f.context.includes(selectedCabinetContext))) &&
       f.key !== CUSTOM_FORMULA_KEY 
-    ).sort((a,b) => a.name.localeCompare(b.name));
-  };
+    ).map(f => ({ ...f, type: 'predefined' as const, id: f.key }));
+
+    const relevantGlobalFormulas = (globalCustomFormulas || []).filter(f =>
+        (f.dimensionType === 'Width' && dimension === 'Width') ||
+        (f.dimensionType === 'Height' && dimension === 'Height')
+    ).map(f_glob => ({
+        id: f_glob.id, key: f_glob.id, name: `${f_glob.name} (Global)`, formula: f_glob.formulaString,
+        description: f_glob.description || 'User-defined global formula.',
+        example: `Global Formula: ${f_glob.formulaString}`, type: 'custom_db' as const,
+        partType: [], context: null, dimension: f_glob.dimensionType,
+    }));
+
+    return [...predefinedFiltered, ...relevantGlobalFormulas].sort((a,b) => a.name.localeCompare(b.name));
+  }, [selectedPartType, selectedCabinetContext, globalCustomFormulas]);
   
-  const availableWidthFormulas = React.useMemo(() => getFilteredFormulas('Width'), [selectedPartType, selectedCabinetContext]);
-  const availableHeightFormulas = React.useMemo(() => getFilteredFormulas('Height'), [selectedPartType, selectedCabinetContext]);
+  const availableWidthFormulas = React.useMemo(() => getFilteredFormulas('Width'), [getFilteredFormulas]);
+  const availableHeightFormulas = React.useMemo(() => getFilteredFormulas('Height'), [getFilteredFormulas]);
+
 
   React.useEffect(() => {
     if (selectedPartType) {
@@ -155,12 +172,12 @@ export function AddPartDialog({
         else form.setValue("quantityFormula", "1", { shouldDirty: true });
         
         const firstWidthFormula = availableWidthFormulas[0];
-        if (firstWidthFormula) { form.setValue("widthFormulaKey", firstWidthFormula.key, { shouldDirty: true }); form.setValue("customWidthFormula", firstWidthFormula.formula, { shouldDirty: true }); }
-        else { form.setValue("widthFormulaKey", CUSTOM_FORMULA_KEY, { shouldDirty: true }); form.setValue("customWidthFormula", "", { shouldDirty: true }); }
+        if (firstWidthFormula) { form.setValue("widthFormulaKey", firstWidthFormula.key, { shouldDirty: true }); form.setValue("customWidthFormula", firstWidthFormula.formula, { shouldValidate: true }); }
+        else { form.setValue("widthFormulaKey", CUSTOM_FORMULA_KEY, { shouldDirty: true }); form.setValue("customWidthFormula", "", { shouldValidate: true }); }
 
         const firstHeightFormula = availableHeightFormulas[0];
-        if (firstHeightFormula) { form.setValue("heightFormulaKey", firstHeightFormula.key, { shouldDirty: true }); form.setValue("customHeightFormula", firstHeightFormula.formula, { shouldDirty: true }); }
-        else { form.setValue("heightFormulaKey", CUSTOM_FORMULA_KEY, { shouldDirty: true }); form.setValue("customHeightFormula", "", { shouldDirty: true }); }
+        if (firstHeightFormula) { form.setValue("heightFormulaKey", firstHeightFormula.key, { shouldDirty: true }); form.setValue("customHeightFormula", firstHeightFormula.formula, { shouldValidate: true }); }
+        else { form.setValue("heightFormulaKey", CUSTOM_FORMULA_KEY, { shouldDirty: true }); form.setValue("customHeightFormula", "", { shouldValidate: true }); }
     }
   }, [selectedPartType, selectedCabinetContext, form, availableWidthFormulas, availableHeightFormulas]);
 
@@ -168,12 +185,26 @@ export function AddPartDialog({
     setIsSubmitting(true);
     try {
       const edgeBanding: EdgeBandingAssignment = { front: values.edgeBanding_front, back: values.edgeBanding_back, top: values.edgeBanding_top, bottom: values.edgeBanding_bottom };
-      const finalWidthFormula = values.widthFormulaKey === CUSTOM_FORMULA_KEY ? values.customWidthFormula || "" : PREDEFINED_FORMULAS.find(f => f.key === values.widthFormulaKey)?.formula || values.customWidthFormula || "";
-      const finalHeightFormula = values.heightFormulaKey === CUSTOM_FORMULA_KEY ? values.customHeightFormula || "" : PREDEFINED_FORMULAS.find(f => f.key === values.heightFormulaKey)?.formula || values.customHeightFormula || "";
+      
+      let finalWidthFormula = values.customWidthFormula || "";
+      if (values.widthFormulaKey !== CUSTOM_FORMULA_KEY) {
+          const selectedPredef = PREDEFINED_FORMULAS.find(f => f.key === values.widthFormulaKey);
+          const selectedGlobal = globalCustomFormulas.find(f => f.id === values.widthFormulaKey);
+          finalWidthFormula = selectedPredef?.formula || selectedGlobal?.formulaString || values.customWidthFormula || "";
+      }
+
+      let finalHeightFormula = values.customHeightFormula || "";
+       if (values.heightFormulaKey !== CUSTOM_FORMULA_KEY) {
+          const selectedPredef = PREDEFINED_FORMULAS.find(f => f.key === values.heightFormulaKey);
+          const selectedGlobal = globalCustomFormulas.find(f => f.id === values.heightFormulaKey);
+          finalHeightFormula = selectedPredef?.formula || selectedGlobal?.formulaString || values.customHeightFormula || "";
+      }
       
       const newPart: PartDefinition = {
         partId: `${values.partType.toLowerCase().replace(/[\s()]+/g, '_')}_${existingPartCount + 1}_${Date.now()}`, nameLabel: values.nameLabel, partType: values.partType, cabinetContext: values.cabinetContext,
-        quantityFormula: values.quantityFormula, widthFormula: finalWidthFormula, widthFormulaKey: values.widthFormulaKey, heightFormula: finalHeightFormula, heightFormulaKey: values.heightFormulaKey,
+        quantityFormula: values.quantityFormula, quantityFormulaKey: values.quantityFormula,
+        widthFormula: finalWidthFormula, widthFormulaKey: values.widthFormulaKey, 
+        heightFormula: finalHeightFormula, heightFormulaKey: values.heightFormulaKey,
         materialId: values.materialId,
         edgeBandingMaterialId: values.edgeBandingMaterialId === NO_EDGE_BANDING_PLACEHOLDER ? null : values.edgeBandingMaterialId,
         grainDirection: values.grainDirection, edgeBanding: edgeBanding, notes: values.notes || `Added via dialog. Part Type: ${values.partType}`,
@@ -189,19 +220,43 @@ export function AddPartDialog({
     } finally { setIsSubmitting(false); }
   }
 
-  const renderFormulaSelect = (dimension: 'Width' | 'Height', availableFormulas: PredefinedFormula[], valueKey: "widthFormulaKey" | "heightFormulaKey", customValueKey: "customWidthFormula" | "customHeightFormula") => (
+  const renderFormulaSelect = (dimension: 'Width' | 'Height', availableFormulasForDim: Array<any>, valueKey: "widthFormulaKey" | "heightFormulaKey", customValueKey: "customWidthFormula" | "customHeightFormula") => (
     <FormField control={form.control} name={valueKey}
       render={({ field }) => (
         <FormItem>
           <FormLabel>{dimension} Formula*</FormLabel>
-          <Select onValueChange={(val) => { field.onChange(val); if (val !== CUSTOM_FORMULA_KEY) { const selected = PREDEFINED_FORMULAS.find(f => f.key === val); form.setValue(customValueKey, selected?.formula || "", {shouldValidate: true}); } else { form.setValue(customValueKey, "", {shouldValidate: true}); }}} value={field.value}>
-            <FormControl><SelectTrigger><SelectValue placeholder={`Select ${dimension.toLowerCase()} formula`} /></SelectTrigger></FormControl>
-            <SelectContent>
-              {availableFormulas.map((f) => (<SelectItem key={f.key} value={f.key}>{f.name} ({f.formula})</SelectItem>))}
-              <SelectItem value={CUSTOM_FORMULA_KEY}>Custom Formula...</SelectItem>
-            </SelectContent>
-          </Select>
-          <FormMessage />
+          <div className="flex items-end gap-2">
+             <div className="flex-grow">
+              <Select 
+                onValueChange={(val) => { 
+                  field.onChange(val); 
+                  if (val !== CUSTOM_FORMULA_KEY) { 
+                    const selectedF = availableFormulasForDim.find(f_item => f_item.key === val);
+                    form.setValue(customValueKey, selectedF?.formula || "", {shouldValidate: true}); 
+                  } else { 
+                    form.setValue(customValueKey, "", {shouldValidate: true}); 
+                  } 
+                }} 
+                value={field.value}
+              >
+                <FormControl><SelectTrigger><SelectValue placeholder={`Select ${dimension.toLowerCase()} formula`} /></SelectTrigger></FormControl>
+                <SelectContent>
+                  {availableFormulasForDim.map((f_item) => (<SelectItem key={f_item.key} value={f_item.key}>{f_item.name} ({f_item.formula})</SelectItem>))}
+                  <SelectItem value={CUSTOM_FORMULA_KEY}>Custom Formula...</SelectItem>
+                </SelectContent>
+              </Select>
+              <FormMessage />
+            </div>
+             <DropdownMenu>
+                <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" className="h-10 w-10 shrink-0"><ChevronDown className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                 <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
+                    {availableFormulasForDim.map((item) => ( <DropdownMenuItem key={item.key} onSelect={() => { field.onChange(item.key); form.setValue(customValueKey, item.formula, {shouldValidate: true}); }} className="flex justify-between items-center text-xs">
+                        <span className={item.type === 'custom_db' ? 'italic' : ''}>{item.name} ({item.formula})</span>
+                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6 opacity-50 hover:opacity-100"><HelpCircle className="h-3 w-3" /></Button></TooltipTrigger><TooltipContent side="left" className="max-w-xs text-xs p-2 bg-popover text-popover-foreground"><p className="font-semibold">{item.description}</p><p className="text-xs text-muted-foreground">{item.example}</p></TooltipContent></Tooltip></DropdownMenuItem> ))}
+                    <DropdownMenuItem key="CUSTOM" onSelect={() => { field.onChange(CUSTOM_FORMULA_KEY); form.setValue(customValueKey, "", {shouldValidate: true}); }} className="flex justify-between items-center text-xs"><span className="font-semibold">Custom Formula... (Type directly)</span></DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
            {field.value === CUSTOM_FORMULA_KEY && (
              <Controller name={customValueKey} control={form.control} render={({ field: customField }) => (<Textarea {...customField} placeholder={`Enter custom ${dimension.toLowerCase()} formula`} className="mt-2 text-sm" rows={2}/>)}/>
            )}
@@ -288,3 +343,4 @@ export function AddPartDialog({
     </DialogContent>
   );
 }
+
