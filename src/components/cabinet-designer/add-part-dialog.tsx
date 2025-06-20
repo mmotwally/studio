@@ -34,11 +34,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { PlusCircle, HelpCircle, ChevronDown } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 
 
 const cabinetPartTypes: CabinetPartType[] = [
-  'Side Panel', 'Bottom Panel', 'Top Panel', 'Back Panel', 'Double Back Panel', 
-  'Door', 'Doors', 'Drawer Front', 'Drawer Back', 'Drawer Side', 'Drawer Counter Front', 
+  'Side Panel', 'Bottom Panel', 'Top Panel', 'Back Panel', 'Double Back Panel',
+  'Door', 'Doors', 'Drawer Front', 'Drawer Back', 'Drawer Side', 'Drawer Counter Front',
   'Drawer Bottom', 'Mobile Shelf', 'Fixed Shelf', 'Upright', 'Front Panel',
   'Top Rail (Front)', 'Top Rail (Back)', 'Bottom Rail (Front)', 'Bottom Rail (Back)',
   'Stretcher', 'Toe Kick'
@@ -58,8 +59,8 @@ const addPartFormSchema = z.object({
   }),
   nameLabel: z.string().min(1, "Part name label is required."),
   quantityFormula: z.string().min(1, "Quantity formula is required (e.g., '1', '2', or parameter).").default("1"),
-  widthFormulaKey: z.string().optional(), 
-  customWidthFormula: z.string().optional(), 
+  widthFormulaKey: z.string().optional(),
+  customWidthFormula: z.string().optional(),
   heightFormulaKey: z.string().optional(),
   customHeightFormula: z.string().optional(),
   materialId: z.string().min(1, "Material selection is required."),
@@ -90,19 +91,19 @@ interface AddPartDialogProps {
   setOpen: (open: boolean) => void;
   onAddPart: (newPart: PartDefinition) => void;
   existingPartCount: number;
-  templateParameters: CabinetTemplateData['parameters']; 
+  templateParameters: CabinetTemplateData['parameters'];
   materialOptions: GenericSelectItem[];
   onRequestOpenPanelMaterialDialog: () => void;
   onRequestOpenEdgeBandMaterialDialog: () => void;
   globalCustomFormulas: CustomFormulaEntry[];
 }
 
-export function AddPartDialog({ 
-  setOpen, 
-  onAddPart, 
-  existingPartCount, 
-  templateParameters, 
-  materialOptions, 
+export function AddPartDialog({
+  setOpen,
+  onAddPart,
+  existingPartCount,
+  templateParameters,
+  materialOptions,
   onRequestOpenPanelMaterialDialog,
   onRequestOpenEdgeBandMaterialDialog,
   globalCustomFormulas,
@@ -120,7 +121,7 @@ export function AddPartDialog({
       partType: 'Side Panel',
       cabinetContext: 'Base',
       nameLabel: "Side Panel",
-      quantityFormula: "2", 
+      quantityFormula: "2",
       widthFormulaKey: PREDEFINED_FORMULAS.find(f => f.partType === 'Side Panel' && f.context?.includes('Base') && f.dimension === 'Width')?.key || CUSTOM_FORMULA_KEY,
       customWidthFormula: PREDEFINED_FORMULAS.find(f => f.partType === 'Side Panel' && f.context?.includes('Base') && f.dimension === 'Width')?.formula || "D",
       heightFormulaKey: PREDEFINED_FORMULAS.find(f => f.partType === 'Side Panel' && f.context?.includes('Base') && f.dimension === 'Height')?.key || CUSTOM_FORMULA_KEY,
@@ -135,7 +136,7 @@ export function AddPartDialog({
       notes: "",
     },
   });
-  
+
   const selectedPartType = form.watch("partType");
   const selectedCabinetContext = form.watch("cabinetContext");
 
@@ -144,8 +145,8 @@ export function AddPartDialog({
       f.dimension === dimension &&
       (Array.isArray(f.partType) ? f.partType.includes(selectedPartType) : f.partType === selectedPartType || f.partType.length === 0) &&
       (f.context === null || (selectedCabinetContext && f.context.includes(selectedCabinetContext))) &&
-      f.key !== CUSTOM_FORMULA_KEY 
-    ).map(f => ({ ...f, type: 'predefined' as const, id: f.key }));
+      f.key !== CUSTOM_FORMULA_KEY
+    ).map(f => ({ ...f, type: 'predefined' as const, id: f.key, key: f.key })); // Ensure key is preserved
 
     const relevantGlobalFormulas = (globalCustomFormulas || []).filter(f =>
         (f.dimensionType === 'Width' && dimension === 'Width') ||
@@ -159,7 +160,7 @@ export function AddPartDialog({
 
     return [...predefinedFiltered, ...relevantGlobalFormulas].sort((a,b) => a.name.localeCompare(b.name));
   }, [selectedPartType, selectedCabinetContext, globalCustomFormulas]);
-  
+
   const availableWidthFormulas = React.useMemo(() => getFilteredFormulas('Width'), [getFilteredFormulas]);
   const availableHeightFormulas = React.useMemo(() => getFilteredFormulas('Height'), [getFilteredFormulas]);
 
@@ -170,7 +171,7 @@ export function AddPartDialog({
         form.setValue("nameLabel", defaultLabel, { shouldDirty: true });
         if (selectedPartType === 'Side Panel' || selectedPartType === 'Doors' || selectedPartType === 'Drawer Side' || selectedPartType === 'Top Rail (Front)' || selectedPartType === 'Top Rail (Back)') form.setValue("quantityFormula", "2", { shouldDirty: true });
         else form.setValue("quantityFormula", "1", { shouldDirty: true });
-        
+
         const firstWidthFormula = availableWidthFormulas[0];
         if (firstWidthFormula) { form.setValue("widthFormulaKey", firstWidthFormula.key, { shouldDirty: true }); form.setValue("customWidthFormula", firstWidthFormula.formula, { shouldValidate: true }); }
         else { form.setValue("widthFormulaKey", CUSTOM_FORMULA_KEY, { shouldDirty: true }); form.setValue("customWidthFormula", "", { shouldValidate: true }); }
@@ -185,25 +186,23 @@ export function AddPartDialog({
     setIsSubmitting(true);
     try {
       const edgeBanding: EdgeBandingAssignment = { front: values.edgeBanding_front, back: values.edgeBanding_back, top: values.edgeBanding_top, bottom: values.edgeBanding_bottom };
-      
+
       let finalWidthFormula = values.customWidthFormula || "";
       if (values.widthFormulaKey !== CUSTOM_FORMULA_KEY) {
-          const selectedPredef = PREDEFINED_FORMULAS.find(f => f.key === values.widthFormulaKey);
-          const selectedGlobal = globalCustomFormulas.find(f => f.id === values.widthFormulaKey);
-          finalWidthFormula = selectedPredef?.formula || selectedGlobal?.formulaString || values.customWidthFormula || "";
+          const selectedFormula = [...availableWidthFormulas].find(f => f.key === values.widthFormulaKey);
+          finalWidthFormula = selectedFormula?.formula || values.customWidthFormula || "";
       }
 
       let finalHeightFormula = values.customHeightFormula || "";
        if (values.heightFormulaKey !== CUSTOM_FORMULA_KEY) {
-          const selectedPredef = PREDEFINED_FORMULAS.find(f => f.key === values.heightFormulaKey);
-          const selectedGlobal = globalCustomFormulas.find(f => f.id === values.heightFormulaKey);
-          finalHeightFormula = selectedPredef?.formula || selectedGlobal?.formulaString || values.customHeightFormula || "";
+          const selectedFormula = [...availableHeightFormulas].find(f => f.key === values.heightFormulaKey);
+          finalHeightFormula = selectedFormula?.formula || values.customHeightFormula || "";
       }
-      
+
       const newPart: PartDefinition = {
         partId: `${values.partType.toLowerCase().replace(/[\s()]+/g, '_')}_${existingPartCount + 1}_${Date.now()}`, nameLabel: values.nameLabel, partType: values.partType, cabinetContext: values.cabinetContext,
         quantityFormula: values.quantityFormula, quantityFormulaKey: values.quantityFormula,
-        widthFormula: finalWidthFormula, widthFormulaKey: values.widthFormulaKey, 
+        widthFormula: finalWidthFormula, widthFormulaKey: values.widthFormulaKey,
         heightFormula: finalHeightFormula, heightFormulaKey: values.heightFormulaKey,
         materialId: values.materialId,
         edgeBandingMaterialId: values.edgeBandingMaterialId === NO_EDGE_BANDING_PLACEHOLDER ? null : values.edgeBandingMaterialId,
@@ -213,7 +212,7 @@ export function AddPartDialog({
       };
       onAddPart(newPart);
       toast({ title: "Part Added", description: `"${values.nameLabel}" has been added.` });
-      setOpen(false); form.reset(); 
+      setOpen(false); form.reset();
     } catch (error) {
       console.error("Failed to add part:", error);
       toast({ title: "Error", description: (error instanceof Error ? error.message : "Could not add part."), variant: "destructive" });
@@ -227,21 +226,21 @@ export function AddPartDialog({
           <FormLabel>{dimension} Formula*</FormLabel>
           <div className="flex items-end gap-2">
              <div className="flex-grow">
-              <Select 
-                onValueChange={(val) => { 
-                  field.onChange(val); 
-                  if (val !== CUSTOM_FORMULA_KEY) { 
+              <Select
+                onValueChange={(val) => {
+                  field.onChange(val);
+                  if (val !== CUSTOM_FORMULA_KEY) {
                     const selectedF = availableFormulasForDim.find(f_item => f_item.key === val);
-                    form.setValue(customValueKey, selectedF?.formula || "", {shouldValidate: true}); 
-                  } else { 
-                    form.setValue(customValueKey, "", {shouldValidate: true}); 
-                  } 
-                }} 
+                    form.setValue(customValueKey, selectedF?.formula || "", {shouldValidate: true});
+                  } else {
+                    form.setValue(customValueKey, "", {shouldValidate: true});
+                  }
+                }}
                 value={field.value}
               >
                 <FormControl><SelectTrigger><SelectValue placeholder={`Select ${dimension.toLowerCase()} formula`} /></SelectTrigger></FormControl>
                 <SelectContent>
-                  {availableFormulasForDim.map((f_item) => (<SelectItem key={f_item.key} value={f_item.key}>{f_item.name} ({f_item.formula})</SelectItem>))}
+                  {availableFormulasForDim.map((f_item) => (<SelectItem key={f_item.key || f_item.id} value={f_item.key || f_item.id}>{f_item.name} ({f_item.formula})</SelectItem>))}
                   <SelectItem value={CUSTOM_FORMULA_KEY}>Custom Formula...</SelectItem>
                 </SelectContent>
               </Select>
@@ -250,7 +249,7 @@ export function AddPartDialog({
              <DropdownMenu>
                 <DropdownMenuTrigger asChild><Button type="button" variant="outline" size="icon" className="h-10 w-10 shrink-0"><ChevronDown className="h-4 w-4" /></Button></DropdownMenuTrigger>
                  <DropdownMenuContent align="end" className="w-80 max-h-96 overflow-y-auto">
-                    {availableFormulasForDim.map((item) => ( <DropdownMenuItem key={item.key} onSelect={() => { field.onChange(item.key); form.setValue(customValueKey, item.formula, {shouldValidate: true}); }} className="flex justify-between items-center text-xs">
+                    {availableFormulasForDim.map((item) => ( <DropdownMenuItem key={item.key || item.id} onSelect={() => { field.onChange(item.key || item.id); form.setValue(customValueKey, item.formula, {shouldValidate: true}); }} className="flex justify-between items-center text-xs">
                         <span className={item.type === 'custom_db' ? 'italic' : ''}>{item.name} ({item.formula})</span>
                         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6 opacity-50 hover:opacity-100"><HelpCircle className="h-3 w-3" /></Button></TooltipTrigger><TooltipContent side="left" className="max-w-xs text-xs p-2 bg-popover text-popover-foreground"><p className="font-semibold">{item.description}</p><p className="text-xs text-muted-foreground">{item.example}</p></TooltipContent></Tooltip></DropdownMenuItem> ))}
                     <DropdownMenuItem key="CUSTOM" onSelect={() => { field.onChange(CUSTOM_FORMULA_KEY); form.setValue(customValueKey, "", {shouldValidate: true}); }} className="flex justify-between items-center text-xs"><span className="font-semibold">Custom Formula... (Type directly)</span></DropdownMenuItem>
@@ -274,10 +273,10 @@ export function AddPartDialog({
             </div>
             <FormField control={form.control} name="nameLabel" render={({ field }) => (<FormItem><FormLabel>Part Name Label*</FormLabel><FormControl><Input placeholder="e.g., Left Side Panel" {...field} /></FormControl><FormMessage /></FormItem>)}/>
             <FormField control={form.control} name="quantityFormula" render={({ field }) => (<FormItem><FormLabel>Quantity Formula*</FormLabel><FormControl><Input placeholder="e.g., 1 or 2" {...field} /></FormControl><FormMessage /></FormItem>)}/>
-            
+
             {renderFormulaSelect('Width', availableWidthFormulas, 'widthFormulaKey', 'customWidthFormula')}
             {renderFormulaSelect('Height', availableHeightFormulas, 'heightFormulaKey', 'customHeightFormula')}
-            
+
             <FormField control={form.control} name="materialId"
               render={({ field }) => (
                 <FormItem>
@@ -292,7 +291,7 @@ export function AddPartDialog({
                     <SelectContent>{materialOptions.filter(m => m.type === 'panel' || m.type === 'other').map((material) => (<SelectItem key={material.value} value={material.value}>{material.label}</SelectItem>))}</SelectContent>
                   </Select><FormMessage />
                 </FormItem>)}/>
-              
+
             <FormField control={form.control} name="grainDirection"
               render={({ field }) => (
                 <FormItem><FormLabel>Grain Direction</FormLabel>
@@ -302,7 +301,7 @@ export function AddPartDialog({
                           <FormItem className="flex items-center space-x-2"><RadioGroupItem value="reverse" id="grain-reverse-dlg" /><Label htmlFor="grain-reverse-dlg" className="font-normal">Reverse Grain (Width)</Label></FormItem>
                       </RadioGroup></FormControl><FormMessage />
                 </FormItem>)}/>
-            
+
             <div>
               <FormLabel className="text-base font-medium">Edge Banding Application</FormLabel>
               <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2">
@@ -319,8 +318,8 @@ export function AddPartDialog({
                       <PlusCircle className="mr-1 h-3 w-3" /> Define New...
                     </Button>
                   </div>
-                  <Select 
-                    onValueChange={(value) => field.onChange(value === NO_EDGE_BANDING_PLACEHOLDER ? null : value)} 
+                  <Select
+                    onValueChange={(value) => field.onChange(value === NO_EDGE_BANDING_PLACEHOLDER ? null : value)}
                     value={field.value || NO_EDGE_BANDING_PLACEHOLDER}
                   >
                     <FormControl><SelectTrigger><SelectValue placeholder="Select edge banding material (optional)" /></SelectTrigger></FormControl>
@@ -332,7 +331,7 @@ export function AddPartDialog({
                 </FormItem>)}/>
 
             <FormField control={form.control} name="notes" render={({ field }) => (<FormItem><FormLabel>Part Notes</FormLabel><FormControl><Textarea placeholder="Optional notes..." {...field} value={field.value ?? ""} /></FormControl><FormMessage /></FormItem>)}/>
-            
+
             <DialogFooter className="sticky bottom-0 bg-background py-4 border-t -mx-6 px-6">
               <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button></DialogClose>
               <Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Adding..." : "Add Part to Template"}</Button>
@@ -343,4 +342,3 @@ export function AddPartDialog({
     </DialogContent>
   );
 }
-
