@@ -137,7 +137,7 @@ export default function CabinetDesignerPage() {
   const [drawerSetResult, setDrawerSetResult] = React.useState<DrawerSetCalculatorResult | null>(null);
   const [isCalculatingDrawers, setIsCalculatingDrawers] = React.useState(false);
   const [drawerCalcError, setDrawerCalcError] = React.useState<string | null>(null);
-  
+
   const [projectCabinetItems, setProjectCabinetItems] = React.useState<ProjectCabinetItem[]>([]);
   const [projectCalculationResult, setProjectCalculationResult] = React.useState<ProjectCalculationResult | null>(null);
   const [isCalculatingProject, setIsCalculatingProject] = React.useState(false);
@@ -148,7 +148,7 @@ export default function CabinetDesignerPage() {
   const [customMaterialTypes, setCustomMaterialTypes] = React.useState<MaterialDefinitionDB[]>([]);
   const [customAccessoryTypes, setCustomAccessoryTypes] = React.useState<AccessoryDefinitionDB[]>([]);
   const [globalCustomFormulas, setGlobalCustomFormulas] = React.useState<CustomFormulaEntry[]>([]);
-  const [isMaterialDialogOp, setIsMaterialDialogOp] = React.useState(false); 
+  const [isMaterialDialogOp, setIsMaterialDialogOp] = React.useState(false);
   const [isAccessoryDialogOp, setIsAccessoryDialogOp] = React.useState(false);
   const [templateToDelete, setTemplateToDelete] = React.useState<CabinetTemplateData | null>(null);
 
@@ -220,7 +220,7 @@ export default function CabinetDesignerPage() {
                 newCalcInput.width = defaultDims.width; newCalcInput.height = defaultDims.height; newCalcInput.depth = defaultDims.depth;
             }
         } else if (dbType) {
-            newCalcInput.customTemplate = dbType; 
+            newCalcInput.customTemplate = dbType;
             newCalcInput.width = dbType.defaultDimensions.width; newCalcInput.height = dbType.defaultDimensions.height; newCalcInput.depth = dbType.defaultDimensions.depth;
         }
         return newCalcInput;
@@ -335,13 +335,13 @@ export default function CabinetDesignerPage() {
         const newTemplate = JSON.parse(JSON.stringify(prev));
         if (newTemplate.parts && newTemplate.parts[partIndex]) {
             (newTemplate.parts[partIndex] as any)[formulaField] = selectedFormulaValue;
-            const isPredefined = PREDEFINED_FORMULAS.find(f => f.formula === selectedFormulaValue && 
+            const isPredefined = PREDEFINED_FORMULAS.find(f => f.formula === selectedFormulaValue &&
                 ( (f.dimension === 'Width' && formulaField === 'widthFormula') ||
                   (f.dimension === 'Height' && formulaField === 'heightFormula') ||
                   (f.dimension === 'Quantity' && formulaField === 'quantityFormula') ||
                   (f.dimension === 'Thickness' && formulaField === 'thicknessFormula') )
             );
-            const isGlobalCustom = globalCustomFormulas.find(f => f.formulaString === selectedFormulaValue && 
+            const isGlobalCustom = globalCustomFormulas.find(f => f.formulaString === selectedFormulaValue &&
                  ( (f.dimensionType === 'Width' && formulaField === 'widthFormula') ||
                    (f.dimensionType === 'Height' && formulaField === 'heightFormula') ||
                    (f.dimensionType === 'Quantity' && formulaField === 'quantityFormula') ||
@@ -379,7 +379,7 @@ export default function CabinetDesignerPage() {
         if (result.success && result.id) {
             toast({ title: "Template Saved to Database", description: `Template "${currentTemplate.name}" (ID: ${result.id}) saved.` });
             const updatedTemplates = await fetchAndSetTemplates();
-            const savedFullTemplate = updatedTemplates.find(t => t.id === result.id) || currentTemplate; 
+            const savedFullTemplate = updatedTemplates.find(t => t.id === result.id) || currentTemplate;
             setCalculationInput({
                 cabinetType: result.id, width: savedFullTemplate.defaultDimensions.width, height: savedFullTemplate.defaultDimensions.height,
                 depth: savedFullTemplate.defaultDimensions.depth, customTemplate: savedFullTemplate,
@@ -414,7 +414,7 @@ export default function CabinetDesignerPage() {
       await deleteCabinetTemplateAction(templateToDelete.id);
       toast({ title: "Template Deleted", description: `Template "${templateToDelete.name}" has been deleted.` });
       setTemplateToDelete(null);
-      await fetchAndSetTemplates(); 
+      await fetchAndSetTemplates();
       if (calculationInput.cabinetType === templateToDelete.id) {
         setCalculationInput({
           cabinetType: 'standard_base_2_door',
@@ -480,7 +480,7 @@ export default function CabinetDesignerPage() {
       const currentFormulaKey = (currentTemplate.parts[partIndex] as any)[`${formulaField}Key`];
       const currentFormulaValue = (currentTemplate.parts[partIndex] as any)[formulaField] || "";
 
-      const isCustomEntryMode = currentFormulaKey === 'CUSTOM' && !globalCustomFormulas.find(f => f.formulaString === currentFormulaValue && (f.dimensionType === 'Width' ? formulaField === 'widthFormula' : f.dimensionType === 'Height' ? formulaField === 'heightFormula' : f.dimensionType === 'Quantity' ? formulaField === 'quantityFormula' : formulaField === 'thicknessFormula')) && !PREDEFINED_FORMULAS.find(f => f.formula === currentFormulaValue && (f.dimension === 'Width' ? formulaField === 'widthFormula' : f.dimension === 'Height' ? formulaField === 'heightFormula' : f.dimension === 'Quantity' ? formulaField === 'quantityFormula' : formulaField === 'thicknessFormula'));
+      const isCustomEntryMode = currentFormulaKey === 'CUSTOM';
 
       let relevantFormulas = PREDEFINED_FORMULAS.filter(f => {
           const part = currentTemplate.parts[partIndex];
@@ -490,8 +490,8 @@ export default function CabinetDesignerPage() {
           const dimensionMatch = (f.dimension === 'Width' && formulaField === 'widthFormula') || (f.dimension === 'Height' && formulaField === 'heightFormula') || (f.dimension === 'Quantity' && formulaField === 'quantityFormula') || (f.dimension === 'Thickness' && formulaField === 'thicknessFormula');
           return contextMatch && partTypeMatch && dimensionMatch;
       }).map(f => ({ ...f, type: 'predefined' as const, id: f.key }));
-      
-      const relevantCustomDbFormulas = customDbFormulas.filter(f => 
+
+      const relevantCustomDbFormulas = customDbFormulas.filter(f =>
            (f.dimensionType === 'Width' && formulaField === 'widthFormula') ||
            (f.dimensionType === 'Height' && formulaField === 'heightFormula') ||
            (f.dimensionType === 'Quantity' && formulaField === 'quantityFormula') ||
@@ -502,7 +502,7 @@ export default function CabinetDesignerPage() {
           example: `Custom Formula: ${f.formulaString}`, type: 'custom_db' as const,
           partType: [], context: null, dimension: f.dimensionType
       }));
-      
+
       const combinedFormulas = [...relevantFormulas, ...relevantCustomDbFormulas].sort((a,b) => a.name.localeCompare(b.name));
 
       const handleSaveGlobal = async () => {
@@ -550,7 +550,7 @@ export default function CabinetDesignerPage() {
                         <span className={item.type === 'custom_db' ? 'italic' : ''}>{item.name} ({item.formula})</span>
                         <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6 opacity-50 hover:opacity-100"><HelpCircle className="h-3 w-3" /></Button></TooltipTrigger><TooltipContent side="left" className="max-w-xs text-xs p-2 bg-popover text-popover-foreground"><p className="font-semibold">{item.description}</p><p className="text-xs text-muted-foreground">{item.example}</p></TooltipContent></Tooltip></DropdownMenuItem> ))}
                     <DropdownMenuItem key="CUSTOM" onSelect={() => handleFormulaSelect(partIndex, formulaField as any, PREDEFINED_FORMULAS.find(f => f.key === 'CUSTOM')?.formula || "")} className="flex justify-between items-center text-xs"><span className="font-semibold">Custom Formula... (Type directly)</span></DropdownMenuItem>
-                </DropdownMenuContent></DropdownMenu> 
+                </DropdownMenuContent></DropdownMenu>
             )}
             {isCustomEntryMode && currentFormulaValue.trim() && (
                 <Button type="button" variant="outline" size="sm" onClick={handleSaveGlobal} className="whitespace-nowrap px-2" title="Save this custom formula globally">
@@ -589,7 +589,7 @@ export default function CabinetDesignerPage() {
       })
     );
   };
-  
+
   const handleCalculateProject = async () => {
     if (projectCabinetItems.length === 0) {
       toast({ title: "Project Empty", description: "Add some cabinets to the project first." });
@@ -597,7 +597,7 @@ export default function CabinetDesignerPage() {
     }
     setIsCalculatingProject(true);
     setProjectCalculationResult(null);
-    setLatestCalculatedProjectPartsForNesting([]); 
+    setLatestCalculatedProjectPartsForNesting([]);
     let cumulativeCost = 0;
     let cumulativePanelArea = 0;
     let cumulativeBackPanelArea = 0;
@@ -609,7 +609,7 @@ export default function CabinetDesignerPage() {
       for (const projectItem of projectCabinetItems) {
         let templateForCalc: CabinetTemplateData | undefined = undefined;
         const isHardcoded = initialHardcodedCabinetTypes.some(hct => hct.value === projectItem.templateId);
-        
+
         if (!isHardcoded) {
           if (currentTemplate && currentTemplate.id === projectItem.templateId) {
             templateForCalc = currentTemplate;
@@ -621,7 +621,7 @@ export default function CabinetDesignerPage() {
               if (fetchedTemplate) templateForCalc = fetchedTemplate;
           }
         }
-        
+
         const calcInput: CabinetCalculationInput = {
           cabinetType: projectItem.templateId,
           width: projectItem.width,
@@ -642,7 +642,7 @@ export default function CabinetDesignerPage() {
             quantity: projectItem.quantity,
           });
 
-          
+
           result.data.parts.forEach(part => {
             const partKey = `${part.name}-${part.width.toFixed(1)}-${part.height.toFixed(1)}-${part.thickness.toFixed(1)}-${part.material}-${part.grainDirection || 'none'}`;
             const existingPart = aggregatedPartsMap.get(partKey);
@@ -654,7 +654,7 @@ export default function CabinetDesignerPage() {
             }
           });
 
-          
+
           result.data.accessories.forEach(accessory => {
             const existingAccessory = aggregatedAccessoriesMap.get(accessory.id);
             const quantityToAdd = accessory.quantity * projectItem.quantity;
@@ -674,7 +674,7 @@ export default function CabinetDesignerPage() {
           throw new Error(`Failed to calculate details for ${projectItem.templateName}: ${result.error || 'Unknown error'}`);
         }
       }
-      
+
       const finalAggregatedParts = Array.from(aggregatedPartsMap.values());
       setProjectCalculationResult({
         totalCost: cumulativeCost,
@@ -685,15 +685,15 @@ export default function CabinetDesignerPage() {
         aggregatedAccessories: Array.from(aggregatedAccessoriesMap.values()),
       });
 
-      
+
       const partsForNesting: InputPart[] = finalAggregatedParts.map(p => ({
-        name: `${p.name} (${p.material}, ${p.thickness.toFixed(0)}mm)`, 
+        name: `${p.name} (${p.material}, ${p.thickness.toFixed(0)}mm)`,
         width: p.width,
         height: p.height,
         qty: p.quantity,
         material: p.material,
-        grainDirection: p.grainDirection, 
-        originalName: p.name, 
+        grainDirection: p.grainDirection,
+        originalName: p.name,
         originalWidth: p.width,
         originalHeight: p.height,
       }));
@@ -723,10 +723,10 @@ export default function CabinetDesignerPage() {
     try {
       const existingJobsString = localStorage.getItem("cabinetDesignerNestingJobs");
       let existingJobs: NestingJob[] = existingJobsString ? JSON.parse(existingJobsString) : [];
-      
+
       const now = new Date();
       const jobName = customNestingJobName.trim() !== "" ? customNestingJobName.trim() : `Project Parts - ${format(now, "yyyy-MM-dd HH:mm:ss")}`;
-      const jobId = `nestJob_${now.getTime()}_${jobName.replace(/\s+/g, '_').slice(0,20)}`; 
+      const jobId = `nestJob_${now.getTime()}_${jobName.replace(/\s+/g, '_').slice(0,20)}`;
 
       const newJob: NestingJob = {
         id: jobId,
@@ -735,12 +735,12 @@ export default function CabinetDesignerPage() {
         parts: latestCalculatedProjectPartsForNesting,
       };
 
-      existingJobs.unshift(newJob); 
-      existingJobs = existingJobs.slice(0, 10); 
+      existingJobs.unshift(newJob);
+      existingJobs = existingJobs.slice(0, 10);
 
       localStorage.setItem("cabinetDesignerNestingJobs", JSON.stringify(existingJobs));
       toast({ title: "Project Parts Saved", description: `"${jobName}" saved for nesting tool. You can now load it in Advanced Tools.`, });
-      setCustomNestingJobName(""); 
+      setCustomNestingJobName("");
     } catch (e) {
       console.error("Error saving project for nesting:", e);
       toast({ title: "Error Saving for Nesting", description: "Could not save parts to localStorage.", variant: "destructive" });
@@ -831,16 +831,16 @@ export default function CabinetDesignerPage() {
                 {latestCalculatedProjectPartsForNesting.length > 0 && (
                   <div className="p-4 border rounded-md bg-muted/40 space-y-3">
                     <Label htmlFor="nestingJobName" className="font-medium">Nesting Job Name (Optional)</Label>
-                    <Input 
-                        id="nestingJobName" 
-                        value={customNestingJobName} 
-                        onChange={(e) => setCustomNestingJobName(e.target.value)} 
+                    <Input
+                        id="nestingJobName"
+                        value={customNestingJobName}
+                        onChange={(e) => setCustomNestingJobName(e.target.value)}
                         placeholder={`Default: Project Parts - ${format(new Date(), "yyyy-MM-dd HH:mm")}`}
                         className="text-sm h-9"
                     />
-                    <Button 
-                        onClick={handleSaveProjectForNesting} 
-                        variant="secondary" 
+                    <Button
+                        onClick={handleSaveProjectForNesting}
+                        variant="secondary"
                         className="w-full sm:w-auto"
                         disabled={isCalculatingProject}>
                         <SendToBack className="mr-2 h-4 w-4" />
@@ -850,7 +850,7 @@ export default function CabinetDesignerPage() {
                   </div>
                 )}
             </div>
-           
+
            {isCalculatingProject && (<div className="flex items-center justify-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary" /><p className="ml-2">Calculating project estimates...</p></div>)}
            {projectCalculationResult && !isCalculatingProject && (
              <div className="mt-4 p-4 border rounded-md bg-muted/40 space-y-6">
@@ -870,7 +870,7 @@ export default function CabinetDesignerPage() {
                    ))}
                  </ul>
                </div>
-               
+
                <div>
                 <h4 className="text-md font-semibold mb-2 flex items-center"><List className="mr-2 h-5 w-5"/>Aggregated Project Part List</h4>
                 <div className="max-h-[400px] overflow-y-auto border rounded-md">
@@ -944,16 +944,16 @@ export default function CabinetDesignerPage() {
                     <div><Label htmlFor="defaultWidth">Width (W)</Label><Input id="defaultWidth" name="width" type="number" value={currentTemplate.defaultDimensions.width} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.width')} /></div>
                     <div><Label htmlFor="defaultHeight">Height (H)</Label><Input id="defaultHeight" name="height" type="number" value={currentTemplate.defaultDimensions.height} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.height')} /></div>
                     <div><Label htmlFor="defaultDepth">Depth (D)</Label><Input id="defaultDepth" name="depth" type="number" value={currentTemplate.defaultDimensions.depth} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.depth')} /></div></CardContent></Card>
-                
+
                 <Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="text-lg">Part Definitions</CardTitle><CardDescription>Define each part, its quantity, dimensions, material, and edge banding.</CardDescription></div>
                     <Dialog open={isAddPartDialogOpen} onOpenChange={setIsAddPartDialogOpen}><DialogTrigger asChild><Button size="sm"><PlusCircle className="mr-2 h-4 w-4" />Add Part</Button></DialogTrigger>
-                        <AddPartDialog 
-                            setOpen={setIsAddPartDialogOpen} 
-                            onAddPart={handleAddPartToTemplate} 
-                            existingPartCount={currentTemplate.parts.length} 
-                            templateParameters={currentTemplate.parameters} 
+                        <AddPartDialog
+                            setOpen={setIsAddPartDialogOpen}
+                            onAddPart={handleAddPartToTemplate}
+                            existingPartCount={currentTemplate.parts.length}
+                            templateParameters={currentTemplate.parameters}
                             materialOptions={combinedMaterialOptions}
-                            onRequestOpenMaterialDialog={() => setIsMaterialDialogOp(true)} 
+                            onRequestOpenMaterialDialog={() => setIsMaterialDialogOp(true)}
                         />
                     </Dialog></CardHeader>
                     <CardContent className="space-y-4">{currentTemplate.parts.map((part, index) => {
@@ -1037,3 +1037,5 @@ export default function CabinetDesignerPage() {
     </TooltipProvider>
   );
 }
+
+    
