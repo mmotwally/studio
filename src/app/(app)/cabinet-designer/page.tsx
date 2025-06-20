@@ -7,12 +7,12 @@ import { PageHeader } from '@/components/page-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Label } from '@/components/ui/label'; // Changed from ui/form to ui/label
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Checkbox } from '@/components/ui/checkbox';
-import { FormItem, FormLabel, FormControl } from '@/components/ui/form';
+import { FormItem, FormLabel as RHFFormLabel, FormControl } from '@/components/ui/form'; // Renamed FormLabel to avoid conflict
 import { useToast } from "@/hooks/use-toast";
 import { Library, Settings2, Loader2, Calculator, Palette, PackagePlus, PlusCircle, Save, XCircle, DraftingCompass, HelpCircle, ChevronDown, BookOpen, BoxSelect, AlertCircle, ListChecks, Trash2, Wrench, Construction, Hammer, Edit2, List, SendToBack, UploadCloud, SheetIcon } from 'lucide-react';
 import {
@@ -503,7 +503,9 @@ export default function CabinetDesignerPage() {
 
   const FormulaInputWithHelper = ({ partIndex, formulaField, label, placeholder, customDbFormulas, onRefreshGlobalFormulas }: { partIndex: number, formulaField: 'widthFormula' | 'heightFormula' | 'quantityFormula', label: string, placeholder: string, customDbFormulas: CustomFormulaEntry[], onRefreshGlobalFormulas: () => void }) => {
       const currentFormulaKey = (currentTemplate.parts[partIndex] as any)[`${formulaField}Key`];
-      const currentFormulaValue = (currentTemplate.parts[partIndex] as any)[formulaField] || "";
+      let currentFormulaValue = (currentTemplate.parts[partIndex] as any)[formulaField] || "";
+      if (typeof currentFormulaValue !== 'string') currentFormulaValue = String(currentFormulaValue); // Ensure it's a string
+
       const isCustomEntryMode = currentFormulaKey === 'CUSTOM';
 
       let relevantFormulas = PREDEFINED_FORMULAS.filter(f => {
@@ -530,7 +532,7 @@ export default function CabinetDesignerPage() {
 
       const handleSaveGlobal = async () => {
         const formulaToSave = (currentTemplate.parts[partIndex] as any)[formulaField];
-        if (!formulaToSave || !formulaToSave.trim()) {
+        if (!formulaToSave || !String(formulaToSave).trim()) { // Ensure it's a string and trimmed
             toast({title: "Empty Formula", description: "Cannot save an empty formula globally.", variant: "default"});
             return;
         }
@@ -544,7 +546,7 @@ export default function CabinetDesignerPage() {
         else if (formulaField === 'quantityFormula') dimType = 'Quantity';
 
         try {
-            const result = await saveCustomFormulaAction(formulaName, formulaToSave, dimType, "Saved from template editor");
+            const result = await saveCustomFormulaAction(formulaName, String(formulaToSave), dimType, "Saved from template editor");
             if (result.success) {
                 toast({title: "Formula Saved", description: `Formula "${formulaName}" saved globally.`});
                 onRefreshGlobalFormulas(); // Refresh the list of global formulas
@@ -793,7 +795,7 @@ export default function CabinetDesignerPage() {
           </div>
            <Button onClick={() => { setCurrentTemplate(generateNewTemplatePlaceholder()); setViewMode('templateDefinition'); }} variant="outline" className="w-full"><PlusCircle className="mr-2 h-4 w-4" /> Define New Cabinet Template</Button>
           <Separator />
-          <div><Label htmlFor="cabinetType">Cabinet Type</Label><Select value={calculationInput.cabinetType} onValueChange={handleTypeChange}><SelectTrigger id="cabinetType"><SelectValue placeholder="Select type" /></SelectTrigger><SelectContent>{selectableCabinetTypes.map(type => (<SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>))}</SelectContent></Select></div>
+          <div><RHFFormLabel htmlFor="cabinetType">Cabinet Type</RHFFormLabel><Select value={calculationInput.cabinetType} onValueChange={handleTypeChange}><SelectTrigger id="cabinetType"><SelectValue placeholder="Select type" /></SelectTrigger><SelectContent>{selectableCabinetTypes.map(type => (<SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>))}</SelectContent></Select></div>
           {isSelectedTemplateCustomDb && (
             <div className="flex gap-2 mt-2">
                 <Button variant="outline" size="sm" onClick={handleEditSelectedTemplate} className="flex-1">
@@ -1000,20 +1002,20 @@ export default function CabinetDesignerPage() {
                                 <FormulaInputWithHelper partIndex={index} formulaField="heightFormula" label="Height Formula*" placeholder="e.g., H or D - BPO" customDbFormulas={globalCustomFormulas} onRefreshGlobalFormulas={fetchCustomDefinitionsAndFormulas} />
                                 <div>
                                     <div className="flex items-center justify-between mb-1">
-                                        <FormLabel>Material (Panel)*</FormLabel>
+                                        <Label htmlFor={`part_material_${index}`}>Material (Panel)*</Label>
                                         <Button type="button" variant="link" size="sm" onClick={openPanelMaterialDialog} className="p-0 h-auto text-xs">
                                             <PlusCircle className="mr-1 h-3 w-3" /> Define New...
                                         </Button>
                                     </div>
                                     <Select value={part.materialId} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'materialId', value }} as any, `parts.${index}.materialId`)}>
-                                      <SelectTrigger className="text-sm"><SelectValue placeholder="Select material" /></SelectTrigger>
+                                      <SelectTrigger id={`part_material_${index}`} className="text-sm"><SelectValue placeholder="Select material" /></SelectTrigger>
                                       <SelectContent>{combinedMaterialOptions.filter(m => m.type === 'panel' || m.type === 'other').map((material) => (<SelectItem key={material.value} value={material.value}>{material.label}</SelectItem>))}</SelectContent>
                                     </Select>
                                 </div>
-                                <div><FormLabel>Grain Direction</FormLabel><Select value={part.grainDirection || 'none'} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'grainDirection', value: value === 'none' ? null : value }} as any, `parts.${index}.grainDirection`)}><SelectTrigger className="text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="with">With Grain (Height)</SelectItem><SelectItem value="reverse">Reverse Grain (Width)</SelectItem></SelectContent></Select></div>
+                                <div><Label htmlFor={`part_grain_${index}`}>Grain Direction</Label><Select value={part.grainDirection || 'none'} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'grainDirection', value: value === 'none' ? null : value }} as any, `parts.${index}.grainDirection`)}><SelectTrigger id={`part_grain_${index}`} className="text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="with">With Grain (Height)</SelectItem><SelectItem value="reverse">Reverse Grain (Width)</SelectItem></SelectContent></Select></div>
                                 <div>
                                     <div className="flex items-center justify-between mb-1">
-                                        <FormLabel>Edge Banding Material (Optional)</FormLabel>
+                                        <Label htmlFor={`part_eb_material_${index}`}>Edge Banding Material (Optional)</Label>
                                         <Button type="button" variant="link" size="sm" onClick={openEdgeBandMaterialDialog} className="p-0 h-auto text-xs">
                                             <PlusCircle className="mr-1 h-3 w-3" /> Define New...
                                         </Button>
@@ -1022,7 +1024,7 @@ export default function CabinetDesignerPage() {
                                         value={part.edgeBandingMaterialId || NO_EDGE_BANDING_PLACEHOLDER} 
                                         onValueChange={(value) => handleTemplateInputChange({ target: { name: 'edgeBandingMaterialId', value: value === NO_EDGE_BANDING_PLACEHOLDER ? null : value }} as any, `parts.${index}.edgeBandingMaterialId`)}
                                     >
-                                      <SelectTrigger className="text-sm"><SelectValue placeholder="Select edge band material" /></SelectTrigger>
+                                      <SelectTrigger id={`part_eb_material_${index}`} className="text-sm"><SelectValue placeholder="Select edge band material" /></SelectTrigger>
                                       <SelectContent>
                                         <SelectItem value={NO_EDGE_BANDING_PLACEHOLDER}>None</SelectItem>
                                         {edgeBandingMaterialOptions.map((ebMaterial) => (<SelectItem key={ebMaterial.value} value={ebMaterial.value}>{ebMaterial.label}</SelectItem>))}
@@ -1030,10 +1032,17 @@ export default function CabinetDesignerPage() {
                                     </Select>
                                 </div>
                             </div>
-                            <div className="mt-3"><FormLabel className="font-medium">Edge Banding Application:</FormLabel><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 text-sm">
+                            <div className="mt-3">
+                                <Label className="font-medium">Edge Banding Application:</Label>
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 text-sm">
                                 {(['front', 'back', 'top', 'bottom'] as Array<keyof PartDefinition['edgeBanding']>).map(edge => (<FormItem key={edge} className="flex flex-row items-center space-x-2"><Checkbox id={`edge_${index}_${edge}`} checked={!!part.edgeBanding?.[edge]} onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, `parts.${index}.edgeBanding.${edge}`, index, edge as keyof PartDefinition['edgeBanding'])}/><Label htmlFor={`edge_${index}_${edge}`} className="font-normal capitalize">{edge}</Label></FormItem>))}</div>
-                                <p className="text-xs text-muted-foreground mt-1">For panels: Top/Bottom on Width; Front/Back on Height.</p></div>
-                            <div className="mt-3"><FormLabel className="font-medium">Part Notes:</FormLabel><Textarea value={part.notes || ''} onChange={(e) => handleTemplateInputChange(e, `parts.${index}.notes`)} rows={2} className="text-sm" placeholder="Optional notes..."/></div></Card>)})}
+                                <p className="text-xs text-muted-foreground mt-1">For panels: Top/Bottom on Width; Front/Back on Height.</p>
+                            </div>
+                            <div className="mt-3">
+                                <Label className="font-medium">Part Notes:</Label>
+                                <Textarea value={part.notes || ''} onChange={(e) => handleTemplateInputChange(e, `parts.${index}.notes`)} rows={2} className="text-sm" placeholder="Optional notes..."/>
+                            </div>
+                            </Card>)})}
                         {currentTemplate.parts.length === 0 && <p className="text-muted-foreground text-center py-4">No parts defined. Click "Add Part".</p>}
                     </ScrollArea></CardContent></Card>
                 <Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="text-lg flex items-center"><Wrench className="mr-2 h-5 w-5" />Accessories</CardTitle><CardDescription>Define accessories like hinges, handles, with quantity formulas.</CardDescription></div>
