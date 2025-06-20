@@ -33,6 +33,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { AddPartDialog } from '@/components/cabinet-designer/add-part-dialog';
 import { AddMaterialTypeDialog } from '@/components/cabinet-designer/add-material-type-dialog';
 import { AddAccessoryTypeDialog } from '@/components/cabinet-designer/add-accessory-type-dialog';
+import { AddCustomFormulaDialog } from '@/components/cabinet-designer/add-custom-formula-dialog';
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { PREDEFINED_FORMULAS } from './predefined-formulas';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -151,8 +152,9 @@ export default function CabinetDesignerPage() {
   const [customAccessoryTypes, setCustomAccessoryTypes] = React.useState<AccessoryDefinitionDB[]>([]);
   const [globalCustomFormulas, setGlobalCustomFormulas] = React.useState<CustomFormulaEntry[]>([]);
   
-  const [materialDialogType, setMaterialDialogType] = React.useState<"panel" | "edge_band" | "other" | null>(null);
-  const [isAccessoryDialogOp, setIsAccessoryDialogOp] = React.useState(false);
+  const [materialDialogState, setMaterialDialogState] = React.useState<{isOpen: boolean; initialType: "panel" | "edge_band" | "other" | null}>({ isOpen: false, initialType: null });
+  const [isAccessoryDialogOpen, setIsAccessoryDialogOpen] = React.useState(false);
+  const [isFormulaDialogOpen, setIsFormulaDialogOpen] = React.useState(false);
   const [templateToDelete, setTemplateToDelete] = React.useState<CabinetTemplateData | null>(null);
 
 
@@ -215,9 +217,9 @@ export default function CabinetDesignerPage() {
     return [...predefined, ...custom].sort((a, b) => a.label.localeCompare(b.label));
   }, [customAccessoryTypes]);
 
-  const openPanelMaterialDialog = () => setMaterialDialogType("panel");
-  const openEdgeBandMaterialDialog = () => setMaterialDialogType("edge_band");
-  const openGenericMaterialDialog = () => setMaterialDialogType("panel");
+  const openPanelMaterialDialog = () => setMaterialDialogState({ isOpen: true, initialType: 'panel' });
+  const openEdgeBandMaterialDialog = () => setMaterialDialogState({ isOpen: true, initialType: 'edge_band' });
+  const openGenericMaterialDialog = () => setMaterialDialogState({ isOpen: true, initialType: 'panel' });
 
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -791,7 +793,10 @@ export default function CabinetDesignerPage() {
             <Button variant="outline" className="flex-1" onClick={openGenericMaterialDialog}>
               <Construction className="mr-2 h-4 w-4"/>Define Material
             </Button>
-            <Button variant="outline" className="flex-1" onClick={() => setIsAccessoryDialogOp(true)}>
+             <Button variant="outline" className="flex-1" onClick={() => setIsFormulaDialogOpen(true)}>
+                <DraftingCompass className="mr-2 h-4 w-4"/>Define Formula
+            </Button>
+            <Button variant="outline" className="flex-1" onClick={() => setIsAccessoryDialogOpen(true)}>
               <Hammer className="mr-2 h-4 w-4"/>Define Accessory
             </Button>
           </div>
@@ -1049,7 +1054,7 @@ export default function CabinetDesignerPage() {
                     </ScrollArea></CardContent></Card>
                 <Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="text-lg flex items-center"><Wrench className="mr-2 h-5 w-5" />Accessories</CardTitle><CardDescription>Define accessories like hinges, handles, with quantity formulas.</CardDescription></div>
                   <div className="flex gap-2">
-                    <Button size="sm" variant="outline" onClick={() => setIsAccessoryDialogOp(true)}>
+                    <Button size="sm" variant="outline" onClick={() => setIsAccessoryDialogOpen(true)}>
                       <PlusCircle className="mr-2 h-4 w-4" />Define New Accessory
                     </Button>
                     <Button size="sm" onClick={handleAddAccessoryToTemplate}><PlusCircle className="mr-2 h-4 w-4" />Add To Template</Button>
@@ -1092,15 +1097,18 @@ export default function CabinetDesignerPage() {
       <PageHeader title="Cabinet Designer" description={viewMode === 'calculator' ? "Configure, calculate parts, and estimate costs for individual cabinets or entire projects." : "Define a new parametric cabinet template."}/>
       {viewMode === 'calculator' ? renderCalculatorView() : renderTemplateDefinitionView()}
 
-      <Dialog open={materialDialogType !== null} onOpenChange={(open) => { if (!open) setMaterialDialogType(null); }}>
+      <Dialog open={materialDialogState.isOpen} onOpenChange={(open) => setMaterialDialogState({ isOpen: open, initialType: null })}>
         <AddMaterialTypeDialog 
-            setOpen={(open) => !open && setMaterialDialogType(null)} 
+            setOpen={(open) => setMaterialDialogState({ isOpen: open, initialType: null })} 
             onMaterialTypeAdded={fetchCustomDefinitionsAndFormulas}
-            initialType={materialDialogType} 
+            initialType={materialDialogState.initialType} 
         />
       </Dialog>
-      <Dialog open={isAccessoryDialogOp} onOpenChange={setIsAccessoryDialogOp}>
-         <AddAccessoryTypeDialog setOpen={setIsAccessoryDialogOp} onAccessoryTypeAdded={fetchCustomDefinitionsAndFormulas} />
+      <Dialog open={isAccessoryDialogOpen} onOpenChange={setIsAccessoryDialogOpen}>
+         <AddAccessoryTypeDialog setOpen={setIsAccessoryDialogOpen} onAccessoryTypeAdded={fetchCustomDefinitionsAndFormulas} />
+      </Dialog>
+       <Dialog open={isFormulaDialogOpen} onOpenChange={setIsFormulaDialogOpen}>
+         <AddCustomFormulaDialog setOpen={setIsFormulaDialogOpen} onFormulaAdded={fetchCustomDefinitionsAndFormulas} />
       </Dialog>
 
       {templateToDelete && (
