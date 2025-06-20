@@ -57,7 +57,7 @@ export function AddMaterialTypeDialog({ setOpen, onMaterialTypeAdded, initialTyp
       thickness: initialType === "panel" || !initialType ? 18 : undefined,
       defaultSheetWidth: initialType === "panel" || !initialType ? 2440 : undefined,
       defaultSheetHeight: initialType === "panel" || !initialType ? 1220 : undefined,
-      hasGrain: initialType === "panel" ? false : undefined, // Only relevant for panels
+      hasGrain: (initialType === "panel" || !initialType) ? false : undefined, 
       notes: "",
     });
   }, [initialType, form]);
@@ -73,7 +73,7 @@ export function AddMaterialTypeDialog({ setOpen, onMaterialTypeAdded, initialTyp
         thickness: values.type === 'panel' ? values.thickness : null,
         defaultSheetWidth: values.type === 'panel' ? values.defaultSheetWidth : null,
         defaultSheetHeight: values.type === 'panel' ? values.defaultSheetHeight : null,
-        hasGrain: values.type === 'panel' ? values.hasGrain : false, // Ensure hasGrain is boolean for panel, false otherwise
+        hasGrain: values.type === 'panel' ? values.hasGrain || false : false, 
       };
 
       await saveMaterialDefinitionAction(dataToSave);
