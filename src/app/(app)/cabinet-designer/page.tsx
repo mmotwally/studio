@@ -58,18 +58,6 @@ const generateNewTemplatePlaceholder = (): CabinetTemplateData => ({
   lastUpdated: new Date().toISOString(),
 });
 
-const globalParameterUIDefinitions = [
-  { key: 'PT', displayName: 'Panel Thickness', tooltip: 'Main panel thickness (PT)' },
-  { key: 'BPT', displayName: 'Back Panel Thickness', tooltip: 'Thickness of the back panel (BPT)' },
-  { key: 'BPO', displayName: 'Back Panel Offset', tooltip: 'Inset distance for the back panel (BPO)' },
-  { key: 'DG', displayName: 'Door Gap', tooltip: 'General gap around doors (DG)' },
-  { key: 'DCG', displayName: 'Door Center Gap', tooltip: 'Gap between two doors (DCG)' },
-  { key: 'TRD', displayName: 'Top Rail Depth', tooltip: 'Depth/width of top rails (TRD)' },
-  { key: 'DW', displayName: 'Drawer Width (Overall)', tooltip: 'Overall width available for drawer assembly (DW)' },
-  { key: 'DD', displayName: 'Drawer Depth', tooltip: 'Overall depth for drawer assembly/slides (DD)' },
-  { key: 'DH', displayName: 'Drawer Side Height', tooltip: 'Height of the drawer box sides (DH)' },
-  { key: 'Clearance', displayName: 'Drawer Slide Clearance (Total)', tooltip: 'Total side clearance for drawer slides (Clearance)' },
-];
 
 function evaluateFormulaClientSide(
   formula: string | undefined,
@@ -98,9 +86,8 @@ function evaluateFormulaClientSide(
       }
     }
     if (hasUnresolved) return formula;
-    const sanitizedForEval = formulaToEvaluate.replace(/[^0-9.+\-*/\s()]/g, '');
     // eslint-disable-next-line no-eval
-    const result = eval(sanitizedForEval);
+    const result = eval(formulaToEvaluate.replace(/[^0-9.+\-*/\s()]/g, ''));
     if (typeof result === 'number' && !isNaN(result)) return String(parseFloat(result.toFixed(1)));
     return formula;
   } catch (e) {
@@ -160,7 +147,7 @@ export default function CabinetDesignerPage() {
 
   const [customMaterialTypes, setCustomMaterialTypes] = React.useState<MaterialDefinitionDB[]>([]);
   const [customAccessoryTypes, setCustomAccessoryTypes] = React.useState<AccessoryDefinitionDB[]>([]);
-  const [isMaterialDialogOp, setIsMaterialDialogOp] = React.useState(false); // Used by both general define and from AddPartDialog
+  const [isMaterialDialogOp, setIsMaterialDialogOp] = React.useState(false); 
   const [isAccessoryDialogOp, setIsAccessoryDialogOp] = React.useState(false);
   const [templateToDelete, setTemplateToDelete] = React.useState<CabinetTemplateData | null>(null);
 
@@ -230,7 +217,7 @@ export default function CabinetDesignerPage() {
                 newCalcInput.width = defaultDims.width; newCalcInput.height = defaultDims.height; newCalcInput.depth = defaultDims.depth;
             }
         } else if (dbType) {
-            newCalcInput.customTemplate = dbType; // Store the full template data
+            newCalcInput.customTemplate = dbType; 
             newCalcInput.width = dbType.defaultDimensions.width; newCalcInput.height = dbType.defaultDimensions.height; newCalcInput.depth = dbType.defaultDimensions.depth;
         }
         return newCalcInput;
@@ -534,7 +521,7 @@ export default function CabinetDesignerPage() {
     }
     setIsCalculatingProject(true);
     setProjectCalculationResult(null);
-    setLatestCalculatedProjectPartsForNesting([]); // Clear previous
+    setLatestCalculatedProjectPartsForNesting([]); 
     let cumulativeCost = 0;
     let cumulativePanelArea = 0;
     let cumulativeBackPanelArea = 0;
@@ -579,7 +566,7 @@ export default function CabinetDesignerPage() {
             quantity: projectItem.quantity,
           });
 
-          // Aggregate parts
+          
           result.data.parts.forEach(part => {
             const partKey = `${part.name}-${part.width.toFixed(1)}-${part.height.toFixed(1)}-${part.thickness.toFixed(1)}-${part.material}-${part.grainDirection || 'none'}`;
             const existingPart = aggregatedPartsMap.get(partKey);
@@ -591,7 +578,7 @@ export default function CabinetDesignerPage() {
             }
           });
 
-          // Aggregate accessories
+          
           result.data.accessories.forEach(accessory => {
             const existingAccessory = aggregatedAccessoriesMap.get(accessory.id);
             const quantityToAdd = accessory.quantity * projectItem.quantity;
@@ -622,7 +609,7 @@ export default function CabinetDesignerPage() {
         aggregatedAccessories: Array.from(aggregatedAccessoriesMap.values()),
       });
 
-      // Transform and store for nesting tool
+      
       const partsForNesting: InputPart[] = finalAggregatedParts.map(p => ({
         name: `${p.name} (${p.material}, ${p.thickness.toFixed(0)}mm)`, 
         width: p.width,
@@ -881,10 +868,7 @@ export default function CabinetDesignerPage() {
                     <div><Label htmlFor="defaultWidth">Width (W)</Label><Input id="defaultWidth" name="width" type="number" value={currentTemplate.defaultDimensions.width} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.width')} /></div>
                     <div><Label htmlFor="defaultHeight">Height (H)</Label><Input id="defaultHeight" name="height" type="number" value={currentTemplate.defaultDimensions.height} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.height')} /></div>
                     <div><Label htmlFor="defaultDepth">Depth (D)</Label><Input id="defaultDepth" name="depth" type="number" value={currentTemplate.defaultDimensions.depth} onChange={(e) => handleTemplateInputChange(e, 'defaultDimensions.depth')} /></div></CardContent></Card>
-                <Card><CardHeader><CardTitle className="text-lg">Global Parameters (mm)</CardTitle><CardDescription>Variables for formulas (e.g., W - 2\*PT).</CardDescription></CardHeader><CardContent className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                    {globalParameterUIDefinitions.map(({ key, displayName, tooltip }) => (<div key={key}><div className="flex items-center justify-between mb-1"><Label htmlFor={`param_${key}`}>{displayName}</Label>
-                        <Tooltip><TooltipTrigger asChild><Button variant="ghost" size="icon" className="h-5 w-5 opacity-60 hover:opacity-100 p-0"><HelpCircle className="h-3.5 w-3.5" /></Button></TooltipTrigger><TooltipContent side="top" className="max-w-xs text-xs p-2"><p className="font-medium">{tooltip}</p></TooltipContent></Tooltip></div>
-                        <Input id={`param_${key}`} name={key} type="number" value={(currentTemplate.parameters as any)[key] || ''} onChange={(e) => handleTemplateInputChange(e, `parameters.${key}`)}/></div>))}</CardContent></Card>
+                
                 <Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="text-lg">Part Definitions</CardTitle><CardDescription>Define each part, its quantity, dimensions, material, and edge banding.</CardDescription></div>
                     <Dialog open={isAddPartDialogOpen} onOpenChange={setIsAddPartDialogOpen}><DialogTrigger asChild><Button size="sm"><PlusCircle className="mr-2 h-4 w-4" />Add Part</Button></DialogTrigger>
                         <AddPartDialog 
