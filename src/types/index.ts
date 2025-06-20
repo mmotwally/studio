@@ -606,6 +606,7 @@ export interface InputPart {
   height: number;
   qty: number;
   material?: string; 
+  grainDirection?: 'with' | 'reverse' | 'none' | null; // Added for grain direction
   originalName?: string; 
   originalWidth?: number; 
   originalHeight?: number; 
@@ -624,7 +625,7 @@ export interface SheetLayout {
   packedAreaWidth?: number; 
   packedAreaHeight?: number; 
   efficiency?: number; 
-  material?: string; // Added to identify material for this sheet
+  material?: string; 
 }
 
 // For potpack (client-side)
@@ -638,6 +639,7 @@ export interface PotpackBox {
   originalWidth?: number; 
   originalHeight?: number; 
   material?: string;
+  grainDirection?: 'with' | 'reverse' | 'none' | null;
   [key: string]: any; 
 }
 export interface PotpackStats {
@@ -660,5 +662,3 @@ export interface SheetDimensionOption {
   height: number;
 }
 
-
-```

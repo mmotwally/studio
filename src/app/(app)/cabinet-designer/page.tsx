@@ -627,11 +627,15 @@ export default function CabinetDesignerPage() {
 
       // Transform and store for nesting tool
       const partsForNesting: InputPart[] = finalAggregatedParts.map(p => ({
-        name: `${p.name} (${p.material}, ${p.thickness.toFixed(0)}mm)`, // More descriptive name for nesting
+        name: `${p.name} (${p.material}, ${p.thickness.toFixed(0)}mm)`, 
         width: p.width,
         height: p.height,
         qty: p.quantity,
-        material: p.material, // Keep material info for potential future use in nesting (e.g., sheet type matching)
+        material: p.material,
+        grainDirection: p.grainDirection, // Copy grainDirection
+        originalName: p.name, // Store original name before material/thickness info
+        originalWidth: p.width,
+        originalHeight: p.height,
       }));
       setLatestCalculatedProjectPartsForNesting(partsForNesting);
 
