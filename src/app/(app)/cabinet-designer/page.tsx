@@ -45,6 +45,7 @@ const initialHardcodedCabinetTypes = [
 ];
 
 const defaultDims = { width: 600, height: 720, depth: 560 };
+const NO_EDGE_BANDING_PLACEHOLDER = "__NO_EDGE_BAND__";
 
 const generateNewTemplatePlaceholder = (): CabinetTemplateData => ({
   id: crypto.randomUUID(),
@@ -490,7 +491,6 @@ export default function CabinetDesignerPage() {
   const FormulaInputWithHelper = ({ partIndex, formulaField, label, placeholder, customDbFormulas, onRefreshGlobalFormulas }: { partIndex: number, formulaField: 'widthFormula' | 'heightFormula' | 'quantityFormula', label: string, placeholder: string, customDbFormulas: CustomFormulaEntry[], onRefreshGlobalFormulas: () => void }) => {
       const currentFormulaKey = (currentTemplate.parts[partIndex] as any)[`${formulaField}Key`];
       const currentFormulaValue = (currentTemplate.parts[partIndex] as any)[formulaField] || "";
-
       const isCustomEntryMode = currentFormulaKey === 'CUSTOM';
 
       let relevantFormulas = PREDEFINED_FORMULAS.filter(f => {
@@ -980,7 +980,7 @@ export default function CabinetDesignerPage() {
                                 <FormulaInputWithHelper partIndex={index} formulaField="heightFormula" label="Height Formula*" placeholder="e.g., H or D - BPO" customDbFormulas={globalCustomFormulas} onRefreshGlobalFormulas={fetchCustomDefinitionsAndFormulas} />
                                 <div>
                                     <div className="flex items-center justify-between mb-1">
-                                        <Label>Material (Panel)*</Label>
+                                        <FormLabel>Material (Panel)*</FormLabel>
                                         <Button type="button" variant="link" size="sm" onClick={() => setIsMaterialDialogOp(true)} className="p-0 h-auto text-xs">
                                             <PlusCircle className="mr-1 h-3 w-3" /> Define New...
                                         </Button>
@@ -990,27 +990,30 @@ export default function CabinetDesignerPage() {
                                       <SelectContent>{combinedMaterialOptions.filter(m => m.type === 'panel' || m.type === 'other').map((material) => (<SelectItem key={material.value} value={material.value}>{material.label}</SelectItem>))}</SelectContent>
                                     </Select>
                                 </div>
-                                <div><Label>Grain Direction</Label><Select value={part.grainDirection || 'none'} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'grainDirection', value: value === 'none' ? null : value }} as any, `parts.${index}.grainDirection`)}><SelectTrigger className="text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="with">With Grain (Height)</SelectItem><SelectItem value="reverse">Reverse Grain (Width)</SelectItem></SelectContent></Select></div>
+                                <div><FormLabel>Grain Direction</FormLabel><Select value={part.grainDirection || 'none'} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'grainDirection', value: value === 'none' ? null : value }} as any, `parts.${index}.grainDirection`)}><SelectTrigger className="text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="none">None</SelectItem><SelectItem value="with">With Grain (Height)</SelectItem><SelectItem value="reverse">Reverse Grain (Width)</SelectItem></SelectContent></Select></div>
                                 <div>
                                     <div className="flex items-center justify-between mb-1">
-                                        <Label>Edge Banding Material (Optional)</Label>
+                                        <FormLabel>Edge Banding Material (Optional)</FormLabel>
                                         <Button type="button" variant="link" size="sm" onClick={() => setIsMaterialDialogOp(true)} className="p-0 h-auto text-xs">
                                             <PlusCircle className="mr-1 h-3 w-3" /> Define New...
                                         </Button>
                                     </div>
-                                    <Select value={part.edgeBandingMaterialId || ""} onValueChange={(value) => handleTemplateInputChange({ target: { name: 'edgeBandingMaterialId', value: value === "" ? null : value }} as any, `parts.${index}.edgeBandingMaterialId`)}>
+                                    <Select 
+                                        value={part.edgeBandingMaterialId || NO_EDGE_BANDING_PLACEHOLDER} 
+                                        onValueChange={(value) => handleTemplateInputChange({ target: { name: 'edgeBandingMaterialId', value: value === NO_EDGE_BANDING_PLACEHOLDER ? null : value }} as any, `parts.${index}.edgeBandingMaterialId`)}
+                                    >
                                       <SelectTrigger className="text-sm"><SelectValue placeholder="Select edge band material" /></SelectTrigger>
                                       <SelectContent>
-                                        <SelectItem value="">None</SelectItem>
+                                        <SelectItem value={NO_EDGE_BANDING_PLACEHOLDER}>None</SelectItem>
                                         {edgeBandingMaterialOptions.map((ebMaterial) => (<SelectItem key={ebMaterial.value} value={ebMaterial.value}>{ebMaterial.label}</SelectItem>))}
                                       </SelectContent>
                                     </Select>
                                 </div>
                             </div>
-                            <div className="mt-3"><Label className="font-medium">Edge Banding Application:</Label><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 text-sm">
-                                {(['front', 'back', 'top', 'bottom'] as Array<keyof PartDefinition['edgeBanding']>).map(edge => (<FormItem key={edge} className="flex flex-row items-center space-x-2"><Checkbox id={`edge_${index}_${edge}`} checked={!!part.edgeBanding?.[edge]} onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, `parts.${index}.edgeBanding.${edge}`, index, edge as keyof PartDefinition['edgeBanding'])}/><Label htmlFor={`edge_${index}_${edge}`} className="capitalize font-normal">{edge}</Label></FormItem>))}</div>
+                            <div className="mt-3"><FormLabel className="font-medium">Edge Banding Application:</FormLabel><div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-1 text-sm">
+                                {(['front', 'back', 'top', 'bottom'] as Array<keyof PartDefinition['edgeBanding']>).map(edge => (<FormItem key={edge} className="flex flex-row items-center space-x-2"><Checkbox id={`edge_${index}_${edge}`} checked={!!part.edgeBanding?.[edge]} onCheckedChange={(checked) => handleTemplateInputChange({target: {name: edge, type: 'checkbox', value: !!checked, checked: !!checked}} as any, `parts.${index}.edgeBanding.${edge}`, index, edge as keyof PartDefinition['edgeBanding'])}/><Label htmlFor={`edge_${index}_${edge}`} className="font-normal capitalize">{edge}</Label></FormItem>))}</div>
                                 <p className="text-xs text-muted-foreground mt-1">For panels: Top/Bottom on Width; Front/Back on Height.</p></div>
-                            <div className="mt-3"><Label className="font-medium">Part Notes:</Label><Textarea value={part.notes || ''} onChange={(e) => handleTemplateInputChange(e, `parts.${index}.notes`)} rows={2} className="text-sm" placeholder="Optional notes..."/></div></Card>)})}
+                            <div className="mt-3"><FormLabel className="font-medium">Part Notes:</FormLabel><Textarea value={part.notes || ''} onChange={(e) => handleTemplateInputChange(e, `parts.${index}.notes`)} rows={2} className="text-sm" placeholder="Optional notes..."/></div></Card>)})}
                         {currentTemplate.parts.length === 0 && <p className="text-muted-foreground text-center py-4">No parts defined. Click "Add Part".</p>}
                     </ScrollArea></CardContent></Card>
                 <Card><CardHeader className="flex flex-row items-center justify-between"><div><CardTitle className="text-lg flex items-center"><Wrench className="mr-2 h-5 w-5" />Accessories</CardTitle><CardDescription>Define accessories like hinges, handles, with quantity formulas.</CardDescription></div>

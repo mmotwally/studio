@@ -45,6 +45,7 @@ const cabinetPartTypes: CabinetPartType[] = [
 const cabinetTypeContexts: CabinetTypeContext[] = ['Base', 'Wall', 'Drawer', 'General'];
 
 const CUSTOM_FORMULA_KEY = "CUSTOM_FORMULA_KEY";
+const NO_EDGE_BANDING_PLACEHOLDER = "__NO_EDGE_BAND__";
 
 const addPartFormSchema = z.object({
   partType: z.custom<CabinetPartType>((val) => cabinetPartTypes.includes(val as CabinetPartType), {
@@ -164,11 +165,12 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
       const newPart: PartDefinition = {
         partId: `${values.partType.toLowerCase().replace(/[\s()]+/g, '_')}_${existingPartCount + 1}_${Date.now()}`, nameLabel: values.nameLabel, partType: values.partType, cabinetContext: values.cabinetContext,
         quantityFormula: values.quantityFormula, widthFormula: finalWidthFormula, widthFormulaKey: values.widthFormulaKey, heightFormula: finalHeightFormula, heightFormulaKey: values.heightFormulaKey,
-        thicknessFormula: null, 
-        thicknessFormulaKey: null, 
         materialId: values.materialId,
-        edgeBandingMaterialId: values.edgeBandingMaterialId,
+        edgeBandingMaterialId: values.edgeBandingMaterialId, // This now comes directly from the form
         grainDirection: values.grainDirection, edgeBanding: edgeBanding, notes: values.notes || `Added via dialog. Part Type: ${values.partType}`,
+        // thicknessFormula and thicknessFormulaKey are intentionally null as thickness is derived from material
+        thicknessFormula: null,
+        thicknessFormulaKey: null,
       };
       onAddPart(newPart);
       toast({ title: "Part Added", description: `"${values.nameLabel}" has been added.` });
@@ -254,10 +256,13 @@ export function AddPartDialog({ setOpen, onAddPart, existingPartCount, templateP
                       <PlusCircle className="mr-1 h-3 w-3" /> Define New...
                     </Button>
                   </div>
-                  <Select onValueChange={field.onChange} value={field.value || ""}>
+                  <Select 
+                    onValueChange={(value) => field.onChange(value === NO_EDGE_BANDING_PLACEHOLDER ? null : value)} 
+                    value={field.value || NO_EDGE_BANDING_PLACEHOLDER}
+                  >
                     <FormControl><SelectTrigger><SelectValue placeholder="Select edge banding material (optional)" /></SelectTrigger></FormControl>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value={NO_EDGE_BANDING_PLACEHOLDER}>None</SelectItem>
                       {edgeBandingMaterialOptions.map((material) => (<SelectItem key={material.value} value={material.value}>{material.label}</SelectItem>))}
                     </SelectContent>
                   </Select><FormMessage />
