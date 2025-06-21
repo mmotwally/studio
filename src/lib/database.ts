@@ -515,26 +515,26 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   await db.run('DELETE FROM permissions');
 
   const permissionsData = [
-    // Settings
-    { id: crypto.randomUUID(), name: 'Manage Users & Roles', description: 'Can create, edit, and delete users and roles.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Categories & Sub-Categories', description: 'Can add, edit, and delete inventory categories and sub-categories.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Locations', description: 'Can add, edit, and delete inventory storage locations.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Suppliers', description: 'Can add, edit, and delete suppliers.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Units of Measurement', description: 'Can add, edit, and delete units of measurement.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Departments', description: 'Can add, edit, and delete departments.', group: 'Settings' },
-    
-    // Inventory
+    // Settings Group
+    { id: crypto.randomUUID(), name: 'Manage Roles', description: 'Can create, edit, and delete user roles and their permissions.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Manage Departments', description: 'Can create, edit, and delete departments.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Manage Categories', description: 'Can create, edit, and delete inventory categories & sub-categories.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Manage Locations', description: 'Can create, edit, and delete inventory storage locations.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Manage Suppliers', description: 'Can create, edit, and delete suppliers.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Manage Units of Measurement', description: 'Can create, edit, and delete units of measurement.', group: 'Settings' },
+
+    // Inventory Group
     { id: crypto.randomUUID(), name: 'View Inventory', description: 'Can view the inventory list and item details.', group: 'Inventory' },
     { id: crypto.randomUUID(), name: 'Create Inventory Items', description: 'Can add new items to the inventory.', group: 'Inventory' },
     { id: crypto.randomUUID(), name: 'Edit Inventory Items', description: 'Can edit existing inventory items.', group: 'Inventory' },
     { id: crypto.randomUUID(), name: 'Delete Inventory Items', description: 'Can delete items from the inventory.', group: 'Inventory' },
-    { id: crypto.randomUUID(), name: 'Adjust Stock Manually', description: 'Can perform manual stock adjustments via Stock Movement dialog.', group: 'Inventory' },
-    { id: crypto.randomUUID(), name: 'Import Inventory from Excel', description: 'Can bulk import inventory items from an Excel file.', group: 'Inventory' },
-    { id: crypto.randomUUID(), name: 'Export Inventory to Excel', description: 'Can export the current inventory list to an Excel file.', group: 'Inventory' },
+    { id: crypto.randomUUID(), name: 'Adjust Stock Manually', description: 'Can perform manual stock adjustments.', group: 'Inventory' },
+    { id: crypto.randomUUID(), name: 'Import from Excel', description: 'Can bulk import inventory items from an Excel file.', group: 'Inventory' },
+    { id: crypto.randomUUID(), name: 'Export to Excel', description: 'Can export the inventory list to an Excel file.', group: 'Inventory' },
     { id: crypto.randomUUID(), name: 'View Stock Movement History', description: 'Can view the historical stock movements for an item.', group: 'Inventory' },
     
-    // Requisitions
-    { id: crypto.randomUUID(), name: 'View All Requisitions', description: 'Can view all material requisitions from all departments.', group: 'Requisitions' },
+    // Requisitions Group
+    { id: crypto.randomUUID(), name: 'View All Requisitions', description: 'Can view all material requisitions.', group: 'Requisitions' },
     { id: crypto.randomUUID(), name: 'Create Requisitions', description: 'Can create new material requisitions.', group: 'Requisitions' },
     { id: crypto.randomUUID(), name: 'Edit Requisitions', description: 'Can edit requisitions (may reset fulfillment).', group: 'Requisitions' },
     { id: crypto.randomUUID(), name: 'Delete Requisitions', description: 'Can delete requisitions (returns issued stock).', group: 'Requisitions' },
@@ -543,29 +543,29 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
     { id: crypto.randomUUID(), name: 'Fulfill Requisitions', description: 'Can issue stock for an approved requisition.', group: 'Requisitions' },
     { id: crypto.randomUUID(), name: 'Print Requisition Vouchers', description: 'Can generate and print/download a PDF issue voucher.', group: 'Requisitions' },
 
-    // Purchase Orders
+    // Purchase Orders Group
     { id: crypto.randomUUID(), name: 'View All Purchase Orders', description: 'Can view all purchase orders.', group: 'Purchase Orders' },
     { id: crypto.randomUUID(), name: 'Create Purchase Orders', description: 'Can create new purchase orders.', group: 'Purchase Orders' },
     { id: crypto.randomUUID(), name: 'Edit Purchase Orders', description: 'Can edit POs before they are processed.', group: 'Purchase Orders' },
     { id: crypto.randomUUID(), name: 'Delete Purchase Orders', description: 'Can delete DRAFT or CANCELLED purchase orders.', group: 'Purchase Orders' },
     { id: crypto.randomUUID(), name: 'Cancel Purchase Orders', description: 'Can cancel an active purchase order.', group: 'Purchase Orders' },
-    { id: crypto.randomUUID(), name: 'Submit POs for Approval', description: 'Can move a PO from DRAFT to PENDING_APPROVAL status.', group: 'Purchase Orders' },
+    { id: crypto.randomUUID(), name: 'Submit POs for Approval', description: 'Can move a PO from DRAFT to PENDING_APPROVAL.', group: 'Purchase Orders' },
     { id: crypto.randomUUID(), name: 'Approve Purchase Order Items', description: 'Can approve items on a PO submitted for approval.', group: 'Purchase Orders' },
     { id: crypto.randomUUID(), name: 'Mark POs as Ordered', description: 'Can move an APPROVED PO to ORDERED status.', group: 'Purchase Orders' },
     { id: crypto.randomUUID(), name: 'Receive Stock from POs', description: 'Can receive stock against an ordered purchase order.', group: 'Purchase Orders' },
-    { id: crypto.randomUUID(), name: 'Print Purchase Orders', description: 'Can generate and print/download a PDF of a purchase order.', group: 'Purchase Orders' },
+    { id: crypto.randomUUID(), name: 'Print Purchase Orders', description: 'Can generate and print/download a PDF of a PO.', group: 'Purchase Orders' },
 
-    // Reports
+    // Reports Group
     { id: crypto.randomUUID(), name: 'Generate & View Reports', description: 'Can view the reports page and generate all available reports.', group: 'Reports' },
 
-    // Cabinet Designer
+    // Cabinet Designer Group
     { id: crypto.randomUUID(), name: 'Use Cabinet Designer', description: 'Can access and use the main calculator and project planner features.', group: 'Cabinet Designer' },
     { id: crypto.randomUUID(), name: 'Manage Cabinet Templates', description: 'Can create, edit, and delete global cabinet templates.', group: 'Cabinet Designer' },
-    { id: crypto.randomUUID(), name: 'Manage Cabinet Formulas', description: 'Can add, edit, and delete global formulas for cabinets.', group: 'Cabinet Designer' },
-    { id: crypto.randomUUID(), name: 'Manage Cabinet Materials', description: 'Can add, edit, and delete global material definitions.', group: 'Cabinet Designer' },
-    { id: crypto.randomUUID(), name: 'Manage Cabinet Accessories', description: 'Can add, edit, and delete global accessory definitions.', group: 'Cabinet Designer' },
+    { id: crypto.randomUUID(), name: 'Manage Cabinet Formulas', description: 'Can create, edit, and delete global formulas.', group: 'Cabinet Designer' },
+    { id: crypto.randomUUID(), name: 'Manage Cabinet Materials', description: 'Can create, edit, and delete material definitions.', group: 'Cabinet Designer' },
+    { id: crypto.randomUUID(), name: 'Manage Cabinet Accessories', description: 'Can create, edit, and delete accessory definitions.', group: 'Cabinet Designer' },
     
-    // Advanced Tools
+    // Advanced Tools Group
     { id: crypto.randomUUID(), name: 'Use Nesting Optimization', description: 'Can access and use the nesting optimization tools.', group: 'Advanced Tools' },
   ];
 
