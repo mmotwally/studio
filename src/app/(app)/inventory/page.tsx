@@ -1,4 +1,3 @@
-
 import { getInventoryItems } from './actions';
 import { InventoryClient } from './inventory-client';
 
@@ -7,4 +6,3 @@ export default async function InventoryPage() {
 
   return <InventoryClient initialItems={items} />;
 }
-
