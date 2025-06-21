@@ -1081,7 +1081,7 @@ export default function CabinetDesignerPage() {
                                 </div>
                                 <div className="md:col-span-2">
                                     <Label htmlFor={`acc_notes_${index}`}>Notes</Label>
-                                    <Textarea id={`acc_notes_${index}`} value={acc.notes || ''} onChange={(e) => handleAccessoryInputChange(e, index, 'notes')} className="text-sm" rows={2}/>
+                                    <Input id={`acc_notes_${index}`} value={acc.notes || ''} onChange={(e) => handleAccessoryInputChange(e, index, 'notes')} className="text-sm" placeholder="Optional notes..." />
                                 </div>
                             </div>
                         </Card>
