@@ -1,6 +1,7 @@
 
 "use server";
 
+import crypto from 'crypto';
 import sqlite3 from 'sqlite3';
 import { open, type Database } from 'sqlite';
 import path from 'path';
@@ -168,9 +169,10 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
+      hashedPassword TEXT,
+      salt TEXT,
       role TEXT,
       avatarUrl TEXT
-      -- In a real app, add password hash, salt, etc.
     );
   `);
 
@@ -668,6 +670,28 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Inventory Items and initial stock movements seeded.');
   console.log('Initial data seeding complete.');
+const adminUser = {
+    id: 'a1b2c3d4-e5f6-7890-1234-567890abcdef',
+    name: 'Admin User',
+    email: 'admin@local.host',
+    role: 'Admin',
+    avatarUrl: 'https://placehold.co/40x40.png',
+  };
+
+  try {
+    const existingUser = await db.get('SELECT id FROM users WHERE email = ?', adminUser.email);
+    if (!existingUser) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      const hashedPassword = crypto.pbkdf2Sync('adminpassword', salt, 1000, 64, 'sha512').toString('hex');
+      await db.run(
+        'INSERT INTO users (id, name, email, hashedPassword, salt, role, avatarUrl) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        adminUser.id, adminUser.name, adminUser.email, hashedPassword, salt, adminUser.role, adminUser.avatarUrl
+      );
+      console.log('Admin user seeded.');
+    }
+  } catch (e) {
+    console.warn(`Could not insert/update admin user: ${(e as Error).message}`);
+  }
 }
 
 

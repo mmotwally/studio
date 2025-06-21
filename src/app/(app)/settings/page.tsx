@@ -21,20 +21,35 @@ import { Dialog, DialogTrigger } from '@/components/ui/dialog';
 import { AddRoleDialog } from '@/components/settings/add-role-dialog';
 import { getRoles } from './roles/actions';
 import { useToast } from "@/hooks/use-toast";
-
-// Keep user management as a placeholder for now
-const sampleUsers: User[] = [
-  { id: 'USR001', name: 'Alice Wonderland', email: 'alice@example.com', role: 'Administrator', avatarUrl: 'https://placehold.co/40x40/FFA500/FFFFFF.png?text=AW' },
-  { id: 'USR002', name: 'Bob The Builder', email: 'bob@example.com', role: 'Inventory Manager', avatarUrl: 'https://placehold.co/40x40/008000/FFFFFF.png?text=BB' },
-  { id: 'USR003', name: 'Charlie Brown', email: 'charlie@example.com', role: 'Requester', avatarUrl: 'https://placehold.co/40x40/0000FF/FFFFFF.png?text=CB' },
-];
+import { getUsers } from './users/actions';
+import { AddUserDialog } from '@/components/settings/add-user-dialog';
 
 
 export default function SettingsPage() {
   const { toast } = useToast();
   const [roles, setRoles] = React.useState<Role[]>([]);
+  const [users, setUsers] = React.useState<User[]>([]);
   const [isLoadingRoles, setIsLoadingRoles] = React.useState(true);
+  const [isLoadingUsers, setIsLoadingUsers] = React.useState(true);
   const [isAddRoleDialogOpen, setIsAddRoleDialogOpen] = React.useState(false);
+  const [isAddUserDialogOpen, setIsAddUserDialogOpen] = React.useState(false);
+
+  const fetchUsers = React.useCallback(async () => {
+    setIsLoadingUsers(true);
+    try {
+      const fetchedUsers = await getUsers();
+      setUsers(fetchedUsers);
+    } catch (error) {
+      console.error("Failed to fetch users:", error);
+      toast({
+        title: "Error",
+        description: "Could not load users data.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingUsers(false);
+    }
+  }, [toast]);
   
   const fetchRoles = React.useCallback(async () => {
     setIsLoadingRoles(true);
@@ -55,7 +70,8 @@ export default function SettingsPage() {
 
   React.useEffect(() => {
     fetchRoles();
-  }, [fetchRoles]);
+    fetchUsers();
+  }, [fetchRoles, fetchUsers]);
 
 
   return (
@@ -72,9 +88,14 @@ export default function SettingsPage() {
 
         <TabsContent value="users" className="mt-6">
           <div className="flex justify-end mb-4">
-            <Button>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add User
-            </Button>
+            <Dialog open={isAddUserDialogOpen} onOpenChange={setIsAddUserDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <PlusCircle className="mr-2 h-4 w-4" /> Add User
+                </Button>
+              </DialogTrigger>
+              <AddUserDialog setOpen={setIsAddUserDialogOpen} onUserAdded={fetchUsers} roles={roles} />
+            </Dialog>
           </div>
           <div className="overflow-hidden rounded-lg border shadow-sm">
             <Table>
@@ -88,45 +109,54 @@ export default function SettingsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {sampleUsers.map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={user.avatarUrl} alt={user.name} data-ai-hint="avatar person" />
-                        <AvatarFallback>{user.name.split(' ').map(n => n[0]).join('')}</AvatarFallback>
-                      </Avatar>
-                    </TableCell>
-                    <TableCell className="font-medium">{user.name}</TableCell>
-                    <TableCell>{user.email}</TableCell>
-                    <TableCell>{user.role}</TableCell>
-                    <TableCell className="text-right">
-                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0" disabled>
-                            <span className="sr-only">Open menu</span>
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem disabled>
-                            <Edit className="mr-2 h-4 w-4" /> Edit User
-                          </DropdownMenuItem>
-                          <DropdownMenuItem disabled className="text-destructive focus:text-destructive focus:bg-destructive/10">
-                            <Trash2 className="mr-2 h-4 w-4" /> Delete User
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                {isLoadingUsers ? (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      <Loader2 className="h-6 w-6 animate-spin inline-block mr-2" /> Loading users...
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : users.length > 0 ? (
+                  users.map((user) => (
+                    <TableRow key={user.id}>
+                      <TableCell>
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={user.avatarUrl} alt={user.name} />
+                          <AvatarFallback>{user.name.charAt(0).toUpperCase()}</AvatarFallback>
+                        </Avatar>
+                      </TableCell>
+                      <TableCell className="font-medium">{user.name}</TableCell>
+                      <TableCell>{user.email}</TableCell>
+                      <TableCell>{user.role}</TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0" disabled>
+                              <span className="sr-only">Open menu</span>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem disabled>
+                              <Edit className="mr-2 h-4 w-4" /> Edit User
+                            </DropdownMenuItem>
+                            <DropdownMenuItem disabled className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                              <Trash2 className="mr-2 h-4 w-4" /> Delete User
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={5} className="h-24 text-center">
+                      No users found. Add a new user to get started.
+                    </TableCell>
+                  </TableRow>
+                )}
               </TableBody>
             </Table>
           </div>
-           {sampleUsers.length === 0 && (
-            <div className="mt-4 text-center text-muted-foreground">
-              No users found. Add users to manage access.
-            </div>
-          )}
         </TabsContent>
 
         <TabsContent value="roles" className="mt-6">
