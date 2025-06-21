@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useActionState, useEffect } from "react";
+import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   DialogContent,
@@ -25,7 +26,6 @@ import { Label } from "@/components/ui/label";
 interface AddRoleDialogProps {
   setOpen: (open: boolean) => void;
   permissions: Permission[];
-  isLoadingPermissions: boolean;
 }
 
 const initialState = {
@@ -33,18 +33,18 @@ const initialState = {
   message: "",
 };
 
-function SubmitButton({ isLoading }: { isLoading: boolean }) {
+function SubmitButton() {
     const { pending } = useFormStatus();
     return (
-        <Button type="submit" disabled={pending || isLoading}>
+        <Button type="submit" disabled={pending}>
             {pending ? "Saving..." : "Save Role"}
         </Button>
     );
 }
 
-export function AddRoleDialog({ setOpen, permissions, isLoadingPermissions }: AddRoleDialogProps) {
+export function AddRoleDialog({ setOpen, permissions }: AddRoleDialogProps) {
   const { toast } = useToast();
-  const [state, formAction] = useFormState(addRoleAction, initialState);
+  const [state, formAction] = useActionState(addRoleAction, initialState);
 
   const groupedPermissions = React.useMemo(() => {
     return permissions.reduce((acc, permission) => {
@@ -54,8 +54,7 @@ export function AddRoleDialog({ setOpen, permissions, isLoadingPermissions }: Ad
     }, {} as Record<string, Permission[]>);
   }, [permissions]);
 
-  React.useEffect(() => {
-    console.log("AddRoleDialog form state changed:", state);
+  useEffect(() => {
     if (state.message) {
       if (state.success) {
         toast({
@@ -97,9 +96,11 @@ export function AddRoleDialog({ setOpen, permissions, isLoadingPermissions }: Ad
                 <h3 className="text-base font-medium">Permissions</h3>
                 <p className="text-sm text-muted-foreground">Select the permissions this role will have.</p>
               </div>
-              {isLoadingPermissions ? (
+              {permissions.length === 0 ? (
                 <div className="space-y-2">
-                  {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-8 w-1/2" />)}
+                  <Skeleton className="h-8 w-1/2" />
+                  <Skeleton className="h-8 w-1/2" />
+                  <Skeleton className="h-8 w-1/2" />
                 </div>
               ) : (
                 <div className="space-y-5">
@@ -127,7 +128,7 @@ export function AddRoleDialog({ setOpen, permissions, isLoadingPermissions }: Ad
         </ScrollArea>
         <DialogFooter className="pt-4 border-t shrink-0">
           <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
-          <SubmitButton isLoading={isLoadingPermissions} />
+          <SubmitButton />
         </DialogFooter>
       </form>
     </DialogContent>

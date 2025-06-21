@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { useFormState, useFormStatus } from "react-dom";
+import { useEffect, useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   DialogContent,
@@ -24,7 +24,7 @@ interface AddUserDialogProps {
 }
 
 const initialState = {
-  error: null,
+  error: undefined,
   success: false,
 };
 
@@ -39,10 +39,9 @@ function SubmitButton() {
 
 export function AddUserDialog({ setOpen, roles }: AddUserDialogProps) {
   const { toast } = useToast();
-  const [state, formAction] = useFormState(createUser, initialState);
+  const [state, formAction] = useActionState(createUser, initialState);
 
   useEffect(() => {
-    console.log("AddUserDialog form state changed:", state);
     if (state.success) {
       toast({
         title: "Success",
