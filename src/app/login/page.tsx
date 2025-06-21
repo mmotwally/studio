@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useActionState } from "react";
 import { useRouter } from "next/navigation";
+import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,49 +11,38 @@ import { login } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { AlertTriangle } from "lucide-react";
+import { useEffect } from "react";
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  
+  return (
+    <Button type="submit" disabled={pending}>
+      {pending ? "Signing In..." : "Sign In"}
+    </Button>
+  );
+}
 
 export default function LoginPage() {
   const { toast } = useToast();
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [state, formAction] = useActionState(login, null);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsLoading(true);
-    setError(null);
-
-    const formData = new FormData(event.currentTarget);
-    
-    try {
-      const result = await login(null, formData);
-      
-      if (result.success) {
-        toast({
-          title: "Login Successful",
-          description: "Redirecting to your dashboard...",
-        });
-        router.push('/dashboard');
-      } else if (result.error) {
-        setError(result.error);
-        toast({
-          title: "Login Failed",
-          description: result.error,
-          variant: "destructive",
-        });
-      }
-    } catch (err) {
-      console.error("Login error:", err);
-      setError("An unexpected error occurred. Please try again.");
+  useEffect(() => {
+    if (state?.success) {
       toast({
-        title: "Login Error",
-        description: "An unexpected error occurred. Please try again.",
+        title: "Login Successful",
+        description: "Redirecting to your dashboard...",
+      });
+      router.push('/dashboard');
+    } else if (state?.error) {
+      toast({
+        title: "Login Failed",
+        description: state.error,
         variant: "destructive",
       });
-    } finally {
-      setIsLoading(false);
     }
-  }
+  }, [state, toast, router]);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -64,7 +54,7 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="grid gap-4">
+          <form action={formAction} className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -80,16 +70,14 @@ export default function LoginPage() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" name="password" type="password" required defaultValue="adminpassword" />
             </div>
-            {error && (
+            {state?.error && (
               <Alert variant="destructive" className="mb-4">
                 <AlertTriangle className="h-4 w-4" />
                 <AlertTitle>Login Failed</AlertTitle>
-                <AlertDescription>{error}</AlertDescription>
+                <AlertDescription>{state.error}</AlertDescription>
               </Alert>
             )}
-            <Button type="submit" disabled={isLoading}>
-              {isLoading ? "Signing In..." : "Sign In"}
-            </Button>
+            <SubmitButton />
           </form>
         </CardContent>
       </Card>
