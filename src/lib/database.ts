@@ -670,11 +670,26 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Inventory Items and initial stock movements seeded.');
   console.log('Initial data seeding complete.');
-const adminUser = {
+  // Seed Roles & Assign Permissions
+  await db.run('DELETE FROM roles');
+  await db.run('DELETE FROM role_permissions');
+
+  const adminRoleId = crypto.randomUUID();
+  await db.run("INSERT INTO roles (id, name, description) VALUES (?, ?, ?)", adminRoleId, 'Admin', 'Administrator with all permissions');
+  console.log('Admin role seeded.');
+
+  const allPermissions = await db.all('SELECT id FROM permissions');
+  for (const perm of allPermissions) {
+    await db.run('INSERT INTO role_permissions (roleId, permissionId) VALUES (?, ?)', adminRoleId, perm.id);
+  }
+  console.log(`Assigned all ${allPermissions.length} permissions to Admin role.`);
+
+  // Seed Admin User
+  const adminUser = {
     id: 'a1b2c3d4-e5f6-7890-1234-567890abcdef',
     name: 'Admin User',
     email: 'admin@local.host',
-    role: 'Admin',
+    role: 'Admin', // This text must match the role name seeded above
     avatarUrl: 'https://placehold.co/40x40.png',
   };
 
@@ -688,130 +703,54 @@ const adminUser = {
         adminUser.id, adminUser.name, adminUser.email, hashedPassword, salt, adminUser.role, adminUser.avatarUrl
       );
       console.log('Admin user seeded.');
+    } else {
+        // Ensure existing admin user has the correct role name
+        await db.run("UPDATE users SET role = ? WHERE email = ?", adminUser.role, adminUser.email);
+        console.log("Ensured existing admin user has 'Admin' role.");
     }
   } catch (e) {
     console.warn(`Could not insert/update admin user: ${(e as Error).message}`);
   }
+  
+  console.log('Initial data seeding complete.');
 }
 
 
 export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.Statement>> {
-  if (!appDbPromise) {
-    appDbPromise = (async () => {
-      let db: Database<sqlite3.Database, sqlite3.Statement> | null = null;
-      try {
-        console.log(`App is opening/getting database connection to: ${DB_FILE}`);
-        db = await open({
-          filename: DB_FILE,
-          driver: sqlite3.Database,
-        });
-        console.log('App database connection opened.');
-        await db.exec('PRAGMA foreign_keys = ON;');
+    if (!appDbPromise) {
+        appDbPromise = (async () => {
+            try {
+                console.log(`Opening database connection to: ${DB_FILE}`);
+                const db = await open({
+                    filename: DB_FILE,
+                    driver: sqlite3.Database,
+                });
+                await db.exec('PRAGMA foreign_keys = ON;');
+                console.log('Database connection opened.');
 
-        let schemaNeedsReset = false;
-        const tablesToEnsureExist = ['departments', 'inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles', 'permissions', 'role_permissions', 'requisitions', 'requisition_items', 'purchase_orders', 'purchase_order_items', 'stock_movements', 'cabinet_templates', 'custom_formulas', 'material_definitions', 'accessory_definitions'];
-        const columnsToCheck: Record<string, string[]> = {
-          inventory: ['minStockLevel', 'maxStockLevel', 'description', 'imageUrl', 'lastPurchasePrice', 'averageCost'],
-          units_of_measurement: ['conversion_factor', 'base_unit_id'],
-          suppliers: ['contactPhone'],
-          categories: ['code'],
-          sub_categories: ['code', 'categoryId'],
-          requisitions: ['requesterId', 'departmentId', 'orderNumber', 'bomNumber', 'dateNeeded', 'status', 'notes', 'lastUpdated', 'departmentId'],
-          requisition_items: ['requisitionId', 'inventoryItemId', 'quantityRequested', 'quantityApproved', 'quantityIssued', 'isApproved', 'notes'],
-          purchase_orders: ['supplierId', 'orderDate', 'status', 'lastUpdated', 'shippingAddress', 'billingAddress'],
-          purchase_order_items: ['purchaseOrderId', 'inventoryItemId', 'quantityOrdered', 'unitCost', 'quantityApproved'],
-          stock_movements: ['inventoryItemId', 'movementType', 'quantityChanged', 'balanceAfterMovement', 'movementDate'],
-          cabinet_templates: ['name', 'type', 'defaultDimensions', 'parameters', 'parts', 'createdAt', 'lastUpdated', 'accessories'],
-          custom_formulas: ['name', 'formula_string', 'dimension_type', 'created_at', 'part_type', 'context'],
-          material_definitions: ['name', 'type', 'costPerSqm', 'thickness', 'hasGrain', 'createdAt', 'lastUpdated'],
-          accessory_definitions: ['name', 'type', 'unitCost', 'createdAt', 'lastUpdated'],
-          permissions: ['name', 'description', 'group'],
-          role_permissions: ['roleId', 'permissionId'],
-        };
+                // 1. Create all tables if they don't exist.
+                await _createTables(db);
 
-        for (const tableName of tablesToEnsureExist) {
-          const tableExists = await db.get(`SELECT name FROM sqlite_master WHERE type='table' AND name='${tableName}';`);
-          if (!tableExists) {
-            console.warn(`Table ${tableName} does not exist. Flagging for full schema reset.`);
-            schemaNeedsReset = true;
-            break; 
-          }
-          if (columnsToCheck[tableName]) {
-            const tableInfo = await db.all(`PRAGMA table_info(${tableName});`);
-            const existingColumnNames = tableInfo.map(col => col.name);
-            for (const columnName of columnsToCheck[tableName]) {
-              if (!existingColumnNames.includes(columnName)) {
-                console.warn(`Old schema detected for table ${tableName} (missing column: ${columnName}). Flagging for table reset.`);
-                schemaNeedsReset = true;
-                break; 
-              }
+                // 2. Check if seeding is necessary.
+                // We check for roles, as they are fundamental for permissions.
+                const roleCount = await db.get('SELECT COUNT(*) as count FROM roles');
+                if (roleCount?.count === 0) {
+                    console.log('Roles table is empty. Performing initial data seed.');
+                    await _seedInitialData(db);
+                } else {
+                    console.log('Database appears to be seeded. Skipping seed process.');
+                }
+                
+                console.log('Database initialized successfully.');
+                return db;
+            } catch (error) {
+                console.error('Failed to open or initialize database:', error);
+                appDbPromise = null; // Reset promise on error to allow retry
+                throw error;
             }
-            if (schemaNeedsReset) break; 
-          }
-        }
-        
-        let needsFullSeed = false;
-        if (schemaNeedsReset) {
-          needsFullSeed = true;
-        } else {
-          // If schema seems okay, ensure tables exist (might be first run on a new DB file)
-          // and then check if key seed data is present.
-          await _createTables(db); 
-          
-          const categoryCountResult = await db.get('SELECT COUNT(*) as count FROM categories');
-          if ((categoryCountResult?.count ?? 0) === 0) {
-            console.log('Categories table is empty. Flagging for full seed.');
-            needsFullSeed = true;
-          }
-
-          if (!needsFullSeed) {
-            const deptCheck = await db.get('SELECT id FROM departments WHERE id = ?', SEED_DEPT_ENGINEERING_ID);
-            if (!deptCheck) {
-              console.log('Key seeded department (Engineering) not found. Flagging for full seed.');
-              needsFullSeed = true;
-            }
-          }
-          if (!needsFullSeed) {
-            const invCheck = await db.get('SELECT id FROM inventory WHERE id = ?', KEY_INVENTORY_ITEM_ID);
-            if (!invCheck) {
-              console.log(`Key seeded inventory item (${KEY_INVENTORY_ITEM_ID}) not found. Flagging for full seed.`);
-              needsFullSeed = true;
-            }
-          }
-           if (!needsFullSeed) {
-            // Add a specific check for a new permission to force a re-seed if it's missing.
-            const permissionCheck = await db.get('SELECT id FROM permissions WHERE name = ?', 'Create Material Definitions');
-            if (!permissionCheck) {
-                console.log('Key permission "Create Material Definitions" not found. Re-seeding all data.');
-                needsFullSeed = true;
-            }
-          }
-        }
-
-        if (needsFullSeed) {
-          console.log('Full data reset and seed will be performed by openDb.');
-          await _dropTables(db);
-          await _createTables(db);
-          await _seedInitialData(db);
-        }
-        
-        console.log('App database tables ensured/initialized.');
-        return db;
-      } catch (error) {
-        console.error('App failed to open or initialize database:', error);
-        if (db) {
-          try {
-            await db.close();
-          } catch (closeErr) {
-            console.error("Failed to close DB connection on error path:", closeErr);
-          }
-        }
-        appDbPromise = null; 
-        throw error;
-      }
-    })();
-  }
-  return appDbPromise;
+        })();
+    }
+    return appDbPromise;
 }
 
 export async function initializeDatabaseForScript(dropFirst: boolean = false): Promise<Database<sqlite3.Database, sqlite3.Statement>> {

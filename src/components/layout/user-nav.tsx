@@ -1,6 +1,4 @@
 
-"use client";
-
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,39 +12,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { CreditCard, LogOut, Settings, User as UserIcon } from "lucide-react";
+import { logout } from "@/lib/auth";
+import type { User } from "@/types";
 
-import { getSession, logout } from "@/lib/session";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+interface UserNavProps {
+  user: User | null;
+}
 
-type User = {
-  id: string;
-  name: string;
-  email: string;
-  role: string;
-  avatarUrl: string;
-};
-
-export function UserNav() {
-  const [user, setUser] = useState<User | null>(null);
-  const router = useRouter();
-
-  useEffect(() => {
-    const fetchSession = async () => {
-      const session = await getSession();
-      if (session?.user) {
-        setUser(session.user);
-      }
-    };
-    fetchSession();
-  }, []);
-
-  const handleLogout = async () => {
-    await logout();
-    router.push('/login');
-    router.refresh();
-  };
-
+export function UserNav({ user }: UserNavProps) {
   if (!user) {
     return (
       <Button variant="ghost" className="relative h-10 w-10 rounded-full">
@@ -95,11 +68,15 @@ export function UserNav() {
           </DropdownMenuItem>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={handleLogout}>
-          <LogOut className="mr-2 h-4 w-4" />
-          <span>Log out</span>
-          <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
-        </DropdownMenuItem>
+        <form action={logout}>
+          <DropdownMenuItem asChild>
+            <button type="submit" className="w-full">
+              <LogOut className="mr-2 h-4 w-4" />
+              <span>Log out</span>
+              <DropdownMenuShortcut>⇧⌘Q</DropdownMenuShortcut>
+            </button>
+          </DropdownMenuItem>
+        </form>
       </DropdownMenuContent>
     </DropdownMenu>
   );

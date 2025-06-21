@@ -4,6 +4,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import type { NavItem } from '@/types';
+import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import {
   SidebarMenu,
@@ -26,7 +27,7 @@ export function SidebarNav({ items }: SidebarNavProps) {
   return (
     <SidebarMenu>
       {items.map((item, index) => {
-        const Icon = item.icon;
+        const Icon = dynamic(() => import('lucide-react').then(mod => mod[item.icon as keyof typeof mod] || mod.HelpCircle));
         const isActive = pathname === item.href || (item.href !== "/" && pathname.startsWith(item.href));
 
         return (

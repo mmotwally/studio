@@ -4,8 +4,9 @@ import { cookies } from "next/headers";
 import { openDb } from "./database";
 import crypto from "crypto";
 import { encrypt } from "./session";
+import { redirect } from "next/navigation";
 
-export async function login(formData: FormData) {
+export async function login(prevState: any, formData: FormData) {
   const email = formData.get("email")?.toString();
   const password = formData.get("password")?.toString();
 
@@ -17,13 +18,13 @@ export async function login(formData: FormData) {
   const user = await db.get("SELECT * FROM users WHERE email = ?", email);
 
   if (!user) {
-    return { error: "Invalid credentials." };
+    return { error: "Invalid email or password." };
   }
 
   const hashedPassword = crypto.pbkdf2Sync(password, user.salt, 1000, 64, 'sha512').toString('hex');
 
   if (hashedPassword !== user.hashedPassword) {
-    return { error: "Invalid credentials." };
+    return { error: "Invalid email or password." };
   }
 
   // Create the session
@@ -34,4 +35,11 @@ export async function login(formData: FormData) {
   (await cookies()).set("session", session, { expires, httpOnly: true, secure: process.env.NODE_ENV === 'production', path: '/' });
 
   return { success: true };
+}
+
+export async function logout() {
+  // Destroy the session
+  cookies().set('session', '', { expires: new Date(0) });
+  // Redirect to the login page
+  redirect('/login');
 }

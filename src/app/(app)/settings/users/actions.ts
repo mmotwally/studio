@@ -15,7 +15,8 @@ export async function getUsers(): Promise<User[]> {
   return users;
 }
 
-export async function createUser(formData: FormData) {
+export async function createUser(prevState: any, formData: FormData) {
+  console.log("--- Create User Server Action Invoked ---");
   const canCreateUsers = await hasPermission("Create Roles"); // Reuse a high-level settings permission
   if (!canCreateUsers) {
     return { error: "You do not have permission to create users." };
@@ -46,6 +47,7 @@ export async function createUser(formData: FormData) {
       'INSERT INTO users (id, name, email, hashedPassword, salt, role, avatarUrl) VALUES (?, ?, ?, ?, ?, ?, ?)',
       id, name, email, hashedPassword, salt, role, avatarUrl
     );
+    revalidatePath("/settings");
     return { success: true };
   } catch (error) {
     console.error("Failed to create user:", error);

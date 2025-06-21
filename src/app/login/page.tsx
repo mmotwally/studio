@@ -1,31 +1,50 @@
 "use client";
 
-import { login } from "@/lib/auth";
-import { useState } from "react";
+import { useEffect, useActionState } from "react";
+import { useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useRouter } from "next/navigation";
+import { login } from "@/lib/auth";
+import { useToast } from "@/hooks/use-toast";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertTriangle } from "lucide-react";
+
+const initialState = {
+  error: undefined,
+  success: false,
+};
+
+function LoginButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" className="w-full" disabled={pending}>
+      {pending ? "Signing In..." : "Sign In"}
+    </Button>
+  );
+}
 
 export default function LoginPage() {
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+  const { toast } = useToast();
+  const [state, formAction] = useActionState(login, initialState);
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const formData = new FormData(event.currentTarget);
-    const result = await login(formData);
-
-    if (result?.error) {
-      setError(result.error);
-    } else {
-      setError(null);
-      // Redirect to the dashboard or home page on successful login
-      router.push('/dashboard');
-      router.refresh(); // Refresh the page to update the user nav
+  useEffect(() => {
+    if (state.success) {
+      toast({
+        title: "Login Successful",
+        description: "Redirecting to your dashboard...",
+      });
+      // Force a full page reload to ensure the new session is picked up
+      window.location.href = '/dashboard';
+    } else if (state.error) {
+      toast({
+        title: "Login Failed",
+        description: state.error,
+        variant: "destructive",
+      });
     }
-  };
+  }, [state, toast]);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-100">
@@ -37,7 +56,7 @@ export default function LoginPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleSubmit} className="grid gap-4">
+          <form action={formAction} className="grid gap-4">
             <div className="grid gap-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -53,10 +72,16 @@ export default function LoginPage() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" name="password" type="password" required defaultValue="adminpassword" />
             </div>
-            {error && <p className="text-red-500 text-sm">{error}</p>}
-            <Button type="submit" className="w-full">
-              Sign in
-            </Button>
+            {state.error && (
+                 <Alert variant="destructive" className="mb-4">
+                    <AlertTriangle className="h-4 w-4" />
+                    <AlertTitle>Login Failed</AlertTitle>
+                    <AlertDescription>
+                        {state.error}
+                    </AlertDescription>
+                </Alert>
+            )}
+            <LoginButton />
           </form>
         </CardContent>
       </Card>

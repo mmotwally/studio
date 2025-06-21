@@ -3,10 +3,24 @@
 import { openDb } from "@/lib/database";
 import { revalidatePath } from "next/cache";
 import type { RoleFormValues } from "./schema";
+import crypto from "crypto";
 import type { Role } from "@/types";
 
-export async function addRoleAction(data: RoleFormValues): Promise<{ success: boolean; message: string }> {
+export async function addRoleAction(prevState: any, formData: FormData): Promise<{ success: boolean; message: string }> {
+  console.log("--- Add Role Server Action Invoked ---");
   const db = await openDb();
+  
+  const data = {
+      name: formData.get('name') as string,
+      description: formData.get('description') as string,
+      permissionIds: formData.getAll('permissionIds') as string[],
+  };
+
+  // Basic validation
+  if (!data.name) {
+      return { success: false, message: "Role name is required." };
+  }
+
   await db.run('BEGIN TRANSACTION');
   try {
     const id = crypto.randomUUID();
@@ -60,4 +74,22 @@ export async function getRoles(): Promise<Role[]> {
     ORDER BY r.name ASC
   `);
   return roles;
+}
+
+export async function deleteRoleAction(roleId: string): Promise<{ success: boolean; message: string }> {
+    const db = await openDb();
+    try {
+        // Optional: Check if any users are assigned to this role first
+        const roleInUse = await db.get("SELECT 1 FROM users u JOIN roles r ON u.role = r.name WHERE r.id = ?", roleId);
+        if (roleInUse) {
+            return { success: false, message: "Cannot delete role. It is currently assigned to one or more users." };
+        }
+
+        await db.run('DELETE FROM roles WHERE id = ?', roleId);
+        revalidatePath("/settings");
+        return { success: true, message: "Role deleted successfully." };
+    } catch (error) {
+        console.error("Failed to delete role:", error);
+        return { success: false, message: "Database error: Could not delete role." };
+    }
 }

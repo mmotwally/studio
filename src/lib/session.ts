@@ -23,17 +23,12 @@ export async function decrypt(input: string): Promise<any> {
     return payload;
   } catch (error) {
     console.error("JWT Decryption Error:", error);
+    // If the token is invalid, clear the cookie
+    (await cookies()).set("session", "", { expires: new Date(0), path: '/' });
     return null;
   }
 }
 
-import { clearPermissionsCache } from "./permissions";
-
-export async function logout() {
-  // Destroy the session
-  (await cookies()).set("session", "", { expires: new Date(0), path: '/' });
-  clearPermissionsCache();
-}
 
 export async function getSession() {
   const sessionCookie = (await cookies()).get("session")?.value;

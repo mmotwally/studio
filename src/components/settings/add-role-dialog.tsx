@@ -1,9 +1,7 @@
-
 "use client";
 
 import * as React from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
+import { useFormState, useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   DialogContent,
@@ -13,104 +11,67 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-  FormDescription,
-} from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { type RoleFormValues, roleSchema } from "@/app/(app)/settings/roles/schema";
 import { addRoleAction } from "@/app/(app)/settings/roles/actions";
-import { getPermissions } from "@/app/(app)/settings/permissions/actions";
 import type { Permission } from "@/types";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Separator } from "@/components/ui/separator";
+import { Label } from "@/components/ui/label";
 
 interface AddRoleDialogProps {
   setOpen: (open: boolean) => void;
-  onRoleAdded?: () => void;
+  permissions: Permission[];
+  isLoadingPermissions: boolean;
 }
 
-export function AddRoleDialog({ setOpen, onRoleAdded }: AddRoleDialogProps) {
+const initialState = {
+  success: false,
+  message: "",
+};
+
+function SubmitButton({ isLoading }: { isLoading: boolean }) {
+    const { pending } = useFormStatus();
+    return (
+        <Button type="submit" disabled={pending || isLoading}>
+            {pending ? "Saving..." : "Save Role"}
+        </Button>
+    );
+}
+
+export function AddRoleDialog({ setOpen, permissions, isLoadingPermissions }: AddRoleDialogProps) {
   const { toast } = useToast();
-  const [isSubmitting, setIsSubmitting] = React.useState(false);
-  const [permissions, setPermissions] = React.useState<Permission[]>([]);
-  const [isLoadingPermissions, setIsLoadingPermissions] = React.useState(true);
-
-  const form = useForm<RoleFormValues>({
-    resolver: zodResolver(roleSchema),
-    defaultValues: {
-      name: "",
-      description: "",
-      permissionIds: [],
-    },
-  });
-
-  React.useEffect(() => {
-    async function loadPermissions() {
-      setIsLoadingPermissions(true);
-      try {
-        const fetchedPermissions = await getPermissions();
-        setPermissions(fetchedPermissions);
-      } catch (error) {
-        console.error("Failed to fetch permissions for dialog:", error);
-        toast({
-          title: "Error",
-          description: "Could not load permissions list.",
-          variant: "destructive",
-        });
-      } finally {
-        setIsLoadingPermissions(false);
-      }
-    }
-    loadPermissions();
-  }, [toast]);
+  const [state, formAction] = useFormState(addRoleAction, initialState);
 
   const groupedPermissions = React.useMemo(() => {
-    if (isLoadingPermissions) return {};
     return permissions.reduce((acc, permission) => {
       const group = permission.group || "General";
       (acc[group] = acc[group] || []).push(permission);
       return acc;
     }, {} as Record<string, Permission[]>);
-  }, [permissions, isLoadingPermissions]);
+  }, [permissions]);
 
-  async function onSubmit(values: RoleFormValues) {
-    setIsSubmitting(true);
-    try {
-      const result = await addRoleAction(values);
-      if (result.success) {
+  React.useEffect(() => {
+    console.log("AddRoleDialog form state changed:", state);
+    if (state.message) {
+      if (state.success) {
         toast({
           title: "Success",
-          description: "Role added successfully.",
+          description: state.message,
         });
-        if (onRoleAdded) {
-          onRoleAdded();
-        }
         setOpen(false);
-        form.reset();
       } else {
-        throw new Error(result.message);
+        toast({
+          title: "Error",
+          description: state.message,
+          variant: "destructive",
+        });
       }
-    } catch (error) {
-      console.error("Failed to add role:", error);
-      toast({
-        title: "Error",
-        description: (error instanceof Error ? error.message : "Could not add role."),
-        variant: "destructive",
-      });
-    } finally {
-      setIsSubmitting(false);
     }
-  }
+  }, [state, setOpen, toast]);
 
   return (
     <DialogContent className="sm:max-w-xl max-h-[90vh] flex flex-col">
@@ -120,82 +81,55 @@ export function AddRoleDialog({ setOpen, onRoleAdded }: AddRoleDialogProps) {
           Define a new role and assign its permissions.
         </DialogDescription>
       </DialogHeader>
-      <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="flex-grow overflow-hidden flex flex-col">
-           <div className="flex-grow overflow-y-auto pr-4 space-y-6">
-              <FormField control={form.control} name="name"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Role Name*</FormLabel>
-                    <FormControl><Input placeholder="e.g., Inventory Manager" {...field} /></FormControl>
-                    <FormMessage />
-                  </FormItem>)}
-              />
-              <FormField control={form.control} name="description"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Description</FormLabel>
-                    <FormControl><Textarea placeholder="Describe the responsibilities of this role." {...field} value={field.value ?? ""} /></FormControl>
-                    <FormMessage />
-                  </FormItem>)}
-              />
+      <form action={formAction} className="flex-grow overflow-hidden flex flex-col">
+        <ScrollArea className="flex-grow pr-4">
+           <div className="space-y-6">
+              <div>
+                <Label htmlFor="name">Role Name*</Label>
+                <Input id="name" name="name" placeholder="e.g., Inventory Manager" required />
+              </div>
+              <div>
+                <Label htmlFor="description">Description</Label>
+                <Textarea id="description" name="description" placeholder="Describe the responsibilities of this role." />
+              </div>
               <Separator />
-              <FormField control={form.control} name="permissionIds"
-                render={() => (
-                  <FormItem>
-                    <div className="mb-4">
-                      <FormLabel className="text-base font-medium">Permissions</FormLabel>
-                      <FormDescription>Select the permissions this role will have.</FormDescription>
-                    </div>
-                    {isLoadingPermissions ? (
-                      <div className="space-y-2">
-                        {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-8 w-1/2" />)}
-                      </div>
-                    ) : (
-                      <div className="space-y-5">
-                        {Object.entries(groupedPermissions).sort(([groupA], [groupB]) => groupA.localeCompare(groupB)).map(([group, perms]) => (
-                          <div key={group}>
-                            <h4 className="font-medium text-sm text-foreground mb-3 border-b pb-1">{group}</h4>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
-                              {perms.map((item) => (
-                                <FormField key={item.id} control={form.control} name="permissionIds"
-                                  render={({ field }) => {
-                                    return (
-                                      <FormItem key={item.id} className="flex flex-row items-start space-x-2 space-y-0">
-                                        <FormControl>
-                                          <Checkbox
-                                            checked={field.value?.includes(item.id)}
-                                            onCheckedChange={(checked) => {
-                                              return checked
-                                                ? field.onChange([...(field.value || []), item.id])
-                                                : field.onChange(field.value?.filter((value) => value !== item.id));
-                                            }}
-                                          />
-                                        </FormControl>
-                                        <div className="space-y-0 leading-none">
-                                          <FormLabel className="font-normal text-sm">{item.name}</FormLabel>
-                                          {item.description && <FormDescription className="text-xs">{item.description}</FormDescription>}
-                                        </div>
-                                      </FormItem>
-                                    );
-                                  }}
-                                />
-                              ))}
+              <div>
+                <h3 className="text-base font-medium">Permissions</h3>
+                <p className="text-sm text-muted-foreground">Select the permissions this role will have.</p>
+              </div>
+              {isLoadingPermissions ? (
+                <div className="space-y-2">
+                  {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-8 w-1/2" />)}
+                </div>
+              ) : (
+                <div className="space-y-5">
+                  {Object.entries(groupedPermissions).sort(([groupA], [groupB]) => groupA.localeCompare(groupB)).map(([group, perms]) => (
+                    <div key={group}>
+                      <h4 className="font-medium text-sm text-foreground mb-3 border-b pb-1">{group}</h4>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">
+                        {perms.map((item) => (
+                          <div key={item.id} className="flex items-start space-x-2">
+                            <Checkbox id={`perm-${item.id}`} name="permissionIds" value={item.id} />
+                            <div className="grid gap-1.5 leading-none">
+                              <label htmlFor={`perm-${item.id}`} className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70">
+                                {item.name}
+                              </label>
+                              {item.description && <p className="text-xs text-muted-foreground">{item.description}</p>}
                             </div>
                           </div>
                         ))}
                       </div>
-                    )}
-                    <FormMessage />
-                  </FormItem>)}
-              />
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-          <DialogFooter className="pt-4 border-t shrink-0">
-            <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button></DialogClose>
-            <Button type="submit" disabled={isSubmitting || isLoadingPermissions}>{isSubmitting ? "Saving..." : "Save Role"}</Button>
-          </DialogFooter>
-        </form>
-      </Form>
+        </ScrollArea>
+        <DialogFooter className="pt-4 border-t shrink-0">
+          <DialogClose asChild><Button type="button" variant="outline">Cancel</Button></DialogClose>
+          <SubmitButton isLoading={isLoadingPermissions} />
+        </DialogFooter>
+      </form>
     </DialogContent>
   );
 }

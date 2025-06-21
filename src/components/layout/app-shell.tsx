@@ -20,13 +20,15 @@ import { UserNav } from '@/components/layout/user-nav';
 import { Logo } from '@/components/icons';
 import type { NavItem } from '@/types';
 import { Toaster } from "@/components/ui/toaster";
+import type { User } from '@/types';
 
 interface AppShellProps {
   children: ReactNode;
   navItems: NavItem[];
+  user: User | null;
 }
 
-export function AppShell({ children, navItems }: AppShellProps) {
+export function AppShell({ children, navItems, user }: AppShellProps) {
   return (
     <SidebarProvider defaultOpen>
       <Sidebar variant="sidebar" collapsible="icon" className="border-r">
@@ -60,7 +62,7 @@ export function AppShell({ children, navItems }: AppShellProps) {
           </div>
           <div className="hidden md:block"> {/* Placeholder for breadcrumbs or page title */} </div>
           <div className="ml-auto">
-            <UserNav />
+            <UserNav user={user} />
           </div>
         </header>
         <main className="flex-1 p-4 sm:p-6 md:p-8">

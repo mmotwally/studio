@@ -1,5 +1,7 @@
 "use client";
 
+import { useEffect } from "react";
+import { useFormState, useFormStatus } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   DialogContent,
@@ -7,56 +9,54 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  DialogClose,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { useState } from "react";
 import { createUser } from "@/app/(app)/settings/users/actions";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { Role } from "@/types";
 
 interface AddUserDialogProps {
   setOpen: (open: boolean) => void;
-  onUserAdded: () => void;
   roles: Role[];
 }
 
-export function AddUserDialog({ setOpen, onUserAdded, roles }: AddUserDialogProps) {
+const initialState = {
+  error: null,
+  success: false,
+};
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" disabled={pending}>
+      {pending ? "Creating..." : "Create User"}
+    </Button>
+  );
+}
+
+export function AddUserDialog({ setOpen, roles }: AddUserDialogProps) {
   const { toast } = useToast();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [state, formAction] = useFormState(createUser, initialState);
 
-  const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setIsSubmitting(true);
-    const formData = new FormData(event.currentTarget);
-
-    try {
-      const result = await createUser(formData);
-      if (result.error) {
-        toast({
-          title: "Error",
-          description: result.error,
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Success",
-          description: "User created successfully.",
-        });
-        onUserAdded();
-        setOpen(false);
-      }
-    } catch (error) {
+  useEffect(() => {
+    console.log("AddUserDialog form state changed:", state);
+    if (state.success) {
+      toast({
+        title: "Success",
+        description: "User created successfully.",
+      });
+      setOpen(false);
+    } else if (state.error) {
       toast({
         title: "Error",
-        description: "An unexpected error occurred.",
+        description: state.error,
         variant: "destructive",
       });
-    } finally {
-      setIsSubmitting(false);
     }
-  };
+  }, [state, setOpen, toast]);
 
   return (
     <DialogContent>
@@ -66,51 +66,42 @@ export function AddUserDialog({ setOpen, onUserAdded, roles }: AddUserDialogProp
           Fill in the details below to create a new user account.
         </DialogDescription>
       </DialogHeader>
-      <form onSubmit={handleSubmit}>
-        <div className="grid gap-4 py-4">
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="name" className="text-right">
-              Name
-            </Label>
-            <Input id="name" name="name" className="col-span-3" required />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="email" className="text-right">
-              Email
-            </Label>
-            <Input id="email" name="email" type="email" className="col-span-3" required />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="password" className="text-right">
-              Password
-            </Label>
-            <Input id="password" name="password" type="password" className="col-span-3" required />
-          </div>
-          <div className="grid grid-cols-4 items-center gap-4">
-            <Label htmlFor="role" className="text-right">
-              Role
-            </Label>
-            <Select name="role" required>
-              <SelectTrigger className="col-span-3">
-                <SelectValue placeholder="Select a role" />
-              </SelectTrigger>
-              <SelectContent>
-                {roles.map((role) => (
-                  <SelectItem key={role.id} value={role.name}>
-                    {role.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+      <form action={formAction} className="space-y-4">
+        <div className="space-y-2">
+          <Label htmlFor="name">Name</Label>
+          <Input id="name" name="name" required />
         </div>
+        <div className="space-y-2">
+          <Label htmlFor="email">Email</Label>
+          <Input id="email" name="email" type="email" required />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="password">Password</Label>
+          <Input id="password" name="password" type="password" required />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="role">Role</Label>
+          <Select name="role" required>
+            <SelectTrigger>
+              <SelectValue placeholder="Select a role" />
+            </SelectTrigger>
+            <SelectContent>
+              {roles.map((role) => (
+                <SelectItem key={role.id} value={role.name}>
+                  {role.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {state.error && <p className="text-sm text-destructive">{state.error}</p>}
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-            Cancel
-          </Button>
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Creating..." : "Create User"}
-          </Button>
+          <DialogClose asChild>
+            <Button type="button" variant="outline">
+              Cancel
+            </Button>
+          </DialogClose>
+          <SubmitButton />
         </DialogFooter>
       </form>
     </DialogContent>

@@ -3,13 +3,7 @@
 import { openDb } from "./database";
 import { getSession } from "./session";
 
-let userPermissionsCache: Set<string> | null = null;
-
 export async function getUserPermissions(): Promise<Set<string>> {
-  if (userPermissionsCache) {
-    return userPermissionsCache;
-  }
-
   const session = await getSession();
   if (!session?.user?.role) {
     return new Set();
@@ -29,16 +23,10 @@ export async function getUserPermissions(): Promise<Set<string>> {
     role.id
   );
 
-  userPermissionsCache = new Set(permissions.map((p) => p.name));
-  return userPermissionsCache;
+  return new Set(permissions.map((p) => p.name));
 }
 
 export async function hasPermission(permissionName: string): Promise<boolean> {
   const permissions = await getUserPermissions();
   return permissions.has(permissionName);
-}
-
-// Call this function on logout to clear the cache
-export function clearPermissionsCache() {
-  userPermissionsCache = null;
 }

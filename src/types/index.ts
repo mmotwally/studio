@@ -1,12 +1,12 @@
 
 import type { LucideIcon } from 'lucide-react';
-import type { CabinetPartType as CustomCabinetPartType, CabinetTypeContext as CustomCabinetTypeContext } from './cabinet-designer-types';
+import type { CabinetPartType as CustomCabinetPartType, CabinetTypeContext as CustomCabinetTypeContext } from '@/app/(app)/cabinet-designer/types';
 
 
 export interface NavItem {
   title: string;
   href: string;
-  icon: LucideIcon;
+  icon: string;
   label?: string;
   disabled?: boolean;
 }
