@@ -511,17 +511,17 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Suppliers seeded.');
 
-  // Clear existing permissions before seeding new ones
+  // Clear existing permissions before seeding new ones to ensure a clean state
   await db.run('DELETE FROM permissions');
 
   const permissionsData = [
     // Settings Group
     { id: crypto.randomUUID(), name: 'Manage Roles', description: 'Can create, edit, and delete user roles and their permissions.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Departments', description: 'Can create, edit, and delete departments.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Categories', description: 'Can create, edit, and delete inventory categories & sub-categories.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Locations', description: 'Can create, edit, and delete inventory storage locations.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Suppliers', description: 'Can create, edit, and delete suppliers.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Units of Measurement', description: 'Can create, edit, and delete units of measurement.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Manage Departments', description: 'Can add, edit, and delete departments.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Manage Categories', description: 'Can add, edit, and delete inventory categories & sub-categories.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Manage Locations', description: 'Can add, edit, and delete inventory storage locations.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Manage Suppliers', description: 'Can add, edit, and delete suppliers.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Manage Units of Measurement', description: 'Can add, edit, and delete units of measurement.', group: 'Settings' },
 
     // Inventory Group
     { id: crypto.randomUUID(), name: 'View Inventory', description: 'Can view the inventory list and item details.', group: 'Inventory' },
@@ -559,11 +559,13 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
     { id: crypto.randomUUID(), name: 'Generate & View Reports', description: 'Can view the reports page and generate all available reports.', group: 'Reports' },
 
     // Cabinet Designer Group
-    { id: crypto.randomUUID(), name: 'Use Cabinet Designer', description: 'Can access and use the main calculator and project planner features.', group: 'Cabinet Designer' },
-    { id: crypto.randomUUID(), name: 'Manage Cabinet Templates', description: 'Can create, edit, and delete global cabinet templates.', group: 'Cabinet Designer' },
-    { id: crypto.randomUUID(), name: 'Manage Cabinet Formulas', description: 'Can create, edit, and delete global formulas.', group: 'Cabinet Designer' },
-    { id: crypto.randomUUID(), name: 'Manage Cabinet Materials', description: 'Can create, edit, and delete material definitions.', group: 'Cabinet Designer' },
-    { id: crypto.randomUUID(), name: 'Manage Cabinet Accessories', description: 'Can create, edit, and delete accessory definitions.', group: 'Cabinet Designer' },
+    { id: crypto.randomUUID(), name: 'Use Cabinet Designer & Project Planner', description: 'Can access and use the main calculator and project planner features.', group: 'Cabinet Designer' },
+    { id: crypto.randomUUID(), name: 'Create Cabinet Templates', description: 'Can create new global cabinet templates.', group: 'Cabinet Designer' },
+    { id: crypto.randomUUID(), name: 'Edit Cabinet Templates', description: 'Can edit existing global cabinet templates.', group: 'Cabinet Designer' },
+    { id: crypto.randomUUID(), name: 'Delete Cabinet Templates', description: 'Can delete global cabinet templates.', group: 'Cabinet Designer' },
+    { id: crypto.randomUUID(), name: 'Create Global Formulas', description: 'Can create new global formulas for cabinet parts.', group: 'Cabinet Designer' },
+    { id: crypto.randomUUID(), name: 'Create Material Definitions', description: 'Can define new materials for use in cabinets.', group: 'Cabinet Designer' },
+    { id: crypto.randomUUID(), name: 'Create Accessory Definitions', description: 'Can define new accessories for use in cabinets.', group: 'Cabinet Designer' },
     
     // Advanced Tools Group
     { id: crypto.randomUUID(), name: 'Use Nesting Optimization', description: 'Can access and use the nesting optimization tools.', group: 'Advanced Tools' },
