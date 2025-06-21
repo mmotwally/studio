@@ -1037,7 +1037,7 @@ export default function CabinetDesignerPage() {
                                 </div>
                             </div>
                             <div className="mt-3">
-                                <div className="font-medium text-sm mb-1">Edge Banding Application:</div>
+                                <Label className="font-medium text-sm mb-1">Edge Banding Application:</Label>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
                                 {(['front', 'back', 'top', 'bottom'] as Array<keyof NonNullable<PartDefinition['edgeBanding']>>).map(edge => (
                                     <div key={edge} className="flex flex-row items-center space-x-2">
@@ -1063,12 +1063,32 @@ export default function CabinetDesignerPage() {
                     <Button size="sm" onClick={handleAddAccessoryToTemplate}><PlusCircle className="mr-2 h-4 w-4" />Add To Template</Button>
                   </div>
                   </CardHeader>
-                    <CardContent className="space-y-4"><ScrollArea className="max-h-[300px] pr-3">{(currentTemplate.accessories || []).map((acc, index) => (<Card key={acc.id} className="p-4 relative bg-card/80 mb-3"><Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemoveAccessoryFromTemplate(acc.id)}><XCircle className="h-5 w-5"/></Button>
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><Label htmlFor={`acc_type_${index}`}>Accessory Type*</Label><Select value={acc.accessoryId} onValueChange={(value) => handleAccessoryInputChange(value, index, 'accessoryId')}><SelectTrigger id={`acc_type_${index}`} className="text-sm"><SelectValue placeholder="Select accessory" /></SelectTrigger><SelectContent>{combinedAccessoryOptions.map(pa => (<SelectItem key={pa.value} value={pa.value}>{pa.label}</SelectItem>))}</SelectContent></Select></div>
-                                <div><Label htmlFor={`acc_qty_formula_${index}`}>Quantity Formula*</Label><Input id={`acc_qty_formula_${index}`} value={acc.quantityFormula} onChange={(e) => handleAccessoryInputChange(e, index, 'quantityFormula')} className="text-sm"/></div>
-                                <div className="md:col-span-2"><Label htmlFor={`acc_notes_${index}`}>Notes</Label><Textarea id={`acc_notes_${index}`} value={acc.notes || ''} onChange={(e) => handleAccessoryInputChange(e, index, 'notes')} className="text-sm" rows={2}/></div></div></Card>))}
+                    <CardContent className="max-h-[300px] overflow-y-auto space-y-4">
+                        {(currentTemplate.accessories || []).map((acc, index) => (
+                        <Card key={acc.id} className="p-4 relative bg-card/80">
+                            <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemoveAccessoryFromTemplate(acc.id)}><XCircle className="h-5 w-5"/></Button>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <Label htmlFor={`acc_type_${index}`}>Accessory Type*</Label>
+                                    <Select value={acc.accessoryId} onValueChange={(value) => handleAccessoryInputChange(value, index, 'accessoryId')}>
+                                        <SelectTrigger id={`acc_type_${index}`} className="text-sm"><SelectValue placeholder="Select accessory" /></SelectTrigger>
+                                        <SelectContent>{combinedAccessoryOptions.map(pa => (<SelectItem key={pa.value} value={pa.value}>{pa.label}</SelectItem>))}</SelectContent>
+                                    </Select>
+                                </div>
+                                <div>
+                                    <Label htmlFor={`acc_qty_formula_${index}`}>Quantity Formula*</Label>
+                                    <Input id={`acc_qty_formula_${index}`} value={acc.quantityFormula} onChange={(e) => handleAccessoryInputChange(e, index, 'quantityFormula')} className="text-sm"/>
+                                </div>
+                                <div className="md:col-span-2">
+                                    <Label htmlFor={`acc_notes_${index}`}>Notes</Label>
+                                    <Textarea id={`acc_notes_${index}`} value={acc.notes || ''} onChange={(e) => handleAccessoryInputChange(e, index, 'notes')} className="text-sm" rows={2}/>
+                                </div>
+                            </div>
+                        </Card>
+                        ))}
                         {(!currentTemplate.accessories || currentTemplate.accessories.length === 0) && <p className="text-muted-foreground text-center py-4">No accessories defined for this template.</p>}
-                    </ScrollArea></CardContent></Card>
+                    </CardContent>
+                </Card>
             </CardContent><CardFooter className="flex justify-end space-x-3"><Button variant="outline" onClick={() => setViewMode('calculator')}>Cancel</Button><Button onClick={handleSaveTemplate} disabled={isLoading}>{isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save Template</Button></CardFooter></Card></TooltipProvider>
         {(currentTemplate.type === 'base' || currentTemplate.type === 'tall' || currentTemplate.type === 'custom') && (
             <Card className="shadow-lg"><CardHeader><CardTitle className="flex items-center"><BoxSelect className="mr-2 h-5 w-5 text-primary" />Drawer Set Calculator</CardTitle><CardDescription>Helper to calculate drawer components. Add these to 'Part Definitions' manually.</CardDescription></CardHeader>
