@@ -17,9 +17,20 @@ export async function middleware(request: NextRequest) {
     try {
       const session = await decrypt(sessionCookie);
       // Check if session is valid and not expired
-      isAuthenticated = session && session.user && new Date(session.expires) > new Date();
+      if (session && session.user && new Date(session.expires) > new Date()) {
+        isAuthenticated = true;
+      } else if (session === null) {
+        // Session is invalid, clear the cookie
+        const response = NextResponse.next();
+        response.cookies.set("session", "", { expires: new Date(0), path: '/' });
+        return response;
+      }
     } catch (error) {
       console.error('Session validation error:', error);
+      // Clear invalid session cookie
+      const response = NextResponse.next();
+      response.cookies.set("session", "", { expires: new Date(0), path: '/' });
+      return response;
     }
   }
 

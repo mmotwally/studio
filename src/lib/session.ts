@@ -23,8 +23,7 @@ export async function decrypt(input: string): Promise<any> {
     return payload;
   } catch (error) {
     console.error("JWT Decryption Error:", error);
-    // If the token is invalid, clear the cookie
-    (await cookies()).set("session", "", { expires: new Date(0), path: '/' });
+    // Return null on invalid token - let the caller handle cookie clearing
     return null;
   }
 }
