@@ -113,7 +113,7 @@ export function AddRoleDialog({ setOpen, onRoleAdded }: AddRoleDialogProps) {
   }
 
   return (
-    <DialogContent className="sm:max-w-xl">
+    <DialogContent className="sm:max-w-xl max-h-[90vh] flex flex-col">
       <DialogHeader>
         <DialogTitle>Add New Role</DialogTitle>
         <DialogDescription>
@@ -121,9 +121,8 @@ export function AddRoleDialog({ setOpen, onRoleAdded }: AddRoleDialogProps) {
         </DialogDescription>
       </DialogHeader>
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-          <ScrollArea className="max-h-[65vh] pr-5">
-            <div className="space-y-6 pr-1">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="flex-grow overflow-hidden flex flex-col">
+           <div className="flex-grow overflow-y-auto pr-4 space-y-6">
               <FormField control={form.control} name="name"
                 render={({ field }) => (
                   <FormItem>
@@ -191,8 +190,7 @@ export function AddRoleDialog({ setOpen, onRoleAdded }: AddRoleDialogProps) {
                   </FormItem>)}
               />
             </div>
-          </ScrollArea>
-          <DialogFooter className="pt-4 border-t">
+          <DialogFooter className="pt-4 border-t shrink-0">
             <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button></DialogClose>
             <Button type="submit" disabled={isSubmitting || isLoadingPermissions}>{isSubmitting ? "Saving..." : "Save Role"}</Button>
           </DialogFooter>
