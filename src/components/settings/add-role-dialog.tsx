@@ -154,7 +154,7 @@ export function AddRoleDialog({ setOpen, onRoleAdded }: AddRoleDialogProps) {
                       </div>
                     ) : (
                       <div className="space-y-5">
-                        {Object.entries(groupedPermissions).map(([group, perms]) => (
+                        {Object.entries(groupedPermissions).sort(([groupA], [groupB]) => groupA.localeCompare(groupB)).map(([group, perms]) => (
                           <div key={group}>
                             <h4 className="font-medium text-sm text-foreground mb-3 border-b pb-1">{group}</h4>
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-3">

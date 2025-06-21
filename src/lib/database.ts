@@ -513,30 +513,41 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
 
   const permissionsData = [
     // Settings
-    { id: crypto.randomUUID(), name: 'Manage Settings', description: 'Can view and modify all application settings.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Users', description: 'Can add, edit, and remove users.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Roles & Permissions', description: 'Can create, edit, and delete roles and their permissions.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Manage General Settings', description: 'Can manage global application settings, categories, locations, suppliers, etc.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Manage Users & Roles', description: 'Can create, edit, and delete users and roles.', group: 'Settings' },
+
     // Inventory
     { id: crypto.randomUUID(), name: 'View Inventory', description: 'Can view the inventory list and item details.', group: 'Inventory' },
-    { id: crypto.randomUUID(), name: 'Create Inventory Items', description: 'Can add new items to the inventory.', group: 'Inventory' },
-    { id: crypto.randomUUID(), name: 'Edit Inventory Items', description: 'Can edit details of existing inventory items.', group: 'Inventory' },
+    { id: crypto.randomUUID(), name: 'Create & Edit Inventory Items', description: 'Can add new items and edit existing ones.', group: 'Inventory' },
     { id: crypto.randomUUID(), name: 'Delete Inventory Items', description: 'Can delete items from the inventory.', group: 'Inventory' },
-    { id: crypto.randomUUID(), name: 'Adjust Stock Levels', description: 'Can perform manual stock adjustments.', group: 'Inventory' },
+    { id: crypto.randomUUID(), name: 'Adjust Stock Manually', description: 'Can perform manual stock adjustments via the Stock Movement dialog.', group: 'Inventory' },
+    { id: crypto.randomUUID(), name: 'Import & Export Inventory', description: 'Can use the Excel import/export functionality.', group: 'Inventory' },
+    { id: crypto.randomUUID(), name: 'View Stock Movement History', description: 'Can view the historical stock movements for an item.', group: 'Inventory' },
+    
     // Requisitions
     { id: crypto.randomUUID(), name: 'View Requisitions', description: 'Can view all requisitions.', group: 'Requisitions' },
-    { id: crypto.randomUUID(), name: 'Create Requisitions', description: 'Can create new item requisitions.', group: 'Requisitions' },
-    { id: crypto.randomUUID(), name: 'Approve Requisitions', description: 'Can approve or reject requisition items.', group: 'Requisitions' },
-    { id: crypto.randomUUID(), name: 'Fulfill Requisitions', description: 'Can issue stock for approved requisitions.', group: 'Requisitions' },
+    { id: crypto.randomUUID(), name: 'Create & Edit Requisitions', description: 'Can create new requisitions and edit existing ones.', group: 'Requisitions' },
+    { id: crypto.randomUUID(), name: 'Delete Requisitions', description: 'Can delete requisitions (returns issued stock).', group: 'Requisitions' },
+    { id: crypto.randomUUID(), name: 'Cancel Requisitions', description: 'Can cancel an active requisition (returns issued stock).', group: 'Requisitions' },
+    { id: crypto.randomUUID(), name: 'Approve Requisition Items', description: 'Can approve or reject items on a pending requisition.', group: 'Requisitions' },
+    { id: crypto.randomUUID(), name: 'Fulfill Requisitions', description: 'Can issue stock for an approved requisition.', group: 'Requisitions' },
+    { id: crypto.randomUUID(), name: 'Print Requisition Vouchers', description: 'Can generate and print/download a PDF issue voucher.', group: 'Requisitions' },
+
     // Purchase Orders
     { id: crypto.randomUUID(), name: 'View Purchase Orders', description: 'Can view all purchase orders.', group: 'Purchase Orders' },
-    { id: crypto.randomUUID(), name: 'Create Purchase Orders', description: 'Can create new purchase orders.', group: 'Purchase Orders' },
-    { id: crypto.randomUUID(), name: 'Approve Purchase Orders', description: 'Can approve purchase orders for ordering.', group: 'Purchase Orders' },
-    { id: crypto.randomUUID(), name: 'Receive Stock from POs', description: 'Can receive stock against a purchase order.', group: 'Purchase Orders' },
+    { id: crypto.randomUUID(), name: 'Create & Edit Purchase Orders', description: 'Can create new POs and edit them before they are processed.', group: 'Purchase Orders' },
+    { id: crypto.randomUUID(), name: 'Delete Purchase Orders', description: 'Can delete DRAFT or CANCELLED purchase orders.', group: 'Purchase Orders' },
+    { id: crypto.randomUUID(), name: 'Cancel Purchase Orders', description: 'Can cancel an active purchase order.', group: 'Purchase Orders' },
+    { id: crypto.randomUUID(), name: 'Approve Purchase Order Items', description: 'Can approve items on a PO submitted for approval.', group: 'Purchase Orders' },
+    { id: crypto.randomUUID(), name: 'Receive Stock from POs', description: 'Can receive stock against an ordered purchase order.', group: 'Purchase Orders' },
+    { id: crypto.randomUUID(), name: 'Print Purchase Orders', description: 'Can generate and print/download a PDF of a purchase order.', group: 'Purchase Orders' },
+    
     // Reports
-    { id: crypto.randomUUID(), name: 'View Reports', description: 'Can view and generate all reports.', group: 'Reports' },
+    { id: crypto.randomUUID(), name: 'Generate Reports', description: 'Can view the reports page and generate all available reports.', group: 'Reports' },
+
     // Cabinet Designer
-    { id: crypto.randomUUID(), name: 'Use Cabinet Designer', description: 'Can access and use the cabinet designer tool.', group: 'Cabinet Designer' },
-    { id: crypto.randomUUID(), name: 'Manage Cabinet Templates', description: 'Can create, edit, and delete cabinet templates.', group: 'Cabinet Designer' },
+    { id: crypto.randomUUID(), name: 'Use Cabinet Designer', description: 'Can access and use the main features of the cabinet designer tool.', group: 'Cabinet Designer' },
+    { id: crypto.randomUUID(), name: 'Manage Cabinet Templates', description: 'Can create, edit, and delete global cabinet templates, materials, and formulas.', group: 'Cabinet Designer' },
   ];
 
   for (const perm of permissionsData) {
@@ -792,6 +803,7 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
     
 
     
+
 
 
 
