@@ -516,12 +516,24 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
 
   const permissionsData = [
     // Settings Group
-    { id: crypto.randomUUID(), name: 'Manage Roles', description: 'Can create, edit, and delete user roles and their permissions.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Departments', description: 'Can add, edit, and delete departments.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Categories', description: 'Can add, edit, and delete inventory categories & sub-categories.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Locations', description: 'Can add, edit, and delete inventory storage locations.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Suppliers', description: 'Can add, edit, and delete suppliers.', group: 'Settings' },
-    { id: crypto.randomUUID(), name: 'Manage Units of Measurement', description: 'Can add, edit, and delete units of measurement.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Create Categories', description: 'Can create new inventory categories.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Edit Categories', description: 'Can edit existing inventory categories.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Delete Categories', description: 'Can delete inventory categories.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Create Sub-Categories', description: 'Can create new inventory sub-categories.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Edit Sub-Categories', description: 'Can edit existing inventory sub-categories.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Delete Sub-Categories', description: 'Can delete inventory sub-categories.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Create Units of Measurement', description: 'Can create new units of measurement.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Edit Units of Measurement', description: 'Can edit existing units of measurement.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Delete Units of Measurement', description: 'Can delete units of measurement.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Create Locations', description: 'Can create new storage locations.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Edit Locations', description: 'Can edit existing storage locations.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Delete Locations', description: 'Can delete storage locations.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Create Suppliers', description: 'Can create new suppliers.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Edit Suppliers', description: 'Can edit existing suppliers.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Delete Suppliers', description: 'Can delete suppliers.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Create Roles', description: 'Can create new user roles.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Edit Roles', description: 'Can edit existing user roles and their permissions.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Delete Roles', description: 'Can delete user roles.', group: 'Settings' },
 
     // Inventory Group
     { id: crypto.randomUUID(), name: 'View Inventory', description: 'Can view the inventory list and item details.', group: 'Inventory' },
@@ -742,6 +754,14 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
               needsFullSeed = true;
             }
           }
+           if (!needsFullSeed) {
+            // Add a specific check for a new permission to force a re-seed if it's missing.
+            const permissionCheck = await db.get('SELECT id FROM permissions WHERE name = ?', 'Create Material Definitions');
+            if (!permissionCheck) {
+                console.log('Key permission "Create Material Definitions" not found. Re-seeding all data.');
+                needsFullSeed = true;
+            }
+          }
         }
 
         if (needsFullSeed) {
@@ -822,5 +842,8 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
     
 
     
+
+    
+
 
     
