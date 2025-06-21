@@ -1037,7 +1037,7 @@ export default function CabinetDesignerPage() {
                                 </div>
                             </div>
                             <div className="mt-3">
-                                <Label className="font-medium text-sm mb-1">Edge Banding Application:</Label>
+                                <div className="mb-1"><Label className="font-medium text-sm">Edge Banding Application:</Label></div>
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
                                 {(['front', 'back', 'top', 'bottom'] as Array<keyof NonNullable<PartDefinition['edgeBanding']>>).map(edge => (
                                     <div key={edge} className="flex flex-row items-center space-x-2">
@@ -1063,9 +1063,9 @@ export default function CabinetDesignerPage() {
                     <Button size="sm" onClick={handleAddAccessoryToTemplate}><PlusCircle className="mr-2 h-4 w-4" />Add To Template</Button>
                   </div>
                   </CardHeader>
-                    <CardContent className="max-h-[300px] overflow-y-auto space-y-4">
+                    <CardContent className="max-h-[300px] overflow-y-auto">
                         {(currentTemplate.accessories || []).map((acc, index) => (
-                        <Card key={acc.id} className="p-4 relative bg-card/80">
+                        <Card key={acc.id} className="p-4 relative bg-card/80 mb-4">
                             <Button variant="ghost" size="icon" className="absolute top-2 right-2 text-destructive hover:bg-destructive/10" onClick={() => handleRemoveAccessoryFromTemplate(acc.id)}><XCircle className="h-5 w-5"/></Button>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
