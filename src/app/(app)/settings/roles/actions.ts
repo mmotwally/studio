@@ -6,8 +6,9 @@ import type { RoleFormValues } from "./schema";
 import type { Role } from "@/types";
 
 export async function addRoleAction(data: RoleFormValues): Promise<{ success: boolean; message: string }> {
+  const db = await openDb();
+  await db.run('BEGIN TRANSACTION');
   try {
-    const db = await openDb();
     const id = crypto.randomUUID();
 
     await db.run(
@@ -16,7 +17,21 @@ export async function addRoleAction(data: RoleFormValues): Promise<{ success: bo
       data.name,
       data.description
     );
+
+    if (data.permissionIds && data.permissionIds.length > 0) {
+      const stmt = await db.prepare('INSERT INTO role_permissions (roleId, permissionId) VALUES (?, ?)');
+      for (const permissionId of data.permissionIds) {
+          await stmt.run(id, permissionId);
+      }
+      await stmt.finalize();
+    }
+
+    await db.run('COMMIT');
+
   } catch (error) {
+    if (db) {
+      await db.run('ROLLBACK').catch(rbError => console.error("Rollback failed:", rbError));
+    }
     console.error("Failed to add role:", error);
     if (error instanceof Error) {
       if (error.message.includes("UNIQUE constraint failed: roles.name")) {
@@ -30,6 +45,7 @@ export async function addRoleAction(data: RoleFormValues): Promise<{ success: bo
   revalidatePath("/settings");
   return { success: true, message: "Role added successfully." };
 }
+
 
 export async function getRoles(): Promise<Role[]> {
   const db = await openDb();

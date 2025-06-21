@@ -179,7 +179,25 @@ async function _createTables(dbConnection: Database<sqlite3.Database, sqlite3.St
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL UNIQUE,
       description TEXT
-      -- Permissions would be linked here or in a separate table
+    );
+  `);
+  
+  await dbConnection.exec(`
+    CREATE TABLE IF NOT EXISTS permissions (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      description TEXT,
+      "group" TEXT NOT NULL
+    );
+  `);
+
+  await dbConnection.exec(`
+    CREATE TABLE IF NOT EXISTS role_permissions (
+      roleId TEXT NOT NULL,
+      permissionId TEXT NOT NULL,
+      PRIMARY KEY (roleId, permissionId),
+      FOREIGN KEY (roleId) REFERENCES roles(id) ON DELETE CASCADE,
+      FOREIGN KEY (permissionId) REFERENCES permissions(id) ON DELETE CASCADE
     );
   `);
 
@@ -344,6 +362,8 @@ async function _dropTables(dbConnection: Database<sqlite3.Database, sqlite3.Stat
   await dbConnection.exec(`DROP TABLE IF EXISTS sub_categories;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS categories;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS users;`);
+  await dbConnection.exec(`DROP TABLE IF EXISTS role_permissions;`);
+  await dbConnection.exec(`DROP TABLE IF EXISTS permissions;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS roles;`);
   await dbConnection.exec(`DROP TABLE IF EXISTS departments;`);
   console.log('Existing tables dropped by _dropTables.');
@@ -491,6 +511,46 @@ async function _seedInitialData(db: Database<sqlite3.Database, sqlite3.Statement
   }
   console.log('Suppliers seeded.');
 
+  const permissionsData = [
+    // Settings
+    { id: crypto.randomUUID(), name: 'Manage Settings', description: 'Can view and modify all application settings.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Manage Users', description: 'Can add, edit, and remove users.', group: 'Settings' },
+    { id: crypto.randomUUID(), name: 'Manage Roles & Permissions', description: 'Can create, edit, and delete roles and their permissions.', group: 'Settings' },
+    // Inventory
+    { id: crypto.randomUUID(), name: 'View Inventory', description: 'Can view the inventory list and item details.', group: 'Inventory' },
+    { id: crypto.randomUUID(), name: 'Create Inventory Items', description: 'Can add new items to the inventory.', group: 'Inventory' },
+    { id: crypto.randomUUID(), name: 'Edit Inventory Items', description: 'Can edit details of existing inventory items.', group: 'Inventory' },
+    { id: crypto.randomUUID(), name: 'Delete Inventory Items', description: 'Can delete items from the inventory.', group: 'Inventory' },
+    { id: crypto.randomUUID(), name: 'Adjust Stock Levels', description: 'Can perform manual stock adjustments.', group: 'Inventory' },
+    // Requisitions
+    { id: crypto.randomUUID(), name: 'View Requisitions', description: 'Can view all requisitions.', group: 'Requisitions' },
+    { id: crypto.randomUUID(), name: 'Create Requisitions', description: 'Can create new item requisitions.', group: 'Requisitions' },
+    { id: crypto.randomUUID(), name: 'Approve Requisitions', description: 'Can approve or reject requisition items.', group: 'Requisitions' },
+    { id: crypto.randomUUID(), name: 'Fulfill Requisitions', description: 'Can issue stock for approved requisitions.', group: 'Requisitions' },
+    // Purchase Orders
+    { id: crypto.randomUUID(), name: 'View Purchase Orders', description: 'Can view all purchase orders.', group: 'Purchase Orders' },
+    { id: crypto.randomUUID(), name: 'Create Purchase Orders', description: 'Can create new purchase orders.', group: 'Purchase Orders' },
+    { id: crypto.randomUUID(), name: 'Approve Purchase Orders', description: 'Can approve purchase orders for ordering.', group: 'Purchase Orders' },
+    { id: crypto.randomUUID(), name: 'Receive Stock from POs', description: 'Can receive stock against a purchase order.', group: 'Purchase Orders' },
+    // Reports
+    { id: crypto.randomUUID(), name: 'View Reports', description: 'Can view and generate all reports.', group: 'Reports' },
+    // Cabinet Designer
+    { id: crypto.randomUUID(), name: 'Use Cabinet Designer', description: 'Can access and use the cabinet designer tool.', group: 'Cabinet Designer' },
+    { id: crypto.randomUUID(), name: 'Manage Cabinet Templates', description: 'Can create, edit, and delete cabinet templates.', group: 'Cabinet Designer' },
+  ];
+
+  for (const perm of permissionsData) {
+    try {
+      await db.run(
+        'INSERT INTO permissions (id, name, description, "group") VALUES (?, ?, ?, ?)',
+        perm.id, perm.name, perm.description, perm.group
+      );
+    } catch (e) {
+      console.warn(`Could not insert permission ${perm.name}: ${(e as Error).message}`);
+    }
+  }
+  console.log('Permissions seeded.');
+
   const inventoryItemsData = [
     {
       id: KEY_INVENTORY_ITEM_ID, name: '18mm Birch Plywood (2440x1220mm)', description: 'High-quality birch plywood for structural and aesthetic applications.', imageUrl: 'https://placehold.co/300x200.png?text=Plywood',
@@ -581,7 +641,7 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
         await db.exec('PRAGMA foreign_keys = ON;');
 
         let schemaNeedsReset = false;
-        const tablesToEnsureExist = ['departments', 'inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles', 'requisitions', 'requisition_items', 'purchase_orders', 'purchase_order_items', 'stock_movements', 'cabinet_templates', 'custom_formulas', 'material_definitions', 'accessory_definitions'];
+        const tablesToEnsureExist = ['departments', 'inventory', 'units_of_measurement', 'categories', 'sub_categories', 'locations', 'suppliers', 'users', 'roles', 'permissions', 'role_permissions', 'requisitions', 'requisition_items', 'purchase_orders', 'purchase_order_items', 'stock_movements', 'cabinet_templates', 'custom_formulas', 'material_definitions', 'accessory_definitions'];
         const columnsToCheck: Record<string, string[]> = {
           inventory: ['minStockLevel', 'maxStockLevel', 'description', 'imageUrl', 'lastPurchasePrice', 'averageCost'],
           units_of_measurement: ['conversion_factor', 'base_unit_id'],
@@ -597,6 +657,8 @@ export async function openDb(): Promise<Database<sqlite3.Database, sqlite3.State
           custom_formulas: ['name', 'formula_string', 'dimension_type', 'created_at', 'part_type', 'context'],
           material_definitions: ['name', 'type', 'costPerSqm', 'thickness', 'hasGrain', 'createdAt', 'lastUpdated'],
           accessory_definitions: ['name', 'type', 'unitCost', 'createdAt', 'lastUpdated'],
+          permissions: ['name', 'description', 'group'],
+          role_permissions: ['roleId', 'permissionId'],
         };
 
         for (const tableName of tablesToEnsureExist) {
@@ -730,6 +792,7 @@ export async function initializeDatabaseForScript(dropFirst: boolean = false): P
     
 
     
+
 
 
 

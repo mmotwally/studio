@@ -174,11 +174,25 @@ export interface User {
   avatarUrl?: string;
 }
 
+export interface Permission {
+  id: string;
+  name: string;
+  description?: string | null;
+  group: string;
+}
+
 export interface Role {
   id: string;
   name: string;
-  description: string;
+  description?: string | null;
   userCount: number;
+  permissions?: Permission[];
+}
+
+export interface RoleFormValues {
+  name: string;
+  description?: string | null;
+  permissionIds?: string[];
 }
 
 // Enhanced ReportFilter
