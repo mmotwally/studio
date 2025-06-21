@@ -1,3 +1,4 @@
+
 "use client"; // Required for Tabs and interactivity
 
 import * as React from 'react';
@@ -71,8 +72,8 @@ export default function SettingsPage() {
 
         <TabsContent value="users" className="mt-6">
           <div className="flex justify-end mb-4">
-            <Button disabled>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add User (Coming Soon)
+            <Button>
+              <PlusCircle className="mr-2 h-4 w-4" /> Add User
             </Button>
           </div>
           <div className="overflow-hidden rounded-lg border shadow-sm">
