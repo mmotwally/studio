@@ -43,8 +43,13 @@ export async function login(prevState: any, formData: FormData) {
 }
 
 export async function logout() {
-  // Destroy the session
-  cookies().set('session', '', { expires: new Date(0) });
-  // Redirect to the login page
-  redirect('/login');
+  try {
+    // Destroy the session
+    cookies().set('session', '', { expires: new Date(0) });
+    // Redirect to the login page
+    redirect('/login');
+  } catch (error) {
+    console.error("Logout error:", error);
+    return { error: "An unexpected error occurred during logout." };
+  }
 }
